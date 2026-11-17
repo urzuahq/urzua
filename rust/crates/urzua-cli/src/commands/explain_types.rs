@@ -55,7 +55,7 @@ const ENFORCEMENT_NOTE: &str = "Whether a declared condition or field rule is en
 
 const RULES_SET_NOTE: &str = "Rules set in the configuration, as written under `rules:`. Rules on by default or by a declaration do not appear here; `urzua check` reports every rule that ran and how many records each examined. Whether a declared condition or field rule is enforced is answered by this section and by `urzua check`.";
 
-const PATH_GATE_NOTE: &str = "A path gate protects every path its patterns match, whatever the type; `urzua new` and the edit hook say so when a path is gated.";
+const PATH_GATE_NOTE: &str = "A path gate declares who may change paths matching these patterns, whatever the type; `urzua new`, the edit hook and the pull request check act on it where they are enabled.";
 
 const NO_TARGET_NOTE: &str = "no type satisfies both declarations";
 
@@ -165,7 +165,7 @@ pub(crate) fn build(
     let body = match mode {
         Mode::Summary => obj(vec![
             ("types", selected.map(|(n, t)| ctx.summary(n, t)).collect()),
-            ("path_gates", ctx.path_gates()),
+            ("path_gates", ctx.path_gates()["gates"].clone()),
         ]),
         Mode::Full => obj(vec![
             (
@@ -404,7 +404,9 @@ impl Ctx<'_> {
     fn create(&self, name: &str, t: &RecordTypeConfig) -> Value {
         match crate::commands::new::scaffold_refusal(name, t) {
             Some(_) => Value::Null,
-            None => Value::from(format!("urzua new {name} \"<title>\"")),
+            None => Value::from(urzua_core::report::shell_command(&[
+                "urzua", "new", name, "<title>",
+            ])),
         }
     }
 
@@ -485,6 +487,7 @@ impl Ctx<'_> {
                     ("values", self.field_values(name, t, &f)),
                     ("pointer", self.pointer(name, t, &f)),
                     ("narrative", self.narrative(name, t, &f)),
+                    ("relation_pairs", Value::from(self.field_pairs(name, &f))),
                     ("roles", Value::from(role)),
                 ])
             })
@@ -530,7 +533,10 @@ impl Ctx<'_> {
             })
             .filter_map(|(i, p)| {
                 let tt = p.target_types.as_ref()?;
-                Some(self.declared(&key(&index("relation_pairs", i), "target_types"), json!(tt)))
+                let mut v =
+                    self.declared(&key(&index("relation_pairs", i), "target_types"), json!(tt));
+                v["pair"] = json!(p.name);
+                Some(v)
             })
             .collect();
         obj(vec![
@@ -554,6 +560,32 @@ impl Ctx<'_> {
         }
     }
 
+    /// Each relation pair that declares this field as its forward or inverse
+    /// side and whose `types`, when given, name the type, as declared.
+    fn field_pairs(&self, name: &str, f: &str) -> Vec<Value> {
+        self.config
+            .relation_pairs
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.forward == f || p.inverse == f)
+            .filter(|(_, p)| {
+                p.types
+                    .as_ref()
+                    .is_none_or(|ts| ts.iter().any(|x| x == name))
+            })
+            .map(|(i, p)| {
+                obj(vec![
+                    ("name", json!(p.name)),
+                    ("forward", json!(p.forward)),
+                    ("inverse", json!(p.inverse)),
+                    ("types", json!(p.types)),
+                    ("target_types", json!(p.target_types)),
+                    ("at", self.at(&index("relation_pairs", i))),
+                ])
+            })
+            .collect()
+    }
+
     fn narrative(&self, name: &str, t: &RecordTypeConfig, f: &str) -> Value {
         match t.narrative_fields.iter().flatten().position(|p| p == f) {
             Some(i) => json!({"at": self.at(&index(&key(&base(name), "narrative_fields"), i))}),
@@ -568,10 +600,7 @@ impl Ctx<'_> {
                 json!(d.initial),
             );
         }
-        if d.values.is_empty() {
-            return Value::Null;
-        }
-        json!({"required_of_records": d.has_transitions(), "default": true, "source": "no_initial_declared"})
+        Value::Null
     }
 
     /// The status `urzua new` writes, from the function that writes it; null

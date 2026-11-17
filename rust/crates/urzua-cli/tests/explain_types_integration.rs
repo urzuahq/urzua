@@ -14,7 +14,7 @@ const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 /// The summary of the three-type fixture, as printed, stays under this many bytes.
 const MAX_SUMMARY_BYTES: usize = 2_350;
 /// The full report of the three-type fixture stays under this many bytes.
-const MAX_FULL_BYTES: usize = 10_000;
+const MAX_FULL_BYTES: usize = 10_400;
 /// The summary of this repository's own configuration stays under this many bytes.
 const MAX_OWN_SUMMARY_BYTES: usize = 6_050;
 
@@ -102,7 +102,7 @@ fn every_declaration_is_reported_with_its_position() {
     assert_eq!(r["status"], "ok");
     assert_positions(&r);
     let issue = of(&r, "issue");
-    assert_eq!(issue["create_command"], "urzua new issue \"<title>\"");
+    assert_eq!(issue["create_command"], "urzua new issue '<title>'");
     assert_eq!(issue["prefix"]["value"], "ISS");
     assert_eq!(issue["prefix"]["at"], "record_types.issue.prefix:6");
     assert_eq!(issue["dirs"][1]["value"], "docs/issues-archive");
@@ -172,9 +172,9 @@ fn every_declaration_is_reported_with_its_position() {
         task["prefix"],
         json!({"value": "TASK", "default": true, "source": "type_name_uppercased"})
     );
-    assert_eq!(
-        task["states"]["initial"],
-        json!({"required_of_records": false, "default": true, "source": "no_initial_declared"})
+    assert!(
+        task["states"].get("initial").is_none(),
+        "an undeclared initial is not printed"
     );
     let gates = &r["repository"]["authority"];
     assert!(
@@ -455,6 +455,7 @@ fn a_narrowed_reference_names_each_declaration_and_the_result() {
         up["pair_target_types"][0]["at"],
         "relation_pairs[0].target_types:20"
     );
+    assert_eq!(up["pair_target_types"][0]["pair"], "tree");
     assert_eq!(up["effective_targets"], json!(["b"]));
     let other = &field(of(&r, "a"), "Other")["pointer"];
     assert!(
@@ -476,14 +477,11 @@ fn an_unconstrained_reference_says_any_type() {
 fn an_undeclared_initial_state_requires_no_start_status() {
     let dir = repo("initial", FIXTURE);
     let (_, r) = run(&dir, &["explain", "--type", "task"]);
-    let initial = &of(&r, "task")["states"]["initial"];
-    assert_eq!(initial["required_of_records"], false);
+    assert!(of(&r, "task")["states"].get("initial").is_none());
     assert_eq!(
         of(&r, "task")["states"]["new_writes"],
         json!({"value": "Todo", "default": true, "source": "urzua_new_scaffold"})
     );
-    assert_eq!(initial["default"], true);
-    assert!(initial.get("value").is_none(), "{initial}");
 }
 const UNREQUIRED_STATUS: &str = "schema_version: 2
 record_types:
@@ -666,54 +664,20 @@ fn full_alone_and_an_empty_summary_name_no_type_command() {
 fn path_gates_are_listed_once_as_declared_and_types_carry_only_their_own_gates() {
     let dir = repo("path-gates", FIXTURE);
     let (_, s) = run(&dir, &["explain", "--types"]);
-    assert_eq!(
-        s["path_gates"]["gates"][0]["paths"],
-        json!(["docs/notes"]),
-        "{s}"
+    assert_eq!(s["path_gates"][0]["paths"], json!(["docs/notes"]), "{s}");
+    assert!(
+        s["path_gates"].is_array(),
+        "the summary lists the gates without the note"
     );
-    assert!(s["path_gates"]["note"]
+    let (_, f) = run(&dir, &["explain", "--types", "--full"]);
+    assert!(f["path_gates"]["note"]
         .as_str()
         .unwrap()
-        .contains("whatever the type"));
+        .contains("declares who may change"));
     let (_, r) = run(&dir, &["explain", "--type", "issue"]);
     assert_eq!(of(&r, "issue")["gates"][0]["to"], json!(["Dropped"]));
     assert_eq!(of(&r, "issue")["gates"].as_array().unwrap().len(), 1);
 }
-
-#[test]
-fn a_pattern_urzua_new_cannot_fit_is_refused_ahead_and_a_title_refusal_is_not() {
-    let config = "schema_version: 2
-record_types:
-  b:
-    dir: docs/b
-    prefix: B
-    identity: {from: filename, pattern: '^(?P<prefix>X)-(?P<number>\\d+)-(?P<slug>.+)$'}
-    required_fields: [Status]
-  a:
-    dir: docs/a
-    required_fields: [Status]
-";
-    let dir = write_repo("refusals", config);
-    let (_, r) = run(&dir, &["explain", "--types", "--full"]);
-    let b = of(&r, "b");
-    assert!(b.get("create_command").is_none(), "{b}");
-    let (out, refused) = run(&dir, &["new", "b", "hello", "--by", "someone"]);
-    assert_eq!(out.status.code(), Some(2), "{refused}");
-    assert_eq!(
-        b["cannot_create"], refused["error"],
-        "the reason `urzua new` gives"
-    );
-    assert!(refused["error"].as_str().unwrap().contains("does not read"));
-    let a = of(&r, "a");
-    assert_eq!(a["create_command"], "urzua new a \"<title>\"");
-    let (out, refused) = run(&dir, &["new", "a", "!!!", "--by", "someone"]);
-    assert_eq!(
-        out.status.code(),
-        Some(2),
-        "a title refusal is decided by `urzua new`: {refused}"
-    );
-}
-
 #[test]
 fn a_multi_line_flow_list_gives_each_item_its_line() {
     let config = "schema_version: 2
@@ -765,4 +729,122 @@ fn the_summary_gives_no_create_command() {
             "{t}"
         );
     }
+}
+
+fn pattern_repo(name: &str, number: &str, slug: &str, existing: &[&str]) -> common::TempDir {
+    let config = format!(
+        "schema_version: 2
+record_types:
+  t:
+    dir: docs/t
+    prefix: T
+    identity: {{from: filename, pattern: '^(?P<prefix>T)-(?P<number>{number})-(?P<slug>{slug})$'}}
+    required_fields: [Status]
+"
+    );
+    let dir = write_repo(name, &config);
+    std::fs::create_dir_all(dir.join("docs/t")).unwrap();
+    for f in existing {
+        std::fs::write(dir.join("docs/t").join(f), "---\nStatus: x\n---\n# x\n").unwrap();
+    }
+    dir
+}
+
+#[test]
+fn urzua_new_fits_an_identity_pattern_to_the_real_number_and_title() {
+    let rows: [(&str, &str, &[&str], &str, &str); 6] = [
+        (
+            r"[1-9]\d",
+            ".+",
+            &["T-10-a.md", "T-11-b.md"],
+            "x",
+            "T-12-x.md",
+        ),
+        (r"[1-9]\d{3}", ".+", &["T-1000-a.md"], "x", "T-1001-x.md"),
+        (r"\d+", r"\d+", &[], "2024", "T-1-2024.md"),
+        (
+            r"\d+",
+            "[a-z]+-[a-z]+",
+            &[],
+            "Hello World",
+            "T-1-hello-world.md",
+        ),
+        (r"\d+", "[a-z-]{1,4}", &[], "Hi", "T-1-hi.md"),
+        (
+            r"\d+",
+            "[a-z-]{6,}",
+            &[],
+            "Hello World",
+            "T-1-hello-world.md",
+        ),
+    ];
+    for (i, (number, slug, existing, title, expected)) in rows.iter().enumerate() {
+        let dir = pattern_repo(&format!("fit-{i}"), number, slug, existing);
+        let (_, r) = run(&dir, &["explain", "--type", "t"]);
+        assert!(of(&r, "t")["create_command"].is_string(), "{r}");
+        let (out, created) = run(&dir, &["new", "t", title, "--by", "someone"]);
+        assert_eq!(out.status.code(), Some(0), "row {i}: {created}");
+        assert!(
+            dir.join("docs/t").join(expected).is_file(),
+            "row {i}: expected {expected}: {created}"
+        );
+    }
+}
+
+#[test]
+fn an_unfit_pattern_shows_a_command_and_urzua_new_says_why() {
+    let config = "schema_version: 2
+record_types:
+  b:
+    dir: docs/b
+    prefix: B
+    identity: {from: filename, pattern: '^(?P<prefix>X)-(?P<number>\\d+)-(?P<slug>.+)$'}
+    required_fields: [Status]
+";
+    let dir = write_repo("unfit", config);
+    let (_, r) = run(&dir, &["explain", "--type", "b"]);
+    assert_eq!(of(&r, "b")["create_command"], "urzua new b '<title>'");
+    let (out, refused) = run(&dir, &["new", "b", "hello", "--by", "someone"]);
+    assert_eq!(out.status.code(), Some(2), "{refused}");
+    assert!(
+        refused["error"].as_str().unwrap().contains("does not read"),
+        "{refused}"
+    );
+}
+
+#[test]
+fn the_create_command_is_shell_quoted() {
+    let config = "schema_version: 2\nrecord_types:\n  my type:\n    dir: docs/a\n    prefix: MT\n";
+    let dir = write_repo("quoted", config);
+    let (out, r) = run(&dir, &["explain", "--type", "my type"]);
+    assert_eq!(out.status.code(), Some(0), "{r}");
+    assert_eq!(
+        of(&r, "my type")["create_command"],
+        "urzua new 'my type' '<title>'"
+    );
+}
+
+#[test]
+fn a_pair_field_names_its_pair_as_declared() {
+    let config = "schema_version: 2
+record_types:
+  a:
+    dir: docs/a
+    required_fields: [Status]
+    known_fields: [Up]
+  b:
+    dir: docs/b
+    required_fields: [Status]
+    known_fields: [Down]
+relation_pairs:
+  - {name: tree, forward: Up, inverse: Down, reciprocity: none}
+";
+    let dir = write_repo("pair-field", config);
+    let (_, r) = run(&dir, &["explain", "--type", "b"]);
+    let down = &field(of(&r, "b"), "Down")["relation_pairs"][0];
+    assert_eq!(down["name"], "tree", "{r}");
+    assert_eq!(down["forward"], "Up");
+    assert_eq!(down["inverse"], "Down");
+    assert_eq!(down["at"], "relation_pairs[0]:12");
+    assert!(down.get("target_types").is_none());
 }

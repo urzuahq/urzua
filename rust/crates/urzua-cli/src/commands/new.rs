@@ -188,9 +188,9 @@ pub(crate) fn lookup_record_type<'a>(
 /// write a `Stable-Id` -- generating a record with no identity would be worse
 /// than refusing (`ADR-50`).
 ///
-/// Also refused: a declared identity pattern that does not compile, or that
-/// reads no `PREFIX-N-slug` name back as this type's prefix and a number.
-/// Refusals that depend on the title or on a path gate are decided later.
+/// Also refused: a declared identity pattern that does not compile. Whether
+/// the pattern reads back the name `urzua new` builds depends on the number
+/// and the title, so `build_filename` decides that after numbering.
 pub(crate) fn scaffold_refusal(
     record_type: &str,
     type_config: &urzua_core::config::RecordTypeConfig,
@@ -200,18 +200,7 @@ pub(crate) fn scaffold_refusal(
             "record type '{record_type}' declares header_shape: none -- urzua new cannot generate an identity for a type with no header"
         ));
     }
-    match compile_declared_identity(record_type, type_config) {
-        Err(why) => Some(why),
-        Ok((Some(decl), Some(compiled))) => urzua_core::new_record::declared_file_name(
-            &compiled,
-            &decl.pattern,
-            &type_prefix(record_type, type_config),
-            1,
-            "title",
-        )
-        .err(),
-        Ok(_) => None,
-    }
+    compile_declared_identity(record_type, type_config).err()
 }
 
 /// The prefix a record's file name opens with (`ADR-36`): the type's declared

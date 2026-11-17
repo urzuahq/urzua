@@ -223,6 +223,8 @@ enum Command {
     /// declares; `--types --full` and `--type <name>` give every declaration
     /// (fields, values, references, states, conditions, gates, the command that
     /// creates one), each entry with the key path and line it was read from.
+    /// It does not say which rules apply to a type, nor whether a declared
+    /// condition is enforced: `urzua check` reports what ran.
     #[command(
         override_usage = "urzua explain <PATH>\n       urzua explain --rule <RULE_ID>\n       urzua explain --types [--full]\n       urzua explain --type <TYPE>"
     )]
