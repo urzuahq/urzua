@@ -189,14 +189,22 @@ fn rules_set_on_by_declaration_and_declared_but_not_enabled() {
         values["declared_by"][0],
         "record_types.issue.field_values:11"
     );
-    let off = rules["declared_but_not_enabled"].as_array().unwrap();
-    let missing = off
+    let required = on
         .iter()
         .find(|e| e["id"] == "status.required-field-missing")
         .unwrap();
     assert_eq!(
-        missing["declared_by"][0],
+        required["declared_by"][0],
         "record_types.issue.statuses.require:25"
+    );
+    let off = rules["declared_but_not_enabled"].as_array().unwrap();
+    let undeclared = off
+        .iter()
+        .find(|e| e["id"] == "status.undeclared-value")
+        .unwrap();
+    assert_eq!(
+        undeclared["declared_by"][0],
+        "record_types.issue.statuses.values:18"
     );
     assert!(off.iter().all(|e| e["id"] != "status.transition-allowed"));
 }
@@ -251,8 +259,12 @@ fn the_summary_is_compact_and_points_at_the_detail() {
         "error"
     );
     assert_eq!(
-        r["rules"]["declared_but_not_enabled"]["status.required-field-missing"],
+        r["rules"]["declared_but_not_enabled"]["status.undeclared-value"],
         "off"
+    );
+    assert_eq!(
+        r["rules"]["on_by_declaration"]["status.required-field-missing"],
+        "error"
     );
     assert!(r["rules"].get("set").is_none());
     assert_eq!(r["next_action"], "urzua explain --type <name>");
@@ -443,4 +455,61 @@ fn every_top_level_key_but_types_and_rules_is_under_repository() {
             "top-level key `{key}` is not under `repository`; this repository's configuration declares every one"
         );
     }
+}
+
+const ITEMS: &str = "schema_version: 2
+record_types:
+  work:
+    dir: docs/work
+    required_fields: [Status, Stable-Id]
+    known_fields: [Realized-by]
+    statuses:
+      values: [Planned, Doing, Done]
+      success: [Done]
+      delivery:
+        delivered_tiers: [Implemented]
+        unevidenced_tiers: [Not started]
+        not_done: [Planned, Doing]
+        set_status: Done
+        items:
+          section: Done means
+          clause_separator: \" - \"
+          evidence_marker: \"evidence:\"
+          waiver_marker: \"waived:\"
+          partial_status: Doing
+    sections: {from: headings, depth: 2, required: [{name: Done means}]}
+";
+
+#[test]
+fn rules_on_by_a_status_declaration_are_shown_in_effect_for_the_type() {
+    let dir = repo("items", ITEMS);
+    std::fs::create_dir_all(dir.join("docs/work")).unwrap();
+    let (out, r) = run(&dir, &["explain", "--type", "work"]);
+    assert_eq!(out.status.code(), Some(0), "{r}");
+    let on = r["rules"]["on_by_declaration"].as_array().unwrap();
+    for id in [
+        "status.delivery-agreement",
+        "status.done-items-shape",
+        "status.waived-item-stale",
+    ] {
+        let rule = on
+            .iter()
+            .find(|e| e["id"] == id)
+            .unwrap_or_else(|| panic!("{id} not in effect: {r}"));
+        assert_eq!(rule["default"], true);
+        let by: Vec<&str> = rule["declared_by"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert!(
+            by.contains(&"record_types.work.statuses.delivery.items:15"),
+            "{id}: {by:?}"
+        );
+    }
+    assert!(
+        r["rules"].get("set").is_none(),
+        "rules: names none of them: {r}"
+    );
 }

@@ -318,11 +318,31 @@ fn undecided_record(
     None
 }
 
+/// "does not exist", saying the text was read as a path, and for a record
+/// identifier that a record is cited by its own.
+fn missing_locator_cause(category: &str, path: &str, env: &LocatorEnv<'_>) -> String {
+    let named = env
+        .records
+        .iter()
+        .find(|r| record_id(r).is_some_and(|id| id.eq_ignore_ascii_case(path)));
+    match named {
+        Some(record) => format!(
+            "locator {path} does not exist: it was read as a path, and a record is cited by its path (`{category}:{}`)",
+            record.path.display()
+        ),
+        None if crate::done_items::is_record_id(path) => format!(
+            "locator {path} does not exist: it was read as a path, and a record is cited by its path"
+        ),
+        None => format!("locator {path} does not exist: it was read as a path"),
+    }
+}
+
 fn evidence_standing(
     item: &Item,
     config: &Config,
     kind: &KindRule<'_>,
     delivery: &DeliveryDecl,
+    record_type: &str,
     env: &LocatorEnv<'_>,
 ) -> EvidenceStanding {
     if item.placeholder {
@@ -341,13 +361,20 @@ fn evidence_standing(
     }
     let entries = crate::locator::realized_by_locators(&clause.text);
     for entry in &entries {
-        if locator_defect(entry, "the evidence clause", env).is_some() {
-            let path = entry
-                .parsed
-                .as_ref()
-                .map_or_else(|_| entry.raw.clone(), |l| l.path.clone());
+        let path = entry
+            .parsed
+            .as_ref()
+            .map_or_else(|_| entry.raw.clone(), |l| l.path.clone());
+        if file_locator_defect(entry, "the evidence clause", env).is_some() {
             return EvidenceStanding::Fails {
-                cause: format!("locator {path} does not exist"),
+                cause: missing_locator_cause(&entry.category, &path, env),
+            };
+        }
+        if record_locator_defect(entry, "the evidence clause", env).is_some() {
+            return EvidenceStanding::Fails {
+                cause: format!(
+                    "locator {path} is under `record:` but is not a record of any declared type"
+                ),
             };
         }
     }
@@ -368,21 +395,56 @@ fn evidence_standing(
             tier: tier.to_string(),
         }
     } else {
-        let paths: Vec<String> = entries
-            .iter()
-            .map(|e| {
-                e.parsed
-                    .as_ref()
-                    .map_or_else(|_| e.raw.clone(), |l| l.path.clone())
-            })
-            .collect();
         EvidenceStanding::Fails {
-            cause: format!(
-                "locator {} resolves only to {tier}, which is not in resolving_tiers",
-                paths.join(", ")
-            ),
+            cause: not_counted_cause(&entries, tier, config, delivery, record_type),
         }
     }
+}
+
+/// Why locators that all exist compute to a tier the type does not count, and
+/// the repair that loads: a tier no category computes to is declared under
+/// `embodiment.tiers`, since `resolving_tiers` may name only a declared tier;
+/// a declared tier that does not count is added to `resolving_tiers`.
+fn not_counted_cause(
+    entries: &[crate::locator::LocatorEntry],
+    tier: &str,
+    config: &Config,
+    delivery: &DeliveryDecl,
+    record_type: &str,
+) -> String {
+    let paths: Vec<String> = entries
+        .iter()
+        .map(|e| {
+            e.parsed
+                .as_ref()
+                .map_or_else(|_| e.raw.clone(), |l| l.path.clone())
+        })
+        .collect();
+    if tier == config.embodiment.none {
+        let mut categories: Vec<&str> = entries
+            .iter()
+            .map(|e| e.category.as_str())
+            .filter(|c| {
+                !config
+                    .embodiment
+                    .tiers
+                    .iter()
+                    .any(|t| t.evidence.as_str() == *c)
+            })
+            .collect();
+        let mut seen = HashSet::new();
+        categories.retain(|c| seen.insert(*c));
+        return format!(
+            "locator {} computes to {tier}, because no tier in `embodiment.tiers` declares `evidence: {}`: declare one and add its state to `record_types.{record_type}.statuses.delivery.items.resolving_tiers` to make the category count",
+            paths.join(", "),
+            categories.join("`, `evidence: ")
+        );
+    }
+    format!(
+        "locator {} resolves only to {tier}, which is not in resolving_tiers ({}): add '{tier}' to `record_types.{record_type}.statuses.delivery.items.resolving_tiers` in the configuration to make it count",
+        paths.join(", "),
+        delivery.resolving_tiers().join(", ")
+    )
 }
 
 /// Judges every item of a record against the tree (`ADR-96` section 2).
@@ -410,7 +472,7 @@ pub fn judge_items(
             n: item.n,
             line: item.line,
             text: item.text.clone(),
-            evidence: evidence_standing(item, config, &kind, delivery, env),
+            evidence: evidence_standing(item, config, &kind, delivery, &record.record_type, env),
             waived: item.waiver.clone(),
         })
         .collect();

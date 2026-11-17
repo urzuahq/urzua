@@ -26,7 +26,7 @@
     {
       "file": "docs/adr/ADR-5-fifth-decision.md",
       "line": null,
-      "message": "field 'Date' is Blank -- not a real, present value",
+      "message": "field 'Date' is missing from the header",
       "rule": "field.quality",
       "severity": "error"
     },

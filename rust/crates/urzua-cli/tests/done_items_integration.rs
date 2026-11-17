@@ -1135,28 +1135,34 @@ fn invalid_items_declarations_are_refused_at_load() {
 
 #[test]
 fn items_on_a_type_whose_delivery_rule_is_off_are_refused() {
-    for level in ["off", "none"] {
-        let cfg = if level == "off" {
-            config(ITEMS, "off")
-        } else {
-            config(ITEMS, "error").replace("  status.delivery-agreement: error\n", "")
-        };
-        let dir = common::TempDir::new("urzua-items-ruleoff");
-        std::fs::create_dir_all(dir.join(".urzua")).unwrap();
-        std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
-        git(&dir, &["init", "-q"]);
-        let out = run(&dir, &["check"]);
-        let text = format!(
-            "{}{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        );
-        assert_eq!(out.status.code(), Some(2), "{text}");
-        assert!(
-            text.contains("status.delivery-agreement"),
-            "{level}: {text}"
-        );
-    }
+    let dir = common::TempDir::new("urzua-items-ruleoff");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), config(ITEMS, "off")).unwrap();
+    git(&dir, &["init", "-q"]);
+    let out = run(&dir, &["check"]);
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.status.code(), Some(2), "{text}");
+    assert!(text.contains("status.delivery-agreement"), "{text}");
+}
+
+#[test]
+fn items_on_a_type_whose_delivery_rule_is_not_named_run_it_by_declaration() {
+    let cfg = config(ITEMS, "error").replace("  status.delivery-agreement: error\n", "");
+    let dir = repo(
+        "ruleabsent",
+        &cfg,
+        &[(1, milestone("Done", "", TWO_ITEMS_ONE_EVIDENCED))],
+    );
+    let report = parsed(&run(&dir, &["check"]));
+    assert_eq!(
+        findings(&report, "status.delivery-agreement").len(),
+        1,
+        "{report}"
+    );
 }
 
 // ---------------------------------------------------- evidence readers

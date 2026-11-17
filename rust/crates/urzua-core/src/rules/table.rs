@@ -286,6 +286,12 @@ pub struct DefaultOn {
     /// accepts; any other configuration lists it `not-enabled`, as before the
     /// rule existed.
     pub applies: Option<fn(&crate::config::Config) -> bool>,
+    /// Whether the rule counts as the configuration governing a corpus
+    /// (`any_rule_looked`) once it has examined at least one record: true for
+    /// a rule that holds a declaration only the repository could have written,
+    /// so a clean run in which it read a record is `ok`. A run in which it
+    /// examined nothing stays `not-run`.
+    pub counts_when_applied: bool,
 }
 
 fn declares_target_types(config: &crate::config::Config) -> bool {
@@ -299,9 +305,22 @@ fn declares_field_values(config: &crate::config::Config) -> bool {
         .any(|t| t.field_values.is_some())
 }
 
+fn declares_status_require(config: &crate::config::Config) -> bool {
+    config.declared_status_entries.require
+}
+
+fn declares_status_forbid(config: &crate::config::Config) -> bool {
+    config.declared_status_entries.forbid
+}
+
+fn declares_delivery_items(config: &crate::config::Config) -> bool {
+    config.declared_status_entries.delivery_items
+}
+
 /// Every rule that is on by default. Their executions do not count as a rule
 /// having looked at a corpus the repository chose to govern (`any_rule_looked`):
-/// a configuration that declares no rule still reports `not-run`.
+/// a configuration that declares no rule still reports `not-run`. The five
+/// with `counts_when_applied` count once they have examined a record.
 pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
     // On wherever a vocabulary is declared, since one nothing checks would be
     // a silent no-op; off elsewhere, so a config without one reports as before.
@@ -310,30 +329,73 @@ pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
         level: crate::config::RuleLevel::Error,
         under_selection: false,
         applies: Some(declares_field_values),
+        counts_when_applied: false,
     },
     DefaultOn {
         id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
         level: crate::config::RuleLevel::Error,
         under_selection: true,
         applies: None,
+        counts_when_applied: false,
     },
     DefaultOn {
         id: RULE_EMBODIMENT_PIN_STALE,
         level: crate::config::RuleLevel::Warn,
         under_selection: false,
         applies: None,
+        counts_when_applied: false,
     },
     DefaultOn {
         id: RULE_POINTER_TARGET_TYPE,
         level: crate::config::RuleLevel::Error,
         under_selection: false,
         applies: Some(declares_target_types),
+        counts_when_applied: false,
+    },
+    // The rules below read a declaration whose only reader they are, so a
+    // configuration that declares it without naming the rule would hold the
+    // records to nothing.
+    DefaultOn {
+        id: RULE_STATUS_REQUIRED_FIELD_MISSING,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+        applies: Some(declares_status_require),
+        counts_when_applied: true,
+    },
+    DefaultOn {
+        id: RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+        applies: Some(declares_status_forbid),
+        counts_when_applied: true,
+    },
+    DefaultOn {
+        id: RULE_STATUS_DELIVERY_AGREEMENT,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+        applies: Some(declares_delivery_items),
+        counts_when_applied: true,
+    },
+    DefaultOn {
+        id: RULE_STATUS_DONE_ITEMS_SHAPE,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+        applies: Some(declares_delivery_items),
+        counts_when_applied: true,
+    },
+    DefaultOn {
+        id: RULE_STATUS_WAIVED_ITEM_STALE,
+        level: crate::config::RuleLevel::Warn,
+        under_selection: false,
+        applies: Some(declares_delivery_items),
+        counts_when_applied: true,
     },
     DefaultOn {
         id: RULE_DIFF_PIN_CHANGED_UNATTESTED,
         level: crate::config::RuleLevel::Error,
         under_selection: false,
         applies: None,
+        counts_when_applied: false,
     },
 ];
 
@@ -459,7 +521,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_FIELD_QUALITY,
-        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. The optional `template_placeholders` option (`BUG-22`), off unless declared `true`, reads a field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, and stops applying the compiled-in placeholder tokens; a type with no template is judged by its declared `pending` vocabulary alone, and declaring the option when no type has a template is disclosed as a warning notice. A type's `statuses.placeholders` replaces the compiled-in placeholder words for that type (`MILE-233`).",
+        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. The optional `template_placeholders` option (`BUG-22`), off unless declared `true`, reads a field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, and stops applying the compiled-in placeholder tokens; a type with no template is judged by its declared `pending` vocabulary alone, and declaring the option when no type has a template is disclosed as a warning notice. A type's `statuses.placeholders` replaces the compiled-in placeholder words for that type (`MILE-233`). A required field absent from the header is `missing from the header` and one present with no value is `empty`, as `header.required-fields` distinguishes them; when the type declares `field_values` for it the message names the allowed values and the suggested action carries them as its value (`MILE-327`).",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1068,7 +1130,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
-        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator that resolves outside the repository (absolute, `..` or a link out) is never probed on disk, so it reads as not in the working tree, and a Done-means item that carries a valid waiver is not examined (the waiver holds while its evidence does not resolve). A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. A comma separates `Realized-by` entries only when a category prefix (`spec:`, `code:`, `test:`) follows it; any other comma is part of the path (`BUG-129`), and a path that itself contains `,<category>:` is read as two entries. The `locator_kinds` option (`file`, `directory`, `glob`; default `[file]`) declares which kinds a locator may be: a directory or glob is legal when it matches at least one tracked file present on disk, and one of a kind not declared is reported naming the option. The `pinnable` option (default `[file]`, each kind also in `locator_kinds`) declares which kinds may carry a `@sha256:` pin (`BUG-176`).",
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator that resolves outside the repository (absolute, `..` or a link out) is never probed on disk, so it reads as not in the working tree, and a Done-means item that carries a valid waiver is not examined (the waiver holds while its evidence does not resolve). A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. A comma separates `Realized-by` entries only when a category prefix (`spec:`, `code:`, `test:`) follows it; any other comma is part of the path (`BUG-129`), and a path that itself contains `,<category>:` is read as two entries. The `locator_kinds` option (`file`, `directory`, `glob`; default `[file]`) declares which kinds a locator may be: a directory or glob is legal when it matches at least one tracked file present on disk, and one of a kind not declared is reported naming the option. The `pinnable` option (default `[file]`, each kind also in `locator_kinds`) declares which kinds may carry a `@sha256:` pin (`BUG-176`). The categories are `spec`, `code`, `test` and `record`; `record` cites a record's file by its path, which must name a record of a declared type (a `Realized-by` header and a Done-means item alike; one that does not is `locator-missing`), and counts toward the tier a configuration declares with `evidence: record` under `embodiment.tiers`.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1780,7 +1842,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_REQUIRED_FIELD_MISSING,
-        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank, unedited template text, or (when the type declares `statuses.pending`) one of that declared placeholder vocabulary's whole values such as `Unknown` or `none recorded`, or a value matching one of its `{pattern: ...}` entries for a placeholder family (`MILE-132`, `MILE-153`, `MILE-162`), for example `Deciders` on an `Accepted` record. An entry may also name `when_field` values of another field; it then applies when every condition it declares holds, whatever the status if it declares no `when`, and the finding names the triggering field and value. A type declaring no `pending` keeps the old reading, so a value that only contains the word is still a real value. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
+        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank, unedited template text, or (when the type declares `statuses.pending`) one of that declared placeholder vocabulary's whole values such as `Unknown` or `none recorded`, or a value matching one of its `{pattern: ...}` entries for a placeholder family (`MILE-132`, `MILE-153`, `MILE-162`), for example `Deciders` on an `Accepted` record. An entry may also name `when_field` values of another field; it then applies when every condition it declares holds, whatever the status if it declares no `when`, and the finding names the triggering field and value. A type declaring no `pending` keeps the old reading, so a value that only contains the word is still a real value. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. On by default at `error` wherever a type declares a `statuses.require` entry, so a declaration is never silent (`MILE-326`); a configuration that names the rule keeps the level it gives, and one declaring no `require` entry reports as before. A finding says whether the field is `missing from the header` or `empty`, as `header.required-fields` does, and when the type declares `field_values` for the field it names the allowed values in the form `field.value-not-declared` uses and carries them as the suggested action's value (`MILE-327`).",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1804,7 +1866,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
-        description: "A field the type's `statuses.forbid` bars at the record's current `Status` carries a value (`MILE-132`), for example an acceptance date on a record that is not accepted. A type declaring no `forbid` entries is not examined. An entry may also name `when_field` values of another field; it then applies when every condition it declares holds, whatever the status if it declares no `when`, and the finding names the triggering field and value.",
+        description: "A field the type's `statuses.forbid` bars at the record's current `Status` carries a value (`MILE-132`), for example an acceptance date on a record that is not accepted. A type declaring no `forbid` entries is not examined. An entry may also name `when_field` values of another field; it then applies when every condition it declares holds, whatever the status if it declares no `when`, and the finding names the triggering field and value. On by default at `error` wherever a type declares a `statuses.forbid` entry (`MILE-326`); a configuration that names the rule keeps the level it gives.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1876,7 +1938,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_DELIVERY_AGREEMENT,
-        description: "A record's `Status` agrees with its delivery evidence, in both directions (`MILE-183`): the tier computed from its `Realized-by` locators and source back-pointers (drift ignored) is one of the type's `statuses.delivery.delivered_tiers` while the `Status` is one of its `not_done` statuses, so a built record still reads as unbuilt; and a `success` status whose evidence computes to one of its `unevidenced_tiers`, so a record claims to be done with nothing behind it. The mapping is the type's own declaration (`delivered_tiers`, `unevidenced_tiers`, `not_done`, `set_status`); the rule knows no status or type by name. `urzua fix --apply` writes `set_status` for the first direction; the second has no single correct value and is repaired by adding evidence. `unevidenced_tiers` may be empty, and the type then never reports the second direction. `back_pointer_evidence: false` (default true) makes a source or test back-pointer that cites the record not count as evidence, so only the type's evidence field is read (`ADR-84`). The rule applies to any type that declares `delivery`, whatever the type is called. A type declaring no `delivery` is not examined. The population counts the records of types that declare it.",
+        description: "A record's `Status` agrees with its delivery evidence, in both directions (`MILE-183`): the tier computed from its `Realized-by` locators and source back-pointers (drift ignored) is one of the type's `statuses.delivery.delivered_tiers` while the `Status` is one of its `not_done` statuses, so a built record still reads as unbuilt; and a `success` status whose evidence computes to one of its `unevidenced_tiers`, so a record claims to be done with nothing behind it. The mapping is the type's own declaration (`delivered_tiers`, `unevidenced_tiers`, `not_done`, `set_status`); the rule knows no status or type by name. `urzua fix --apply` writes `set_status` for the first direction; the second has no single correct value and is repaired by adding evidence. `unevidenced_tiers` may be empty, and the type then never reports the second direction. `back_pointer_evidence: false` (default true) makes a source or test back-pointer that cites the record not count as evidence, so only the type's evidence field is read (`ADR-84`). The rule applies to any type that declares `delivery`, whatever the type is called. A type declaring no `delivery` is not examined. The population counts the records of types that declare it. On by default at `error` wherever a type declares `statuses.delivery.items`, since the checklist computes a status nothing else holds a record to; a configuration that names the rule keeps the level it gives, and one that turns it `off` while declaring a checklist is refused at load. A type declaring `delivery` without `items` is not on by default.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1914,7 +1976,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_DONE_ITEMS_SHAPE,
-        description: "A Done-means section that does not follow the item grammar of `ADR-96` section 1, on a type that declares `statuses.delivery.items`: a prose-only section (no list item), a list marker indented less than the item indent, a clause on a line that belongs to no item, clauses on the first line and on final lines at once, a waiver clause before the evidence clause, an evidence clause that is not entirely locators (backticks or quotes before the first `category:`, whitespace inside a locator, no locator at all), a leading `[x]` or `[ ]` checkbox, and a waiver clause with an unknown category, an empty or missing reason, a missing, malformed or unneeded cite or date. A clause that does not parse is a finding, never skipped, and its item reads as unresolved. A marker word with no clause separator before it is plain text. A `Kind` value outside the type's declared `delivery.items.kind` vocabulary is a finding naming the allowed kinds, and the record is then judged as one with no kind. An item whose text matches the type's declared `delivery.items.pending` vocabulary is an unfilled placeholder: a finding on the item's line, and the item never resolves and cannot be waived. A type declaring no `delivery.items` is not examined. The population counts the records of types that declare it.",
+        description: "A Done-means section that does not follow the item grammar of `ADR-96` section 1, on a type that declares `statuses.delivery.items`: a prose-only section (no list item), a list marker indented less than the item indent, a clause on a line that belongs to no item, clauses on the first line and on final lines at once, a waiver clause before the evidence clause, an evidence clause that is not entirely locators (backticks or quotes before the first `category:`, whitespace inside a locator, no locator at all), a leading `[x]` or `[ ]` checkbox, and a waiver clause with an unknown category, an empty or missing reason, a missing, malformed or unneeded cite or date. A clause that does not parse is a finding, never skipped, and its item reads as unresolved. A marker word with no clause separator before it is plain text. A `Kind` value outside the type's declared `delivery.items.kind` vocabulary is a finding naming the allowed kinds, and the record is then judged as one with no kind. An item whose text matches the type's declared `delivery.items.pending` vocabulary is an unfilled placeholder: a finding on the item's line, and the item never resolves and cannot be waived. A type declaring no `delivery.items` is not examined. The population counts the records of types that declare it. On by default at `error` wherever a type declares `statuses.delivery.items`; a configuration that names the rule keeps the level it gives. An evidence clause that belongs to no locator entry lists the categories a locator may carry.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1938,7 +2000,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_WAIVED_ITEM_STALE,
-        description: "A waived Done-means item whose waiver has outlived its reason (`ADR-96` section 3), on a type that declares `statuses.delivery.items`: the item also carries an evidence clause that now resolves (remove the waiver), the record its waiver cites does not exist, a `deferred-to` (a category declared `expires: required`) whose cited record is finished, or an expiry date that has come (from that date on). Every waived item is also listed by category in the report's notices, never omitted. A dated `WAIVER` record can waive this rule like any warning. A type declaring no `delivery.items` is not examined. The population counts the records of types that declare it.",
+        description: "A waived Done-means item whose waiver has outlived its reason (`ADR-96` section 3), on a type that declares `statuses.delivery.items`: the item also carries an evidence clause that now resolves (remove the waiver), the record its waiver cites does not exist, a `deferred-to` (a category declared `expires: required`) whose cited record is finished, or an expiry date that has come (from that date on). Every waived item is also listed by category in the report's notices, never omitted. A dated `WAIVER` record can waive this rule like any warning. A type declaring no `delivery.items` is not examined. The population counts the records of types that declare it. On by default at `warn` wherever a type declares `statuses.delivery.items`; a configuration that names the rule keeps the level it gives.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::CrossRecord,

@@ -37,6 +37,8 @@ pub(crate) const DECLARATION_RULES: &[(&str, &str)] = &[
     ("statuses.forbid", "status.forbidden-field-present"),
     ("statuses.delivery", "status.delivery-agreement"),
     ("statuses.delivery.items", "status.done-items-shape"),
+    ("statuses.delivery.items", "status.delivery-agreement"),
+    ("statuses.delivery.items", "status.waived-item-stale"),
     ("sections.required", "section.required"),
     ("revision_log", "revision-log.change-class-required"),
     ("/relation_pairs", "relation.pair-reciprocity"),
