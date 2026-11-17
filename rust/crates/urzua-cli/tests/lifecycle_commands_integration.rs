@@ -68,7 +68,7 @@ fn installed(name: &str, config: &str) -> common::TempDir {
 }
 
 fn helper(dir: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(["harness", "record"])
         .args(args)
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
@@ -185,7 +185,7 @@ fn no_generated_command_names_a_field_or_status_of_the_configuration() {
 fn done_sets_the_status_only_through_the_engines_computation() {
     let dir = installed("done", BASE);
     let before = read(&dir, "docs/milestones/MILE-1-x.md");
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["harness", "record"])
         .args(["done", "docs/milestones/MILE-1-x.md"])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
@@ -218,7 +218,7 @@ fn done_refuses_when_the_engine_computes_no_status() {
     let path = "docs/milestones/MILE-1-x.md";
     let text = read(&dir, path).replace("Realized-by: code:src/a.rs\n", "");
     std::fs::write(dir.join(path), &text).unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["harness", "record"])
         .args(["done", path])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
@@ -251,7 +251,7 @@ fn a_status_an_authority_gate_names_is_never_written_by_fix_or_done() {
         "{report}"
     );
     assert_eq!(read(&dir, path), before);
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["harness", "record"])
         .args(["done", path])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
@@ -284,7 +284,7 @@ fn with_stale_pin(name: &str) -> common::TempDir {
 }
 
 fn repin(dir: &Path, reason: &str) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(["harness", "record"])
         .args(["repin", "docs/milestones/MILE-1-x.md", reason])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
@@ -353,7 +353,7 @@ fn with_expiry_rule(name: &str) -> common::TempDir {
 }
 
 fn reverify(dir: &Path, reason: &str) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(["harness", "record"])
         .args(["reverify", "docs/milestones/MILE-1-x.md", reason])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))

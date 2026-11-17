@@ -542,10 +542,13 @@ fn export_and_import_require_a_format_and_the_help_says_which_is_implemented() {
 #[test]
 fn the_drafting_steps_run_the_binary_itself_with_no_script_and_no_variable() {
     let dir = fixture("helper-bin", &config(""));
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["harness", "record", "new", "adr", "T"])
         .current_dir(&dir)
-        .env("PATH", "/usr/bin:/bin")
+        .env(
+            "PATH",
+            format!("{}:/usr/bin:/bin", common::stub_gh_dir().display()),
+        )
         .env_remove("URZUA_BIN")
         .env_remove("URZUA")
         .output()

@@ -157,12 +157,39 @@ fn project_dir() -> Option<PathBuf> {
     project_dir_from(std::env::var(claude_code::PROJECT_ENV).ok())
 }
 
+/// `git` in `dir` with only the repository on disk deciding the answer: the
+/// variables and config sources that would point it at another repository or
+/// work tree are removed, so the session's environment cannot steer which
+/// repository a guard reads.
+pub(super) fn pinned_git(dir: &Path) -> urzua_io::git::GitRun {
+    let mut run = urzua_io::git::GitRun::new()
+        .args(["-c", "safe.directory=*"])
+        .cwd(dir)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .discard_stderr();
+    for v in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_NAMESPACE",
+        "GIT_CEILING_DIRECTORIES",
+        "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+        "GIT_CONFIG",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_SYSTEM",
+    ] {
+        run = run.env_remove(v);
+    }
+    run
+}
+
 pub(super) fn git_toplevel(dir: &Path) -> Option<PathBuf> {
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(dir)
+    let out = pinned_git(dir)
         .args(["rev-parse", "--show-toplevel"])
-        .stderr(Stdio::null())
         .output()
         .ok()?;
     if !out.status.success() {
@@ -234,6 +261,19 @@ fn test_engine() -> Option<Vec<String>> {
     serde_json::from_str(&test_seam("URZUA_HOOK_ENGINE_FOR_TESTS")?).ok()
 }
 
+#[cfg(feature = "test-seams")]
+fn test_engine_command() -> Option<Command> {
+    let argv = test_engine().filter(|a| !a.is_empty())?;
+    let mut c = Command::new(&argv[0]);
+    c.args(&argv[1..]);
+    Some(c)
+}
+
+#[cfg(not(feature = "test-seams"))]
+fn test_engine_command() -> Option<Command> {
+    None
+}
+
 /// Panics where the tests ask, so the panic path is tested with a real panic.
 pub(super) fn test_panic(at: &str) {
     if test_seam("URZUA_HOOK_PANIC_FOR_TESTS").as_deref() == Some(at) {
@@ -255,14 +295,11 @@ pub(super) fn engine(
     request: &serde_json::Value,
     cwd: Option<&str>,
 ) -> Result<serde_json::Value, String> {
-    let mut cmd = match test_engine() {
-        Some(argv) if !argv.is_empty() => {
-            let mut c = Command::new(&argv[0]);
-            c.args(&argv[1..]);
-            c
-        }
-        _ => {
-            let mut c = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
+    let mut cmd = match test_engine_command() {
+        Some(c) => c,
+        None => {
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let mut c = Command::new(exe);
             c.args(["harness", "run", event]);
             c
         }

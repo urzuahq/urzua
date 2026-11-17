@@ -46,9 +46,9 @@ fn urzua(args: &[&str]) -> Result<(i32, String), String> {
 }
 
 fn git(args: &[&str]) -> Option<String> {
-    let out = Command::new("git")
+    let out = urzua_io::git::GitRun::new()
         .args(args)
-        .stderr(Stdio::null())
+        .discard_stderr()
         .output()
         .ok()?;
     out.status.success().then(|| {

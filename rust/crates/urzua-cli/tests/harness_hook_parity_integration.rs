@@ -835,7 +835,7 @@ fn a_payload_that_is_not_utf8_binary_is_stricter_it_reads_it_as_unreadable() {
                     .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
                 c
             } else {
-                let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+                let mut c = common::urzua();
                 c.args(["harness", "hook", "claude-code", "edit"])
                     .env("CLAUDE_PROJECT_DIR", dir);
                 c
