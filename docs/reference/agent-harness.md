@@ -84,9 +84,9 @@ refusal, as one JSON document.
 To install it once per machine instead, or as well, see
 [install once per machine, or commit to the repository](adopt.md#10-optional-agent-hooks).
 
-### Upgrading from 0.4.7 or earlier
+### Upgrading from 0.4.8 or earlier
 
-Releases up to 0.4.7 installed a script and pinned its sha256 in each hook command. Nothing removes them
+Releases up to 0.4.8 installed a script and pinned its sha256 in each hook command. Nothing removes them
 for you; `urzua harness status`, `urzua doctor` and the session-start check name what is left. By hand:
 
 ```sh

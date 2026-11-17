@@ -301,7 +301,10 @@ fn an_unreadable_payload_is_decided_from_the_session_and_an_open_configuration_l
     let dir = fixture("open-payload", &config(", on_unjudged: allow"));
     let v = translate(&dir, "garbage{", &ENGINE);
     assert_eq!(decision(&v), None, "{v}");
-    assert!(v["systemMessage"].as_str().unwrap().contains("NOT judged"), "{v}");
+    assert!(
+        v["systemMessage"].as_str().unwrap().contains("NOT judged"),
+        "{v}"
+    );
     // No gate on at all: the same.
     let off = format!("{TYPES}harness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n    session-start: {{enabled: true}}\n");
     let dir = fixture("off-payload", &off);
