@@ -13,7 +13,7 @@ Stop `field.quality` and `field.pending` from reporting a field's value as a pla
 
 ## Why
 
-On 2026-11-17 an agent declared `statuses.values: [Todo, InProgress, Done, WontDo]` with `initial: [Todo]`. The configuration loaded clean, `urzua new` wrote `Status: Todo`, and `check` reported `field.quality`: "field 'Status' is Placeholder". Declaring `statuses.placeholders` without that word removed the finding and exposed a second, `field.pending`: "field 'Status' is marked pending". The agent renamed the status. A word the repository itself declared as a legitimate value of a field is not a placeholder in that field; the engine's placeholder and pending vocabularies are defaults, not a reason to forbid a status name. Declaring both `statuses.placeholders` and `statuses.pending` without the word avoids both findings, but nothing tells the author so.
+On 2026-11-17 an agent declared `statuses.values: [Todo, InProgress, Done, WontDo]` with `initial: [Todo]`. The configuration loaded clean, `urzua new` wrote `Status: Todo`, and `check` reported `field.quality`: "field 'Status' is Placeholder". Declaring `statuses.placeholders` without that word removed the finding and exposed a second, `field.pending`: "field 'Status' is marked pending". The agent renamed the status. A word the repository itself declared as a legitimate value of a field is not a placeholder in that field; the engine's placeholder and pending vocabularies are defaults, not a reason to forbid a status name. Declaring both `statuses.placeholders` and `statuses.pending` without the word avoids both findings (the reporting agent confirmed this on release 0.4.6 on 2026-11-17), but neither finding's message points to those keys.
 
 ## Done means
 
