@@ -621,18 +621,11 @@ fn without_the_engine_the_adapter_states_that_the_command_was_not_judged() {
     let only_python = path_with(&["python3", "git", "sh"]);
     let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), Some(&only_python));
     assert_eq!(out.status.code(), Some(0), "{out:?}");
+    // One short line for the person, nothing more on every command.
     let v = json(&out);
-    let m = v["hookSpecificOutput"]["additionalContext"]
-        .as_str()
-        .unwrap();
-    assert!(
-        m.contains("NOT judged") || m.contains("did NOT judge"),
-        "{m}"
-    );
-    assert_eq!(
-        v["hookSpecificOutput"]["hookEventName"], "PostToolUse",
-        "{v}"
-    );
+    let m = v["systemMessage"].as_str().unwrap();
+    assert!(m.contains("could NOT run"), "{m}");
+    assert!(v.get("hookSpecificOutput").is_none(), "{v}");
 }
 
 // ------------------------------------------- MILE-278: once, and only its own
