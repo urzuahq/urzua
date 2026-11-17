@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4K2QQFBGS4V1FDFGWW
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:edc9d94cd4dc7f0a53b918ee9854f33d33cd6d98f8e9cd854286b8aec49f840c, test:rust/crates/urzua-io/src/lib.rs@sha256:edc9d94cd4dc7f0a53b918ee9854f33d33cd6d98f8e9cd854286b8aec49f840c
+Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:1c0888f835679e365fffe2fe0d8aae3b17081682a6100b76253664eb84997378, test:rust/crates/urzua-io/src/lib.rs@sha256:1c0888f835679e365fffe2fe0d8aae3b17081682a6100b76253664eb84997378
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -149,3 +149,4 @@ surface.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 1d8aa0c99344 -> dd2429c5e9ff. Reason: urzua-io lib.rs makes commits_changing_text follow renames and return each commit path, and adds merge_base_with_head and markdown_files_containing_at; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` dd2429c5e9ff -> 1fb59e2c3d3a. Reason: urzua-io lib.rs adds symbolic_full_name, used to tell a remote-tracking base ref from a local one; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 1fb59e2c3d3a -> edc9d94cd4dc. Reason: rust/crates/urzua-io/src/lib.rs: system_clock, parse_as_of, set_as_of and date_of_unix read and format dates through the private date module in place of an external date crate, and the tests gain two recorded tables for parse_as_of and date_of_unix; resolve_identity and the rest of the file are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` edc9d94cd4dc -> 1c0888f83567. Reason: urzua-io lib.rs gains wall_clock_unix, the real time for lifetimes measured in minutes, read through the same single clock function; today, --as-of and every date comparison are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

@@ -233,15 +233,21 @@ the host's transcript (`transcript_path`) records the call. The transcript check
 a boundary, since the transcript is the user's own file.
 
 **At the local commit check** (`urzua check` with no `--actors`, as the pre-commit hook runs it), with the mode on, a
-gated move in a record whose working-tree or index copy differs from `HEAD` passes, reported at `info`, only with a
-confirmed approval for that record and status, those exact bytes, on that same `HEAD` blob, inside its time window
-(created at or before now, not expired; the wall clock, never `--as-of`) and not yet used. Anything else is an error,
-whatever `require_evidence` says, with the reason: no approval, an unconfirmed one, or one that does not hold. The first
-check that finds the approved bytes committed marks the approval used, so the same bytes restored later or on another
-branch need a new approval. Pending maintainer review: the mode is a statement that local gated moves need a person, so
-a person's own edit outside the agent is held to it too; turn the mode off to commit such a move without an approval.
-With the mode off, nothing here applies: with `require_evidence` off (the default), a gated move committed locally is
-reported at `info` and the pull request check decides.
+gated move in a record whose working-tree or index copy differs from `HEAD`:
+
+- with a confirmed approval for that record and status, those exact bytes, on that same `HEAD` blob, inside its time
+  window (created at or before now, not expired, on the real clock whatever `--as-of` says) and not yet used, passes,
+  reported at `info`, even under `require_evidence: true`;
+- with an approval that is pending (the host never confirmed the call) or does not hold, is an error with the reason;
+- with no approval at all, is judged exactly as with the mode off: `require_evidence` decides (`info` by default, an
+  error when it is true). A person's own edit, or a status change made from a shell, is not blocked locally by this
+  mode.
+
+The first check that finds the approved bytes committed marks the approval used, so the same bytes restored later or on
+another branch need a new approval.
+
+So the mode is a way for the agent's edit tool to make a gated move with the person's answer and a local record of it.
+It adds no local enforcement beyond what `require_evidence` already gives, and the pull request check is the control.
 
 **Limits.** The hooks run as the agent's own user, so there is no secret to anchor on. A shell command can forge an
 approval in a few steps: pipe a made-up PreToolUse payload into `urzua harness hook claude-code edit`, copy the content

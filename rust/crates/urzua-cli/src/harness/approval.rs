@@ -66,18 +66,14 @@ pub(crate) struct Approval {
 
 /// The wall clock, never `--as-of`: an approval's life is real time.
 pub(crate) fn now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+    urzua_io::wall_clock_unix()
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<Vec<u8>> {
-    let out = std::process::Command::new("git")
-        .arg("-C")
-        .arg(dir)
+    let out = urzua_io::git::GitRun::new()
+        .dash_c(dir)
         .args(args)
-        .stderr(std::process::Stdio::null())
+        .discard_stderr()
         .output()
         .ok()?;
     out.status.success().then_some(out.stdout)
@@ -222,20 +218,18 @@ pub(crate) fn judge_local(
     status: &str,
     head: &str,
     now: i64,
-) -> SessionApproval {
-    let Some(path) = approvals_dir(repo_root).map(|d| file_for(&d, rel)) else {
-        return SessionApproval::Invalid(
-            "the repository's own git directory was not found, so no approval can be read".into(),
-        );
-    };
+) -> Option<SessionApproval> {
+    let path = approvals_dir(repo_root).map(|d| file_for(&d, rel))?;
     if !path.exists() {
-        return SessionApproval::Missing;
+        return None;
     }
     let Some(a) = read(&path) else {
-        return SessionApproval::Invalid("the approval kept for it could not be read".into());
+        return Some(SessionApproval::Invalid(
+            "the approval kept for it could not be read".into(),
+        ));
     };
     let on_disk = urzua_io::sha256_hex_of_file(&repo_root.join(rel));
-    if a.path != rel {
+    Some(if a.path != rel {
         SessionApproval::Invalid(format!("the approval kept for it names {}", a.path))
     } else if a.record_id != record_id {
         SessionApproval::Invalid(format!(
@@ -270,7 +264,7 @@ pub(crate) fn judge_local(
             "an approval recorded in an agent session names {} (the name as read from {}, not verified); it is a local record that CI does not rely on",
             a.identity, a.identity_source
         ))
-    }
+    })
 }
 
 /// Marks used every confirmed approval whose bytes `HEAD` now holds.
@@ -338,10 +332,9 @@ pub(crate) fn for_check(
         };
         let id = urzua_core::rules::record_id(record).unwrap_or_default();
         let head = head_blob(repo_root, &rel);
-        out.insert(
-            record.path.clone(),
-            judge_local(repo_root, &rel, &id, status, &head, now),
-        );
+        if let Some(found) = judge_local(repo_root, &rel, &id, status, &head, now) {
+            out.insert(record.path.clone(), found);
+        }
     }
     Some(out)
 }

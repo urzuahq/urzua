@@ -1142,9 +1142,11 @@ below is decided by the builder on 2026-11-17, pending maintainer review.
    local record CI does not rely on. It never says the person edited the file, and never calls the name verified.
 2. **What it shows locally, when nothing forged it.** A confirmed approval under `.git/urzua/approvals` shows that the
    host's post-edit hook ran for an edit call of that record into that status, from that status and that `HEAD` blob,
-   that the transcript records the call, and that the file holds exactly the approved bytes. With the mode on, the
-   pre-commit check accepts an uncommitted gated move only on that basis, once, and refuses one without it whatever
-   `require_evidence` says.
+   that the transcript records the call, and that the file holds exactly the approved bytes. The pre-commit check
+   accepts an uncommitted gated move on that basis, once, even under `require_evidence`, and refuses one whose approval
+   is pending or does not hold. A gated move with no approval is judged as without the mode: `require_evidence`
+   decides. The mode therefore adds no local enforcement; it lets the agent's edit tool make the move with the
+   person's answer and a local record.
 3. **What it does not prove.** Which person clicked: the name is whatever `gh` or `git config` reports, held only to
    being a login in the gate's group. That a person answered: a headless permission-prompt tool, a `PermissionRequest`
    hook, an SDK permission callback or a `permissions.allow` rule can answer instead, and the payload does not show it.
@@ -1219,3 +1221,4 @@ below is decided by the builder on 2026-11-17, pending maintainer review.
 > | 2026-11-17 | Noted in the fourth- and fifth-review amendments that the shell fallback behaviour they describe was removed by the sixth; in the sixth, the maintainer's sentence stands alone and the gloss is stated as the orchestrator's reading. **Why:** seventh review of the pull request that moved the harness into the binary. | **evidence** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17): an approval given at the agent host's prompt is a person's act, and what it proves`. **Why:** `ADR-102` Consequences require it, and the maintainer accepted the amendment of `ADR-102` on 2026-11-17 ("I'm happy for you to amend ADR 102. I'll give you my acceptance.") that makes the host's prompt the first mechanism; the amendment's content was decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Rewrote the amendment of the same day on approvals given at the agent host's prompt after a security review: the receipt is a local record and names the person as the session reported them, not as verified; the limits of a forgery by shell, what reports it and the one control to rely on are stated in full. **Why:** a security review of the pull request that builds it showed a shell can forge an approval naming a decider; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | In the amendment on approvals given at the agent host's prompt: a gated move with no approval is judged as without the mode, so a person's own edit is not blocked at commit; a pending or invalid approval stays an error. **Why:** the orchestrator withdrew the instruction that made a move with no approval an error, because it blocked a maintainer committing an acceptance he made himself, the pain this work exists to remove. | **substantive** |

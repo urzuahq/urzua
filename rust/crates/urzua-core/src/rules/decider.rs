@@ -59,8 +59,9 @@ fn kinds_text(authority: &AuthorityDecl) -> String {
 /// move in an agent session (`ADR-102`). It exists only in the checkout's git
 /// directory, so it is read by a local run with no actors file and never in CI.
 /// It is not proof: a shell command running as the same user can write it.
-/// Under `acceptance.in_session: ask` an uncommitted gated move without a
-/// `Valid` one is an error at the local check, whatever `require_evidence` says.
+/// A `Valid` one satisfies the local check; a `Pending` or `Invalid` one is an
+/// error (someone was asked and it does not hold); with none, `require_evidence`
+/// decides as it does without the mode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionApproval {
     /// A confirmed approval for this record, this status and these bytes.
@@ -70,9 +71,6 @@ pub enum SessionApproval {
     Pending(String),
     /// An approval names the record but does not hold, and why.
     Invalid(String),
-    /// The record's copy in the working tree or index differs from `HEAD` and
-    /// no approval names it.
-    Missing,
 }
 
 /// Who made the change, as far as the run can tell: the actors file the host
@@ -292,15 +290,7 @@ fn finding_for(
         ),
         (None, Some(SessionApproval::Pending(why) | SessionApproval::Invalid(why))) => (
             format!(
-                "{}: {} (gate: {gate_text}), and {why}. With acceptance.in_session: ask a gated move committed from this checkout needs an approval from the agent session: make the move with the agent's edit tool so the person in the decider group '{group}' is asked, or turn the mode off",
-                g.path.display(),
-                g.what,
-            ),
-            None,
-        ),
-        (None, Some(SessionApproval::Missing)) => (
-            format!(
-                "{}: {} (gate: {gate_text}), and no approval given in an agent session names it. With acceptance.in_session: ask a gated move committed from this checkout needs one: make the move with the agent's edit tool so the person in the decider group '{group}' is asked, or turn the mode off",
+                "{}: {} (gate: {gate_text}), and {why}. an approval that was asked for must hold to be committed: make the move again with the agent's edit tool so the person in the decider group '{group}' is asked and the host confirms it, or remove the approval and let require_evidence decide",
                 g.path.display(),
                 g.what,
             ),

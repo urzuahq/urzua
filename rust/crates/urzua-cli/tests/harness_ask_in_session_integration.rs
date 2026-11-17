@@ -385,20 +385,6 @@ fn the_same_bytes_written_without_the_host_reporting_the_call_do_not_pass() {
 }
 
 #[test]
-fn a_receipt_with_no_approval_behind_it_does_not_pass() {
-    let dir = repo("forged", &config(ASK));
-    let content = approve(&dir);
-    std::fs::remove_dir_all(dir.join(".git/urzua/approvals")).unwrap();
-    assert!(content.contains("approved in an agent session"));
-    let (code, out) = check_base(&dir, &[]);
-    assert_eq!(code, 1, "{out}");
-    assert!(
-        out.contains("no approval given in an agent session names it"),
-        "{out}"
-    );
-}
-
-#[test]
 fn an_approval_for_another_record_does_not_pass() {
     let dir = repo("other-record", &config(ASK));
     approve(&dir);
@@ -686,8 +672,10 @@ fn post_edit_without_the_call_in_the_transcript_drops_the_approval() {
             .contains("transcript does not show this edit call"),
         "{v}"
     );
-    let (code, out) = check_base(&dir, &[]);
-    assert_eq!(code, 1, "{out}");
+    assert!(std::fs::read_dir(dir.join(".git/urzua/approvals"))
+        .unwrap()
+        .next()
+        .is_none());
 }
 
 #[test]
@@ -728,22 +716,6 @@ fn an_approvals_directory_outside_the_repositorys_own_git_directory_is_not_used(
     assert_eq!(d, "deny", "{v}");
     assert!(r.contains("own git directory"), "{r}");
     assert!(!elsewhere.join("urzua").exists());
-}
-
-#[test]
-fn with_the_mode_on_a_gated_move_with_no_approval_fails_the_local_check() {
-    let dir = repo("no-approval", &config(ASK));
-    std::fs::write(
-        dir.join("docs/adr/ADR-1-a.md"),
-        accepted(PROPOSED).replace("---\n#", "Accepted-on: 2026-11-17\n---\n#"),
-    )
-    .unwrap();
-    let (code, out) = check_base(&dir, &[]);
-    assert_eq!(code, 1, "{out}");
-    assert!(
-        out.contains("no approval given in an agent session names it"),
-        "{out}"
-    );
 }
 
 #[test]
@@ -837,4 +809,77 @@ fn a_notebook_call_that_names_its_file_under_another_key_is_refused() {
     });
     let v = hook(&dir, "edit", &p, "Alice");
     assert_eq!(decision(&v).0, "deny", "{v}");
+}
+
+fn accept_by_hand(dir: &Path) {
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-a.md"),
+        accepted(PROPOSED).replace("---\n#", "Accepted-on: 2026-11-17\n---\n#"),
+    )
+    .unwrap();
+}
+
+/// Exit code and the decider findings, for comparison across modes.
+fn decider_outcome(dir: &Path) -> (i32, Vec<String>) {
+    let (code, out) = check_base(dir, &[]);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let found = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "diff.decider-required")
+        .map(|f| format!("{} {}", f["severity"], f["message"]))
+        .collect();
+    (code, found)
+}
+
+#[test]
+fn with_the_mode_on_a_gated_move_with_no_approval_is_judged_as_with_the_mode_off() {
+    for evidence in ["error", "{level: error, require_evidence: true}"] {
+        let cfg = |mode: &str| {
+            config(mode).replace(
+                "diff.decider-required: error",
+                &format!("diff.decider-required: {evidence}"),
+            )
+        };
+        let on = repo("hand-on", &cfg(ASK));
+        let off = repo("hand-off", &cfg(""));
+        accept_by_hand(&on);
+        accept_by_hand(&off);
+        let (a, b) = (decider_outcome(&on), decider_outcome(&off));
+        assert_eq!(a, b, "{evidence}");
+        assert_eq!(
+            a.0,
+            if evidence == "error" { 0 } else { 1 },
+            "{evidence}: {a:?}"
+        );
+    }
+}
+
+#[test]
+fn a_receipt_with_no_approval_behind_it_counts_for_nothing() {
+    let dir = repo("forged", &config(ASK));
+    let content = approve(&dir);
+    std::fs::remove_dir_all(dir.join(".git/urzua/approvals")).unwrap();
+    assert!(content.contains("approved in an agent session"));
+    let (code, out) = check_base(&dir, &[]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("no --actors file was given") && !out.contains("not verified"),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_confirmed_approval_satisfies_the_check_under_require_evidence() {
+    let dir = repo(
+        "confirmed-strict",
+        &config(ASK).replace(
+            "diff.decider-required: error",
+            "diff.decider-required: {level: error, require_evidence: true}",
+        ),
+    );
+    approve(&dir);
+    let (code, out) = check_base(&dir, &[]);
+    assert_eq!(code, 0, "{out}");
 }
