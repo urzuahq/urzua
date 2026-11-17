@@ -19,7 +19,7 @@ Have `urzua new` write an unset field the way the type's template writes it, or 
 
 - A record made by `urzua new` with no value for a field carries the template's text for that field or omits the field, shown by a test against each initialised type profile.
 - `urzua new` followed by `urzua check` on the staged record reports no finding about a field `new` wrote, or `new`'s report lists the fields still to fill with a next action.
-- The same holds for a required field with no value given and for an optional pointer field left unset: neither is written as `null`, and an unset optional pointer field trips no pointer rule, shown by a test of each.
+- The same holds for a required field with no value given and for an optional pointer field left unset: neither is written as `null`, and an unset optional pointer field trips no pointer rule (`header.pointer-field-clean` reports it today), shown by a test of each.
 
 > **Revision log**
 >
