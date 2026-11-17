@@ -37,6 +37,9 @@ struct Frame {
 #[derive(Default)]
 pub(crate) struct ConfigLines {
     lines: HashMap<String, usize>,
+    anchors: HashMap<String, String>,
+    /// `(path of the key holding the alias, anchor name)`, in file order.
+    aliases: Vec<(String, String)>,
 }
 
 impl ConfigLines {
@@ -99,7 +102,14 @@ impl ConfigLines {
             let path = key(&parent, &name);
             out.lines.entry(path.clone()).or_insert(line_no);
             counters.remove(&path);
-            let value = value.trim();
+            let mut value = value.trim();
+            if let Some(rest) = value.strip_prefix('&') {
+                let (name, after) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+                out.anchors.insert(name.to_string(), path.clone());
+                value = after.trim();
+            } else if let Some(name) = value.strip_prefix('*') {
+                out.aliases.push((path.clone(), name.trim().to_string()));
+            }
             if value.starts_with('{') {
                 out.flow_keys(&path, value, line_no);
             }
@@ -158,6 +168,19 @@ impl ConfigLines {
         }
     }
 
+    /// Every alias at or under `prefix`, as `(alias at, anchor at)`.
+    pub(crate) fn aliases_under(&self, prefix: &str) -> Vec<(String, String)> {
+        self.aliases
+            .iter()
+            .filter(|(p, _)| {
+                p == prefix
+                    || p.starts_with(&format!("{prefix}."))
+                    || p.starts_with(&format!("{prefix}["))
+            })
+            .filter_map(|(p, name)| Some((self.at(p), self.at(self.anchors.get(name)?))))
+            .collect()
+    }
+
     /// `path:line`, or the bare path when no line is known.
     pub(crate) fn at(&self, path: &str) -> String {
         match self.line(path) {
@@ -211,6 +234,17 @@ mod tests {
         assert_eq!(l.line("a[\"k.v\"]"), Some(6));
         assert_eq!(l.line("rules[\"status.x\"]"), Some(8));
         assert_eq!(l.line("a.list[1].targets[0]"), Some(5));
+    }
+
+    #[test]
+    fn an_alias_names_where_its_anchor_is_defined() {
+        let text = "t:\n  a:\n    statuses: &st\n      values: [X]\n  b:\n    statuses: *st\n";
+        let l = ConfigLines::scan(text);
+        assert_eq!(l.line("t.a.statuses.values"), Some(4));
+        assert_eq!(
+            l.aliases_under("t.b"),
+            [("t.b.statuses:6".to_string(), "t.a.statuses:3".to_string())]
+        );
     }
 
     #[test]

@@ -242,7 +242,7 @@ enum Command {
         types: bool,
         /// With `--types`: every type's full declaration, and the repository's
         /// own settings.
-        #[arg(long, requires = "types")]
+        #[arg(long, requires = "types", conflicts_with = "record_type")]
         full: bool,
         /// One declared record type.
         #[arg(long = "type", value_name = "TYPE")]

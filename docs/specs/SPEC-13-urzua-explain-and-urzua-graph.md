@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.25'
+Version: '0.26'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c, code:rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:08015e93ad9d519277d50938d938437e541198fa8e2062b84fe919145d452489, code:rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e73c3877572225ccf18ba3e734ce163920e6c7efd08c8dadc8a552852f1baae3, test:rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:6ceceef0feb2104159b4f9883a1f61779fb16bfce02e96f155a78fce27a16044
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -86,45 +86,63 @@ corpus: the report is the build's rule table and the repository's configuration.
 ## `urzua explain --types` and `urzua explain --type <name>`
 
 What the configuration declares for its record types, read from the configuration file and nothing
-else (`MILE-329`). A name the configuration does not declare exits 2 with a `not-run` report naming
-the declared types.
+else (`MILE-329`). Types are listed in name order, not declaration order; a configuration with no
+record type prints `types` as an empty list. A name the configuration does not declare exits 2 with a
+`not-run` report naming the declared types, or saying that none is declared. `--full` goes with
+`--types` only; `--type <name>` is always the full detail of one type, and `--type <name> --full`
+exits 2.
 
 `urzua explain --types` prints a summary: per type `name`, `at`, `prefix`, `dirs`, `create` (the
 `urzua new` command for it), `required` and `optional` field names, `states` (`values` and
-`initial`), `references` (each reference field with the types it may name) and the number of
-`conditions`; then `rules` with `on_by_declaration` and `declared_but_not_enabled` as `id: level`.
-Its `next_action` is `urzua explain --type <name>`.
+`initial`), `references` (each reference field with the types it may name, or `"any"`),
+`conditions` (the requirements and prohibitions whose rule is in effect) and
+`conditions_not_enabled` (those whose rule is off); then `rules` with `on_by_declaration` and
+`declared_but_not_enabled` as `id: level`. A declared value is printed bare; a default keeps its
+marker object. Its `next_action` is `urzua explain --type <name>`.
 
 `urzua explain --types --full` prints every declaration of every type, `rules`, and `repository`:
 every declared top-level key other than `record_types` and `rules`, each as `{value, at}`.
-`urzua explain --type <name>` prints the same detail for one type, with `rules.set` holding only the
-rules that report a declaration of that type and the two other rule lists only entries naming its
-keys.
+`urzua explain --type <name>` prints the same detail for one type. Its `rules` hold every rule in
+effect that reads something the type takes part in, wherever that is declared: a rule whose
+per-type declaration (the rule table's `reads_declaration`) the type makes, a rule needing a
+relation pair the type carries (an acyclic one where the rule needs it), a rule needing an
+`authority` gate on the type's states or directories, and a rule that reads every record. Each
+names in `declared_by` the declarations that make it apply. The mapping is read from the rule table,
+not kept in a second list.
 
 Per type in detail: `name`, `at`, `create`, `prefix`, `dirs`, `template`, `header_fields` (each with
-`required`, `values` from `field_values`, `pointer` with its `targets`, `narrative`, `roles` from
-`relation_fields`), `relation_pairs` (every key each pair declares), `states` (the status lists,
-`initial`, `transitions` in declaration order, the claim periods `embodiment.claim-expired` sets for
-the type as `expiry`, and every other `statuses` key raw), `conditions` (each `statuses.require` and
-`statuses.forbid` entry with its `when`, `when_field` and `fields` keys, one generated `sentence`, and
-for a requirement `counts_as_missing`: the type's declared `pending` and `placeholders`, whose
-values meet no requirement), `gates` (an `authority` gate on the type's states or on a path
-overlapping its directories, with `by` and `logins`). Every other declared key of the type is printed
-raw under its own name as `{value, at}`, so no declaration is left out.
+`required`, `values` from `field_values`, `pointer`, `narrative`, `roles` from `relation_fields`),
+`relation_pairs` (every key each pair declares), `states`, `conditions`, `gates`, `aliases`. A
+`pointer` gives the field's own `targets` with their line when it declares any, each carried
+relation pair's `target_types` with its line under `pair_target_types`, and `effective_targets`: the
+types the field may name once every declaration applies, or `"any"`. `states` holds the status lists,
+`initial`, `transitions` in declaration order, every other `statuses` key raw, and `expiry`: the
+claim periods the claim-expiry rule sets for the type, shown only while that rule is in effect.
+`conditions` gives each `statuses.require` and `statuses.forbid` entry with its `when`,
+`when_field` and `fields` keys, the `rule` that reports it with its level, one generated
+`sentence`, and for a requirement `counts_as_missing`: the type's `pending` and `placeholders`
+with their lines, or, where the type declares none, a marker that the engine's built-in list
+applies. `gates` lists the `authority` gates on the type's states or on a path overlapping its
+directories, with `by` and `logins`. `aliases` lists each YAML alias under the type with the line
+of its anchor (`defined_at`), since a key inside an aliased value has no line of its own. Every
+other declared key of the type is printed raw under its own name as `{value, at}`.
 
 `rules` holds `set` (each rule the configuration names, with its level), `on_by_declaration` (a
 default-on rule whose condition a declaration meets, with the keys that declare it) and
-`declared_but_not_enabled` (a rule that reports a declaration in the report and is off, with those
+`declared_but_not_enabled` (a rule that reads a declaration in the report and is off, with those
 keys).
 
 Every entry read from the configuration carries `at`, its key path and line (`path:line`). Lines come
-from a second pass over the YAML text; a key inside a multi-line flow collection is given its
-nearest enclosing key's line. Nothing the configuration does not declare is printed, with four
-exceptions marked `"default": true` with a `source` and no `at`: a type's initial state when
-`initial` is not declared (`first_status_value`); a rule on by declaration (`default_on`); the
-identifier prefix when `prefix` is not declared (`type_name_uppercased`); and the template path when
-the conventional template file exists (`conventional_template_path`). Empty lists, empty objects and
-absent settings are omitted. The only prose is the `sentence` of a condition.
+from a second pass over the YAML text; a key inside a multi-line flow collection or an aliased value
+is given its nearest enclosing key's line. Nothing the configuration does not declare is printed,
+with these exceptions, each marked `"default": true` with a `source` and no `at`: a type's
+`initial` when `statuses.initial` is not declared, which says no starting status is required of a
+record (`required_of_records: false`) and names the status `urzua new` writes (`new_writes`,
+`first_status_value`); a rule on by declaration (`default_on`); the identifier prefix when `prefix`
+is not declared (`type_name_uppercased`); the template path when the conventional template file
+exists (`conventional_template_path`); and the built-in pending and placeholder lists in
+`counts_as_missing` (`built_in_list`). Empty lists, empty objects and absent settings are omitted.
+The only prose is the `sentence` of a condition.
 
 ## `urzua graph`
 
@@ -234,3 +252,5 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 16a38ffef9e7 -> 36dba22b9492. Reason: rust/crates/urzua-core/src/graph.rs: test fixtures that build a Config gain the new declared_status_entries field; no production code changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.24`. Adds the section `urzua explain --types` and `urzua explain --type <name>`: what the configuration declares per record type, each entry with its key path and line, the two marked defaults, and the three rule lists. **Why:** an agent new to a repository could not learn its record model from the tool without reading the configuration file. | **substantive** |
 > | 2026-11-17 | Bumped to `0.25`. `urzua explain --types` prints a summary with `--full` for every declaration and a `repository` section; every undeclared-rendering key is printed raw; a requirement carries `counts_as_missing`; four marked non-declared entries replace two; transitions keep declaration order; the per-type field list is `header_fields`; the initial-state text says what is declared. **Why:** review of the first version found declarations left out and a report too long for a session start; the summary default, the four marked entries and the agent-only session-start line were decided by the orchestrator and accepted by the maintainer on 2026-11-17: "The three decisions you made make sense to me. I'm happy with your decisions". | **substantive** |
+> | 2026-11-17 | Bumped to `0.26`. The `urzua explain --types` section: a type's rules are read from the rule table and include rules declared outside the type's keys; expiry is shown only while its rule is in effect; a reference field reports its own targets, each pair's `target_types` and the effective result, with `"any"` for none; an undeclared initial state says no start status is required and names what `urzua new` writes; the summary keeps default markers and counts conditions by whether their rule is on; `--full` goes with `--types` only; types are in name order; aliases name their anchor's line; the built-in pending and placeholder lists are marked; `Realized-by` cites `explain_types.rs`, `config_lines.rs` and `explain_types_integration.rs`. **Why:** review of 2026-11-17 found the command stated six things untruly; each is corrected. | **substantive** |
+> | 2026-11-17 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:08015e93ad9d, rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e73c38775722, rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:6ceceef0feb2 Reason: explain_types.rs builds the explain --types and --type reports this spec's section describes; config_lines.rs gives each entry its key path and line; explain_types_integration.rs tests each stated behaviour **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |

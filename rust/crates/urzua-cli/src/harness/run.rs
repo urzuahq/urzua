@@ -110,9 +110,6 @@ struct Verdict {
     findings: Vec<serde_json::Value>,
     #[serde(rename = "override", skip_serializing_if = "Option::is_none")]
     override_name: Option<String>,
-    /// Text for the agent alone: the adapter passes it on an `allow` session
-    /// start, which shows the person nothing.
-    /// The answer to a `gates_only` request no gate denied, or text for the agent alone.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     extra: Option<Box<Extra>>,
 }

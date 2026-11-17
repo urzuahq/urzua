@@ -30,9 +30,14 @@ On release 0.4.7 an agent new to a repository cannot learn its record model from
 
 The Done-means item "no built-in default ... with exactly two exceptions" is delivered with four marked entries, each `"default": true` with a `source` and no position: a type's initial state when `initial` is not declared; a rule on by declaration; the effective identifier prefix when `prefix` is not declared, because the prefix decides how a record's id reads; and the conventional template path when that file exists, because the template decides section order where a type takes its order from the template. `urzua explain --types` prints a summary, one compact entry per type and the rule ids with their levels, and points at `urzua explain --type <name>`; `urzua explain --types --full` prints every declaration. The harness's session-start line is passed to the agent alone on a healthy session start and shows the person nothing. These three decisions were made by the orchestrator on 2026-11-17 and accepted by the maintainer on 2026-11-17: "The three decisions you made make sense to me. I'm happy with your decisions".
 
+## Amendment (2026-11-17): which wording the delivered command follows
+
+The delivered command follows the previous amendment's wording, not the Done-means item's "exactly two exceptions": it prints the four marked entries named here, and also marks the engine's built-in pending and placeholder lists where a requirement relies on them.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-17 | Initial record, `Status: Planned`. **Why:** Reported on 2026-11-17 by an agent in an adopting repository at the maintainer's prompting; the maintainer had asked "if another agent comes along, can they figure out what's the workflow quickly through the urzua tool?", expected `urzua explain` to do it, and said a repository should not need its own working document for this. | **structural** |
 > | 2026-11-17 | Amendment: the no-default item is delivered with four marked entries, `--types` prints a summary with `--full` for detail, and the session-start line goes to the agent alone. **Why:** decided by the orchestrator and accepted by the maintainer on 2026-11-17: "The three decisions you made make sense to me. I'm happy with your decisions". | **substantive** |
+> | 2026-11-17 | Amendment: one sentence says the delivered command follows the amendment's four marked entries rather than the Done-means item's "exactly two exceptions", and that it also marks the built-in pending and placeholder lists. **Why:** review of 2026-11-17 noted the item and the amendment disagree; the item is left as written. | **structural** |

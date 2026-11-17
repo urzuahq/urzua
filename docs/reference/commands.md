@@ -297,17 +297,22 @@ With `--rule`: what the rule is. Its `rule` object has `id`, `description`, `sco
 `population_unit`, `spec`, the `level` your config sets, `waivable`, its `options` with their current
 values and its `actions`.
 
-With `--types`: a summary, one compact entry per declared record type (`name`, `prefix`, `dirs`,
-`create`, `required` and `optional` field names, `states`, `references`, the number of
-`conditions`) and the rules on by declaration or declared but off, as `id: level`; `next_action` is
-`urzua explain --type <name>`. With `--types --full`, or `--type <name>` for one type: every
-declaration, each with `at` (`key.path:line`): `header_fields`, `relation_pairs`, `states`,
-`conditions` (keys, a one-line `sentence`, and `counts_as_missing` for a requirement), `gates`, and
-every other declared key raw under its own name; `rules` (`set`, `on_by_declaration`,
-`declared_but_not_enabled`); `--full` adds `repository`, every other declared top-level key. Four
-entries not declared are printed, marked `"default": true` with a `source`: an undeclared initial
-state, a rule on by declaration, an undeclared prefix, and the conventional template file. An
-undeclared `--type` exits 2.
+With `--types`: a summary, one compact entry per declared record type in name order (`name`, `at`,
+`prefix`, `dirs`, `create`, `required` and `optional` field names, `states`, `references` with
+`"any"` for an unconstrained field, `conditions` in effect and `conditions_not_enabled`) and the
+rules on by declaration or declared but off, as `id: level`; a default keeps its marker object;
+`next_action` is `urzua explain --type <name>`. With `--types --full`, or `--type <name>` for one
+type (always full; `--full` with `--type` exits 2): every declaration, each with `at`
+(`key.path:line`): `prefix`, `dirs`, `template`, `header_fields` (a `pointer` gives its own `targets`,
+each pair's `target_types` and `effective_targets`), `relation_pairs`, `states` (with `expiry` while
+the claim-expiry rule is on), `conditions` (keys, the reporting `rule` and level, a one-line
+`sentence`, and `counts_as_missing` for a requirement), `gates`, `aliases`, and every other declared
+key raw under its own name; `rules` (`set`, `on_by_declaration`, `declared_but_not_enabled`; for one
+type, every rule in effect that reads something the type takes part in, with `declared_by`);
+`--full` adds `repository`, every other declared top-level key. Entries not declared are marked
+`"default": true` with a `source`: an undeclared initial state (no start status is required; the
+status `urzua new` writes), a rule on by declaration, an undeclared prefix, the conventional
+template file, and the built-in pending and placeholder lists. An undeclared `--type` exits 2.
 
 ## graph
 

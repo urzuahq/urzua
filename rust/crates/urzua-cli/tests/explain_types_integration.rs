@@ -1,5 +1,4 @@
-//! `urzua explain --types [--full]` and `urzua explain --type <name>`
-//! (`MILE-329`): what the configuration declares for its record types, each
+//! `urzua explain --types [--full]` and `urzua explain --type <name>`: what the configuration declares for its record types, each
 //! entry with the key path and line it was read from.
 
 mod common;
@@ -13,9 +12,9 @@ const FIXTURE: &str = include_str!("fixtures/explain_types/config.yaml");
 const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 
 /// The summary of the three-type fixture, as printed, stays under this many bytes.
-const MAX_SUMMARY_BYTES: usize = 2_500;
+const MAX_SUMMARY_BYTES: usize = 3_500;
 /// The full report of the three-type fixture stays under this many bytes.
-const MAX_FULL_BYTES: usize = 12_000;
+const MAX_FULL_BYTES: usize = 16_000;
 /// The summary of this repository's own configuration stays under this many bytes.
 const MAX_OWN_SUMMARY_BYTES: usize = 6_000;
 
@@ -122,7 +121,14 @@ fn every_declaration_is_reported_with_its_position() {
         json!(["bug", "chore"])
     );
     assert!(field(issue, "Severity").get("required").is_none());
-    assert_eq!(field(issue, "Fixes")["pointer"]["targets"], json!(["task"]));
+    assert_eq!(
+        field(issue, "Fixes")["pointer"]["targets"]["value"],
+        json!(["task"])
+    );
+    assert_eq!(
+        field(issue, "Fixes")["pointer"]["effective_targets"],
+        json!(["task"])
+    );
     assert!(field(issue, "See-also")["narrative"]["at"].is_string());
     assert_eq!(field(issue, "State")["roles"][0]["role"], "status");
     assert_eq!(field(issue, "Opened")["roles"][0]["role"], "date");
@@ -159,7 +165,7 @@ fn every_declaration_is_reported_with_its_position() {
     );
     assert_eq!(
         task["states"]["initial"],
-        json!({"value": ["Todo"], "default": true, "source": "first_status_value"})
+        json!({"required_of_records": false, "new_writes": "Todo", "default": true, "source": "first_status_value"})
     );
     let gates = &r["repository"]["authority"];
     assert!(
@@ -253,7 +259,10 @@ fn the_summary_is_compact_and_points_at_the_detail() {
     assert_eq!(issue["references"]["Fixes"], json!(["task"]));
     assert_eq!(issue["states"]["initial"], json!(["Open"]));
     assert_eq!(issue["conditions"], 2);
-    assert_eq!(of(&r, "task")["prefix"], "TASK");
+    assert_eq!(
+        of(&r, "task")["prefix"],
+        json!({"value": "TASK", "default": true, "source": "type_name_uppercased"})
+    );
     assert_eq!(
         r["rules"]["on_by_declaration"]["field.value-not-declared"],
         "error"
@@ -504,12 +513,272 @@ fn rules_on_by_a_status_declaration_are_shown_in_effect_for_the_type() {
             .map(|v| v.as_str().unwrap())
             .collect();
         assert!(
-            by.contains(&"record_types.work.statuses.delivery.items:15"),
+            by.iter()
+                .any(|b| b.starts_with("record_types.work.statuses.delivery")),
             "{id}: {by:?}"
         );
     }
     assert!(
         r["rules"].get("set").is_none(),
         "rules: names none of them: {r}"
+    );
+}
+
+fn write_repo(name: &str, config: &str) -> common::TempDir {
+    let dir = repo(name, config);
+    for d in ["docs/a", "docs/b", "docs/note"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    dir
+}
+
+fn rule_ids(r: &Value, list: &str) -> Vec<String> {
+    r["rules"][list]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|e| e["id"].as_str().unwrap().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+const NOTE_EXPIRY: &str = "schema_version: 2
+record_types:
+  note:
+    dir: docs/note
+    required_fields: [Status, Last-audited]
+    known_fields: [Realized-by]
+    statuses: {values: [Open, Done]}
+rules:
+  embodiment.claim-expired:
+    level: LEVEL
+    anchor_field: Last-audited
+    periods: [{type: note, status: [Done], days: 45}]
+";
+
+#[test]
+fn expiry_is_shown_only_while_its_rule_is_in_effect_and_the_rule_is_listed() {
+    let off = write_repo("expiry-off", &NOTE_EXPIRY.replace("LEVEL", "off"));
+    let (_, r) = run(&off, &["explain", "--type", "note"]);
+    assert!(of(&r, "note")["states"].get("expiry").is_none(), "{r}");
+    let on = write_repo("expiry-on", &NOTE_EXPIRY.replace("LEVEL", "warn"));
+    let (_, r) = run(&on, &["explain", "--type", "note"]);
+    assert_eq!(of(&r, "note")["states"]["expiry"][0]["days"], 45, "{r}");
+    assert!(
+        rule_ids(&r, "set").contains(&"embodiment.claim-expired".to_string()),
+        "{r}"
+    );
+}
+
+#[test]
+fn one_type_lists_rules_declared_outside_its_own_keys() {
+    let (_, r) = run(&own_root(), &["explain", "--type", "adr"]);
+    assert!(
+        rule_ids(&r, "set").contains(&"diff.decider-required".to_string()),
+        "an authority gate on the type: {}",
+        r["rules"]
+    );
+    let (_, r) = run(&own_root(), &["explain", "--type", "milestone"]);
+    let set = rule_ids(&r, "set");
+    for id in [
+        "relation.pair-reciprocity",
+        "sequence.cycle",
+        "sequence.unresolved-blocker",
+        "sequence.status-agreement",
+        "embodiment.claim-expired",
+    ] {
+        assert!(set.contains(&id.to_string()), "{id}: {set:?}");
+    }
+}
+
+#[test]
+fn every_rule_that_runs_for_a_type_is_listed_for_it() {
+    // This repository's configuration sets most rules; any rule it sets that
+    // reads records, or reads a declaration a type makes, must be listed for
+    // some type, or the per-type view hides a rule that judges that type.
+    let (_, full) = run(&own_root(), &["explain", "--types", "--full"]);
+    let names: Vec<String> = full["types"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
+    let mut listed = std::collections::BTreeSet::new();
+    for name in &names {
+        let (_, r) = run(&own_root(), &["explain", "--type", name]);
+        listed.extend(rule_ids(&r, "set"));
+    }
+    let (_, rules) = run(&own_root(), &["rules"]);
+    let per_record: Vec<String> = rules["rules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["scope"] == "records")
+        .map(|d| d["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(per_record.len() > 20, "{rules}");
+    let set: Vec<String> = full["rules"]["set"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["level"] != "off")
+        .map(|e| e["id"].as_str().unwrap().to_string())
+        .collect();
+    for id in set.iter().filter(|id| per_record.contains(id)) {
+        assert!(
+            listed.contains(id),
+            "{id} judges records but no `--type` lists it"
+        );
+    }
+    assert!(listed.contains("diff.decider-required"), "{listed:?}");
+}
+
+const NARROWED: &str = "schema_version: 2
+record_types:
+  a:
+    dir: docs/a
+    required_fields: [Status]
+    known_fields: [Up, Down, Other]
+    pointer_fields:
+      - {name: Up, targets: [a, b]}
+      - Other
+    narrative_fields: []
+  b:
+    dir: docs/b
+    required_fields: [Status]
+    known_fields: [Down]
+relation_pairs:
+  - name: tree
+    forward: Up
+    inverse: Down
+    reciprocity: none
+    target_types: [b]
+";
+
+#[test]
+fn a_narrowed_reference_names_each_declaration_and_the_result() {
+    let dir = write_repo("narrowed", NARROWED);
+    let (out, r) = run(&dir, &["explain", "--type", "a"]);
+    assert_eq!(out.status.code(), Some(0), "{r}");
+    let up = &field(of(&r, "a"), "Up")["pointer"];
+    assert_eq!(up["targets"]["value"], json!(["a", "b"]));
+    assert_eq!(
+        up["targets"]["at"],
+        "record_types.a.pointer_fields[0].targets:8"
+    );
+    assert_eq!(up["pair_target_types"][0]["value"], json!(["b"]));
+    assert_eq!(
+        up["pair_target_types"][0]["at"],
+        "relation_pairs[0].target_types:20"
+    );
+    assert_eq!(up["effective_targets"], json!(["b"]));
+    let other = &field(of(&r, "a"), "Other")["pointer"];
+    assert!(
+        other.get("targets").is_none(),
+        "no line that declares none: {other}"
+    );
+    assert_eq!(other["effective_targets"], "any");
+}
+
+#[test]
+fn an_unconstrained_reference_says_any_type() {
+    let dir = write_repo("any", NARROWED);
+    let (_, r) = run(&dir, &["explain", "--types"]);
+    assert_eq!(of(&r, "a")["references"]["Other"], "any");
+    assert_eq!(of(&r, "a")["references"]["Up"], json!(["b"]));
+}
+
+#[test]
+fn an_undeclared_initial_state_requires_no_start_status() {
+    let dir = repo("initial", FIXTURE);
+    let (_, r) = run(&dir, &["explain", "--type", "task"]);
+    let initial = &of(&r, "task")["states"]["initial"];
+    assert_eq!(initial["required_of_records"], false);
+    assert_eq!(initial["new_writes"], "Todo");
+    assert_eq!(initial["default"], true);
+    assert!(initial.get("value").is_none(), "{initial}");
+}
+
+#[test]
+fn the_summary_marks_its_defaults() {
+    let dir = repo("summary-defaults", FIXTURE);
+    let (_, r) = run(&dir, &["explain", "--types"]);
+    let task = of(&r, "task");
+    assert_eq!(task["prefix"]["default"], true);
+    assert_eq!(task["states"]["initial"]["default"], true);
+    assert_eq!(
+        of(&r, "issue")["prefix"],
+        "ISS",
+        "a declared prefix stays plain"
+    );
+}
+
+#[test]
+fn no_record_type_is_an_empty_list_and_a_plain_error() {
+    let dir = repo("empty", "schema_version: 2\nrecord_types: {}\n");
+    let (out, r) = run(&dir, &["explain", "--types"]);
+    assert_eq!(out.status.code(), Some(0), "{r}");
+    assert_eq!(r["types"], json!([]));
+    let (_, r) = run(&dir, &["explain", "--type", "x"]);
+    let error = r["error"].as_str().unwrap();
+    assert!(error.ends_with("declares no record type"), "{error}");
+}
+
+#[test]
+fn full_goes_with_types_only() {
+    let dir = repo("full-type", FIXTURE);
+    let (out, r) = run(&dir, &["explain", "--type", "task", "--full"]);
+    assert_eq!(out.status.code(), Some(2), "{r}");
+    assert!(r["error"].as_str().unwrap().contains("--full"), "{r}");
+}
+
+#[test]
+fn conditions_whose_rule_is_off_are_counted_apart() {
+    let config = format!("{FIXTURE}  status.forbidden-field-present: off\n");
+    let dir = repo("conditions-off", &config);
+    let (_, r) = run(&dir, &["explain", "--types"]);
+    let issue = of(&r, "issue");
+    assert_eq!(issue["conditions"], 1, "{issue}");
+    assert_eq!(issue["conditions_not_enabled"], 1, "{issue}");
+    let (_, r) = run(&dir, &["explain", "--type", "issue"]);
+    let forbid = &of(&r, "issue")["conditions"][1];
+    assert_eq!(forbid["rule"]["level"], "off", "{forbid}");
+}
+
+#[test]
+fn an_aliased_declaration_cites_where_it_is_defined() {
+    let config = "schema_version: 2
+record_types:
+  a:
+    dir: docs/a
+    required_fields: [Status]
+    statuses: &st
+      values: [Open, Done]
+  b:
+    dir: docs/b
+    required_fields: [Status]
+    statuses: *st
+";
+    let dir = write_repo("alias", config);
+    let (_, r) = run(&dir, &["explain", "--type", "b"]);
+    assert_eq!(
+        of(&r, "b")["aliases"],
+        json!([{"at": "record_types.b.statuses:11", "defined_at": "record_types.a.statuses:6"}])
+    );
+}
+
+#[test]
+fn built_in_pending_words_apply_when_none_are_declared() {
+    let dir = repo("built-in-pending", FIXTURE);
+    let (_, r) = run(&dir, &["explain", "--type", "issue"]);
+    let missing = &of(&r, "issue")["conditions"][0]["counts_as_missing"];
+    assert_eq!(
+        missing["pending"],
+        json!({"default": true, "source": "built_in_list"})
+    );
+    assert_eq!(
+        missing["placeholders"],
+        json!({"default": true, "source": "built_in_list"})
     );
 }

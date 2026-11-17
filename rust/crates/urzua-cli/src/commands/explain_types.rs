@@ -1,5 +1,4 @@
-//! `urzua explain --types [--full]` and `urzua explain --type <name>`
-//! (`MILE-329`): what the configuration declares for its record types, read
+//! `urzua explain --types [--full]` and `urzua explain --type <name>`: what the configuration declares for its record types, read
 //! from the configuration file alone. Every entry read from it carries `at`,
 //! its key path and line (`path:line`). Four entries the configuration does
 //! not declare are printed, marked `"default": true` with a `source` and no
@@ -13,38 +12,16 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 use urzua_core::config::{Config, RecordTypeConfig, RuleLevel};
 use urzua_core::report::{ActionInput, Failure, NextAction, Notice, Report, ReportStatus};
-use urzua_core::rules::{effective_level, rule_def, DEFAULT_ON_RULES};
+use urzua_core::rules::{
+    effective_level, Declaration, RuleDef, Scope, DEFAULT_ON_RULES, RULE_EMBODIMENT_CLAIM_EXPIRED,
+    RULE_POINTER_TARGET_TYPE, RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+    RULE_STATUS_REQUIRED_FIELD_MISSING, RULE_TABLE,
+};
 use urzua_core::status_model::{StatusDecl, StatusFieldRule};
 
 use super::config_lines::{index, key, ConfigLines};
 use crate::emit;
 use crate::session::{emit_or_not_run, Workspace};
-
-/// Which rule reports a violation of each declaration, keyed by the
-/// declaration's path under `record_types.<type>` (or from the top level when
-/// it starts with `/`). A rule listed here that is off leaves the declaration
-/// with nothing to report it.
-pub(crate) const DECLARATION_RULES: &[(&str, &str)] = &[
-    ("required_fields", "header.required-fields"),
-    ("known_fields", "header.field-set-consistency"),
-    ("field_values", "field.value-not-declared"),
-    ("pointer_fields", "pointer.resolution"),
-    ("pointer_fields.targets", "pointer.target-type"),
-    ("narrative_fields", "narrative-field.stale"),
-    ("statuses.values", "status.undeclared-value"),
-    ("statuses.transitions", "status.transition-allowed"),
-    ("statuses.require", "status.required-field-missing"),
-    ("statuses.forbid", "status.forbidden-field-present"),
-    ("statuses.delivery", "status.delivery-agreement"),
-    ("statuses.delivery.items", "status.done-items-shape"),
-    ("statuses.delivery.items", "status.delivery-agreement"),
-    ("statuses.delivery.items", "status.waived-item-stale"),
-    ("sections.required", "section.required"),
-    ("revision_log", "revision-log.change-class-required"),
-    ("/relation_pairs", "relation.pair-reciprocity"),
-    ("/relation_pairs.target_types", "pointer.target-type"),
-    ("/authority.gates", "diff.decider-required"),
-];
 
 /// Per-type keys with a rendering of their own; every other declared key is
 /// printed raw under its own name, so no declaration can go unreported.
@@ -76,10 +53,8 @@ const STATUS_RENDERED: &[&str] = &[
     "forbid",
 ];
 
-/// Top-level keys reported elsewhere than under `repository`.
 const REPOSITORY_EXCLUDED: &[&str] = &["record_types", "rules"];
 
-/// What `explain` was asked for.
 pub enum Mode {
     Summary,
     Full,
@@ -140,10 +115,14 @@ pub(crate) fn build(
     if let Some(name) = &only {
         if !ws.config.record_types.contains_key(name) {
             let declared: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-            return Err(format!(
-                "'{name}' is not a declared record type; the configuration declares: {}",
-                declared.join(", ")
-            )
+            return Err(if declared.is_empty() {
+                format!("'{name}' is not a declared record type; the configuration declares no record type")
+            } else {
+                format!(
+                    "'{name}' is not a declared record type; the configuration declares: {}",
+                    declared.join(", ")
+                )
+            }
             .into());
         }
     }
@@ -183,6 +162,10 @@ pub(crate) fn build(
             ("rules", ctx.rules()),
         ]),
     };
+    let mut body = body;
+    if let Value::Object(m) = &mut body {
+        m.entry("types").or_insert_with(|| json!([]));
+    }
     let config = ws
         .config_path
         .strip_prefix(&ws.repo_root)
@@ -212,7 +195,6 @@ fn base(name: &str) -> String {
     key(&key("", "record_types"), name)
 }
 
-/// An object without the entries that are null, empty lists or empty objects.
 fn obj(pairs: Vec<(&str, Value)>) -> Value {
     let mut m = Map::new();
     for (k, v) in pairs {
@@ -339,12 +321,18 @@ impl Ctx<'_> {
             out.push(("conditions", Value::from(self.conditions(name, t, d))));
         }
         out.push(("gates", Value::from(self.gates(name, t))));
+        let aliases: Vec<Value> = self
+            .lines
+            .aliases_under(&b)
+            .into_iter()
+            .map(|(at, defined_at)| json!({"at": at, "defined_at": defined_at}))
+            .collect();
+        out.push(("aliases", Value::from(aliases)));
         let raw = raw_get(self.raw, &["record_types", name]);
         out.extend(self.raw_rest(raw, &b, TYPE_RENDERED));
         obj(out)
     }
 
-    /// One compact entry per type for the summary.
     fn summary(&self, name: &str, t: &RecordTypeConfig) -> Value {
         let required: Vec<&String> = t.required_fields.iter().collect();
         let optional: Vec<&String> = t
@@ -353,32 +341,56 @@ impl Ctx<'_> {
             .flatten()
             .filter(|f| !t.required_fields.contains(f))
             .collect();
-        let constraints = urzua_core::pointer_targets::constraints(self.config);
         let references: Map<String, Value> = t
             .pointer_fields
             .iter()
             .flatten()
-            .map(|f| {
-                let targets = constraints.get(name).and_then(|m| m.get(f));
-                (f.clone(), json!(targets.cloned().unwrap_or_default()))
-            })
+            .map(|f| (f.clone(), self.effective_targets(name, f)))
             .collect();
         let decl = t.status_decl();
         let states = decl.as_ref().map(|d| {
+            let initial = self.initial(name, d);
             obj(vec![
                 ("values", json!(d.values)),
-                ("initial", self.initial(name, d)["value"].clone()),
+                (
+                    "initial",
+                    if initial.get("default").is_some() {
+                        initial
+                    } else {
+                        initial["value"].clone()
+                    },
+                ),
             ])
         });
-        let conditions = decl
+        let count = |kind: &str, n: usize| -> (usize, usize) {
+            let on = self.condition_rule(kind)["level"] != RuleLevel::Off.as_str();
+            if on {
+                (n, 0)
+            } else {
+                (0, n)
+            }
+        };
+        let (on_r, off_r) = decl
             .as_ref()
-            .map_or(0, |d| d.require.len() + d.forbid.len());
+            .map_or((0, 0), |d| count("require", d.require.len()));
+        let (on_f, off_f) = decl
+            .as_ref()
+            .map_or((0, 0), |d| count("forbid", d.forbid.len()));
+        let positive = |n: usize| if n > 0 { json!(n) } else { Value::Null };
+        let prefix = self.prefix(name, t);
         let mut dirs = vec![t.dir.clone()];
         dirs.extend(t.extra_dirs.iter().cloned());
         obj(vec![
             ("name", Value::from(name)),
             ("at", self.at(&base(name))),
-            ("prefix", self.prefix(name, t)["value"].clone()),
+            (
+                "prefix",
+                if prefix.get("default").is_some() {
+                    prefix
+                } else {
+                    prefix["value"].clone()
+                },
+            ),
             ("dirs", json!(dirs)),
             (
                 "create",
@@ -388,18 +400,11 @@ impl Ctx<'_> {
             ("optional", json!(optional)),
             ("states", states.unwrap_or(Value::Null)),
             ("references", Value::Object(references)),
-            (
-                "conditions",
-                if conditions > 0 {
-                    json!(conditions)
-                } else {
-                    Value::Null
-                },
-            ),
+            ("conditions", positive(on_r + on_f)),
+            ("conditions_not_enabled", positive(off_r + off_f)),
         ])
     }
 
-    /// Every declared top-level key but the record types and the rules.
     fn repository(&self) -> Value {
         let rest = self.raw_rest(Some(self.raw), "", REPOSITORY_EXCLUDED);
         obj(rest)
@@ -469,19 +474,45 @@ impl Ctx<'_> {
         }
     }
 
+    /// What each declaration says of a reference field's targets, and the
+    /// result: `any` when nothing constrains it.
     fn pointer(&self, name: &str, t: &RecordTypeConfig, f: &str) -> Value {
         let Some(i) = t.pointer_fields.iter().flatten().position(|p| p == f) else {
             return Value::Null;
         };
         let path = index(&key(&base(name), "pointer_fields"), i);
-        let targets = urzua_core::pointer_targets::constraints(self.config)
+        let own = self
+            .config
+            .pointer_targets
             .get(name)
             .and_then(|m| m.get(f))
-            .cloned();
+            .map(|v| self.declared(&key(&path, "targets"), json!(v)));
+        let pairs: Vec<Value> = self
+            .carried_pairs(name, t)
+            .filter(|(_, p)| p.forward == f)
+            .filter_map(|(i, p)| {
+                let tt = p.target_types.as_ref()?;
+                Some(self.declared(&key(&index("relation_pairs", i), "target_types"), json!(tt)))
+            })
+            .collect();
         obj(vec![
             ("at", self.at(&path)),
-            ("targets", targets.map(Value::from).unwrap_or(Value::Null)),
+            ("targets", own.unwrap_or(Value::Null)),
+            ("pair_target_types", Value::from(pairs)),
+            ("effective_targets", self.effective_targets(name, f)),
         ])
+    }
+
+    /// The types a reference field may name once every declaration is
+    /// applied, or `"any"`.
+    fn effective_targets(&self, name: &str, f: &str) -> Value {
+        match urzua_core::pointer_targets::constraints(self.config)
+            .get(name)
+            .and_then(|m| m.get(f))
+        {
+            Some(v) => json!(v),
+            None => json!("any"),
+        }
     }
 
     fn narrative(&self, name: &str, t: &RecordTypeConfig, f: &str) -> Value {
@@ -491,24 +522,31 @@ impl Ctx<'_> {
         }
     }
 
-    /// Every relation pair the type carries, with every key it declares.
-    fn pairs(&self, name: &str, t: &RecordTypeConfig) -> Vec<Value> {
+    fn carried_pairs<'p>(
+        &'p self,
+        name: &'p str,
+        t: &'p RecordTypeConfig,
+    ) -> impl Iterator<Item = (usize, &'p urzua_core::config::RelationPair)> + 'p {
         let fields = t.declared_fields();
-        let raw = raw_get(self.raw, &["relation_pairs"]).and_then(|v| v.as_sequence());
         self.config
             .relation_pairs
             .iter()
             .enumerate()
-            .filter(|(_, p)| {
+            .filter(move |(_, p)| {
                 p.types
                     .as_ref()
                     .is_none_or(|ts| ts.iter().any(|x| x == name))
             })
-            .filter(|(_, p)| {
+            .filter(move |(_, p)| {
                 [&p.forward, &p.inverse]
                     .iter()
                     .any(|f| fields.contains(&urzua_core::values::FieldName::new(f.as_str())))
             })
+    }
+
+    fn pairs(&self, name: &str, t: &RecordTypeConfig) -> Vec<Value> {
+        let raw = raw_get(self.raw, &["relation_pairs"]).and_then(|v| v.as_sequence());
+        self.carried_pairs(name, t)
             .map(|(i, _)| {
                 let mut v = raw
                     .and_then(|r| r.get(i))
@@ -522,6 +560,8 @@ impl Ctx<'_> {
             .collect()
     }
 
+    /// The declared initial statuses, or, undeclared, that a record may start
+    /// at any status and the status `urzua new` writes.
     fn initial(&self, name: &str, d: &StatusDecl) -> Value {
         if !d.initial.is_empty() {
             return self.declared(
@@ -530,9 +570,12 @@ impl Ctx<'_> {
             );
         }
         match d.values.first() {
-            Some(first) => {
-                json!({"value": [first], "default": true, "source": "first_status_value"})
-            }
+            Some(first) => json!({
+                "required_of_records": false,
+                "new_writes": first,
+                "default": true,
+                "source": "first_status_value"
+            }),
             None => Value::Null,
         }
     }
@@ -573,9 +616,13 @@ impl Ctx<'_> {
         obj(out)
     }
 
-    /// The claim periods `embodiment.claim-expired` declares for this type.
+    /// The claim periods the claim-expiry rule declares for this type, when the
+    /// rule is in effect.
     fn expiry(&self, name: &str) -> Vec<Value> {
-        const RULE: &str = "embodiment.claim-expired";
+        const RULE: &str = RULE_EMBODIMENT_CLAIM_EXPIRED;
+        if effective_level(self.config, RULE) == RuleLevel::Off {
+            return Vec::new();
+        }
         let Some(periods) =
             raw_get(self.raw, &["rules", RULE, "periods"]).and_then(|p| p.as_sequence())
         else {
@@ -597,6 +644,15 @@ impl Ctx<'_> {
             .collect()
     }
 
+    fn condition_rule(&self, kind: &str) -> Value {
+        let id = if kind == "require" {
+            RULE_STATUS_REQUIRED_FIELD_MISSING
+        } else {
+            RULE_STATUS_FORBIDDEN_FIELD_PRESENT
+        };
+        json!({"id": id, "level": effective_level(self.config, id).as_str()})
+    }
+
     fn conditions(&self, name: &str, t: &RecordTypeConfig, d: &StatusDecl) -> Vec<Value> {
         let s = key(&base(name), "statuses");
         let status_field = t.relation_field(urzua_core::config::RelationRole::Status);
@@ -604,9 +660,12 @@ impl Ctx<'_> {
         // alone would overstate what satisfies it.
         let missing = obj(["pending", "placeholders"]
             .into_iter()
-            .filter_map(|k| {
-                let v = self.raw_type(name, &["statuses", k])?;
-                Some((k, self.declared(&key(&s, k), yaml_json(v))))
+            .map(|k| {
+                let v = match self.raw_type(name, &["statuses", k]) {
+                    Some(v) => self.declared(&key(&s, k), yaml_json(v)),
+                    None => json!({"default": true, "source": "built_in_list"}),
+                };
+                (k, v)
             })
             .collect());
         [
@@ -623,6 +682,7 @@ impl Ctx<'_> {
         .map(|(kind, verb, i, r)| {
             obj(vec![
                 ("kind", Value::from(kind)),
+                ("rule", self.condition_rule(kind)),
                 ("when", json!(r.when)),
                 ("when_field", json!(r.when_field)),
                 ("fields", json!(r.fields)),
@@ -641,19 +701,28 @@ impl Ctx<'_> {
         .collect()
     }
 
-    fn gates(&self, name: &str, t: &RecordTypeConfig) -> Vec<Value> {
-        let Some(auth) = &self.config.authority else {
-            return Vec::new();
-        };
-        auth.gates
+    fn type_gates<'g>(
+        &'g self,
+        name: &'g str,
+        t: &'g RecordTypeConfig,
+    ) -> impl Iterator<Item = (usize, &'g urzua_core::authority::Gate)> + 'g {
+        self.config
+            .authority
             .iter()
-            .enumerate()
-            .filter(|(_, g)| {
+            .flat_map(|a| a.gates.iter().enumerate())
+            .filter(move |(_, g)| {
                 g.record_type.as_deref() == Some(name)
                     || g.paths
                         .iter()
                         .any(|p| t.all_dirs().any(|d| paths_overlap(p, d)))
             })
+    }
+
+    fn gates(&self, name: &str, t: &RecordTypeConfig) -> Vec<Value> {
+        let Some(auth) = &self.config.authority else {
+            return Vec::new();
+        };
+        self.type_gates(name, t)
             .map(|(i, g)| {
                 let logins = auth.deciders.get(&g.by).map(|d| d.logins.clone());
                 obj(vec![
@@ -667,109 +736,212 @@ impl Ctx<'_> {
             .collect()
     }
 
-    /// Every declaration a rule reports, as `(rule, at)`.
-    fn declarations(&self) -> Vec<(&'static str, String)> {
-        let mut out = Vec::new();
-        for (name, t) in &self.config.record_types {
-            let b = base(name);
-            for (decl, rule) in DECLARATION_RULES
-                .iter()
-                .filter(|(d, _)| !d.starts_with('/'))
-            {
-                if *decl == "pointer_fields.targets" {
-                    for (i, f) in t.pointer_fields.iter().flatten().enumerate() {
-                        let has = self
-                            .config
-                            .pointer_targets
-                            .get(name)
-                            .is_some_and(|m| m.contains_key(f));
-                        if has {
-                            let p = key(&index(&key(&b, "pointer_fields"), i), "targets");
-                            out.push((*rule, self.lines.at(&p)));
-                        }
-                    }
-                    continue;
-                }
-                let segs: Vec<&str> = decl.split('.').collect();
-                if self.raw_type(name, &segs).is_some_and(non_empty) {
-                    let p = segs.iter().fold(b.clone(), |p, s| key(&p, s));
-                    out.push((*rule, self.lines.at(&p)));
-                }
+    /// The `at` of each key under the type that carries `d`; empty when the
+    /// type does not declare it.
+    fn declaration_paths(&self, name: &str, t: &RecordTypeConfig, d: Declaration) -> Vec<String> {
+        let b = base(name);
+        let present = |segs: &[&str]| -> Option<String> {
+            self.raw_type(name, segs)
+                .filter(|v| non_empty(v) && v.as_bool() != Some(false))
+                .map(|_| {
+                    self.lines
+                        .at(&segs.iter().fold(b.clone(), |p, s| key(&p, s)))
+                })
+        };
+        let field = |f: &str| -> Option<String> {
+            let at = |k: &str, list: &[String]| {
+                list.iter()
+                    .position(|x| x == f)
+                    .map(|i| self.lines.at(&index(&key(&b, k), i)))
+            };
+            at("required_fields", &t.required_fields).or_else(|| {
+                at(
+                    "known_fields",
+                    t.known_fields.as_deref().unwrap_or_default(),
+                )
+            })
+        };
+        use urzua_core::config::RelationRole;
+        let found: Vec<Option<String>> = match d {
+            Declaration::RequiredFields => vec![present(&["required_fields"])],
+            Declaration::KnownFields => vec![present(&["known_fields"])],
+            Declaration::PointerFields => vec![present(&["pointer_fields"])],
+            Declaration::VersionBump => vec![present(&["revision_log", "version_bump"])],
+            Declaration::BlockedOrProgress => vec![
+                present(&["statuses", "blocked"]),
+                present(&["statuses", "progress"]),
+            ],
+            Declaration::DeliveryItems => vec![present(&["statuses", "delivery", "items"])],
+            Declaration::UniqueHeadings => vec![present(&["sections", "unique_headings"])],
+            Declaration::NoSkippedLevels => vec![present(&["sections", "no_skipped_levels"])],
+            Declaration::SectionOrder => vec![present(&["sections", "order"])],
+            Declaration::SectionsRequired => vec![present(&["sections", "required"])],
+            Declaration::DeclaredFields => {
+                vec![present(&["required_fields"]), present(&["known_fields"])]
             }
-        }
-        if !self.config.relation_pairs.is_empty() {
-            out.push(("relation.pair-reciprocity", self.lines.at("relation_pairs")));
-        }
-        for (i, p) in self.config.relation_pairs.iter().enumerate() {
-            if p.target_types.is_some() {
-                let path = key(&index("relation_pairs", i), "target_types");
-                out.push(("pointer.target-type", self.lines.at(&path)));
+            Declaration::PointerOrNarrativeFields => {
+                vec![present(&["pointer_fields"]), present(&["narrative_fields"])]
             }
-        }
-        if self
-            .config
-            .authority
-            .as_ref()
-            .is_some_and(|a| !a.gates.is_empty())
-        {
-            out.push(("diff.decider-required", self.lines.at("authority.gates")));
-        }
-        out.retain(|(rule, _)| rule_def(rule).is_some());
-        out
+            Declaration::SupersessionField => {
+                vec![field(t.relation_field(RelationRole::Supersession))]
+            }
+            Declaration::LocatorField => {
+                vec![field(t.relation_field(RelationRole::EmbodimentLocator))]
+            }
+            Declaration::RevisionLog => vec![present(&["revision_log"])],
+            Declaration::StatusValues => vec![present(&["statuses", "values"])],
+            Declaration::FieldValues => vec![present(&["field_values"])],
+            Declaration::StatusRequire => vec![present(&["statuses", "require"])],
+            Declaration::StatusForbid => vec![present(&["statuses", "forbid"])],
+            Declaration::StatusTransitions => vec![present(&["statuses", "transitions"])],
+            Declaration::StatusDelivery => vec![present(&["statuses", "delivery"])],
+            Declaration::WaiverType => {
+                vec![t.role.is_some().then(|| self.lines.at(&key(&b, "role")))]
+            }
+        };
+        found.into_iter().flatten().collect()
     }
 
-    /// Every declaration a rule reports, as `(rule, at)`; for one type, only
-    /// the declarations under that type.
-    fn scoped_declarations(&self) -> Vec<(&'static str, String)> {
-        let mut decls = self.declarations();
-        if let Some(name) = self.only {
-            let b = base(name);
-            decls.retain(|(_, at)| at.starts_with(&format!("{b}.")));
+    /// Whether `def` reads something type `name` takes part in, and the `at`
+    /// of each declaration that makes it so (empty for a rule that reads every
+    /// record). Read from what the rule table says the rule needs.
+    fn rule_for_type(
+        &self,
+        name: &str,
+        t: &RecordTypeConfig,
+        def: &RuleDef,
+    ) -> Option<Vec<String>> {
+        let mut by = Vec::new();
+        if let Some(d) = def.reads_declaration {
+            let paths = self.declaration_paths(name, t, d);
+            if paths.is_empty() {
+                return None;
+            }
+            by.extend(paths);
         }
-        decls
+        if def.requires_relation_pairs || def.requires_acyclic_pair {
+            let pairs: Vec<String> = self
+                .carried_pairs(name, t)
+                .filter(|(_, p)| !def.requires_acyclic_pair || p.acyclic)
+                .map(|(i, _)| self.lines.at(&index("relation_pairs", i)))
+                .collect();
+            if pairs.is_empty() {
+                return None;
+            }
+            by.extend(pairs);
+        }
+        if def.requires_authority {
+            let gates = self
+                .type_gates(name, t)
+                .map(|(i, _)| self.lines.at(&index(&key("authority", "gates"), i)));
+            let gates: Vec<String> = gates.collect();
+            if gates.is_empty() {
+                return None;
+            }
+            by.extend(gates);
+        }
+        if def.id == RULE_POINTER_TARGET_TYPE {
+            by.extend(self.target_declarations(name, t));
+        }
+        let reads_records = def.scope == Scope::Records;
+        (reads_records || !by.is_empty()).then_some(by)
+    }
+
+    fn target_declarations(&self, name: &str, t: &RecordTypeConfig) -> Vec<String> {
+        let b = base(name);
+        let own = t
+            .pointer_fields
+            .iter()
+            .flatten()
+            .enumerate()
+            .filter(|(_, f)| {
+                self.config
+                    .pointer_targets
+                    .get(name)
+                    .is_some_and(|m| m.contains_key(*f))
+            })
+            .map(|(i, _)| {
+                self.lines
+                    .at(&key(&index(&key(&b, "pointer_fields"), i), "targets"))
+            });
+        let pairs = self
+            .carried_pairs(name, t)
+            .filter(|(_, p)| p.target_types.is_some())
+            .map(|(i, _)| {
+                self.lines
+                    .at(&key(&index("relation_pairs", i), "target_types"))
+            });
+        own.chain(pairs).collect()
+    }
+
+    /// Every rule that reads something a selected type takes part in, with the
+    /// declarations that make it so, merged across the selected types.
+    fn rules_by_type(&self) -> Vec<(&'static RuleDef, Vec<String>)> {
+        RULE_TABLE
+            .iter()
+            .filter_map(|def| {
+                let mut any = false;
+                let mut by: Vec<String> = Vec::new();
+                for (name, t) in &self.config.record_types {
+                    if self.only.is_some_and(|o| o != name) {
+                        continue;
+                    }
+                    if let Some(paths) = self.rule_for_type(name, t, def) {
+                        any = true;
+                        by.extend(paths);
+                    }
+                }
+                by.dedup();
+                any.then_some((def, by))
+            })
+            .collect()
     }
 
     /// `(set, on_by_declaration, declared_but_not_enabled)` as
-    /// `(id, level, at or declared_by)` rows.
+    /// `(id, level, at or declared_by)` rows. For one type, only the rules
+    /// that read something it takes part in; otherwise every rule the
+    /// configuration sets.
     fn rule_rows(&self) -> [Vec<(String, &'static str, Value)>; 3] {
-        let decls = self.scoped_declarations();
-        let declared_by = |id: &str| -> Vec<String> {
-            decls
+        let typed = self.rules_by_type();
+        let by_of = |id: &str| -> Vec<String> {
+            typed
                 .iter()
-                .filter(|(r, _)| *r == id)
-                .map(|(_, a)| a.clone())
-                .collect()
+                .find(|(d, _)| d.id == id)
+                .map(|(_, b)| b.clone())
+                .unwrap_or_default()
         };
         let set = self
             .config
             .rules
             .iter()
-            .filter(|(id, _)| self.only.is_none() || !declared_by(id).is_empty())
-            .map(|(id, s)| (id.clone(), s.level.as_str(), self.at(&key("rules", id))))
+            .filter(|(id, _)| self.only.is_none() || typed.iter().any(|(d, _)| d.id == id.as_str()))
+            .filter(|(_, s)| self.only.is_none() || s.level != RuleLevel::Off)
+            .map(|(id, s)| {
+                let by = by_of(id);
+                let mut row = json!({"at": self.at(&key("rules", id))});
+                if self.only.is_some() && !by.is_empty() {
+                    row["declared_by"] = json!(by);
+                }
+                (id.clone(), s.level.as_str(), row)
+            })
             .collect();
         let on = DEFAULT_ON_RULES
             .iter()
             .filter(|d| d.applies.is_some_and(|f| f(self.config)))
             .filter(|d| !self.config.rules.contains_key(d.id))
-            .filter(|d| self.only.is_none() || !declared_by(d.id).is_empty())
-            .map(|d| (d.id.to_string(), d.level.as_str(), json!(declared_by(d.id))))
-            .collect();
-        let mut off_ids: Vec<&str> = decls
-            .iter()
-            .map(|(r, _)| *r)
-            .filter(|r| effective_level(self.config, r) == RuleLevel::Off)
-            .collect();
-        off_ids.sort_unstable();
-        off_ids.dedup();
-        let off = off_ids
-            .into_iter()
-            .map(|id| {
-                (
-                    id.to_string(),
-                    RuleLevel::Off.as_str(),
-                    json!(declared_by(id)),
-                )
+            .filter(|d| {
+                typed
+                    .iter()
+                    .any(|(def, by)| def.id == d.id && !by.is_empty())
             })
+            .map(|d| (d.id.to_string(), d.level.as_str(), json!(by_of(d.id))))
+            .collect();
+        let off = typed
+            .iter()
+            .filter(|(d, by)| {
+                !by.is_empty() && effective_level(self.config, d.id) == RuleLevel::Off
+            })
+            .map(|(d, by)| (d.id.to_string(), RuleLevel::Off.as_str(), json!(by)))
             .collect();
         [set, on, off]
     }
@@ -778,7 +950,11 @@ impl Ctx<'_> {
         let [set, on, off] = self.rule_rows();
         let set: Vec<Value> = set
             .into_iter()
-            .map(|(id, level, at)| json!({"id": id, "level": level, "at": at}))
+            .map(|(id, level, mut row)| {
+                row["id"] = json!(id);
+                row["level"] = json!(level);
+                row
+            })
             .collect();
         let on: Vec<Value> = on
             .into_iter()
@@ -810,18 +986,5 @@ impl Ctx<'_> {
             ("on_by_declaration", map(on)),
             ("declared_but_not_enabled", map(off)),
         ])
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_declaration_rule_is_shipped() {
-        for (decl, rule) in super::DECLARATION_RULES {
-            assert!(
-                urzua_core::rules::rule_def(rule).is_some(),
-                "{decl}: {rule}"
-            );
-        }
     }
 }
