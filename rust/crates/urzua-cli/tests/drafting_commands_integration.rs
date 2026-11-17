@@ -152,7 +152,7 @@ fn run_step_with_bin(dir: &Path, script: &str, title: &str, record: &str, bin: &
         .expect("bash should run")
 }
 
-/// Stands in for the agent's content step: every `null` header field gets a value, and
+/// Stands in for the agent's content step: every empty header field gets a value, and
 /// the body's guidance text is replaced by a sentence. Values are test data, chosen to
 /// resolve in this repository's corpus.
 fn fill(record: &Path) {
@@ -176,7 +176,12 @@ fn fill(record: &Path) {
                     _ => None,
                 }
             };
-            if let Some((key, "null")) = line.split_once(": ") {
+            // A field to fill is empty, written `Key:` or `Key: null`; the
+            // helper accepts both because they read the same.
+            let empty = line
+                .strip_suffix(':')
+                .or_else(|| line.strip_suffix(": null"));
+            if let Some(key) = empty {
                 if let Some(v) = value(key) {
                     out.push_str(&format!("{key}: {v}\n"));
                     continue;
@@ -324,6 +329,49 @@ fn a_field_urzua_new_did_not_write_is_refused() {
     let out = run_step(&dir, &s[1], "", &record);
     assert_eq!(out.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&out.stderr).contains("refusing"));
+}
+
+#[test]
+fn the_helper_returns_to_fill_and_fills_only_the_fields_left_empty() {
+    let dir = fixture("helper-to-fill");
+    let s = steps("adr.md");
+    let out = run_step(&dir, &s[0], "Throwaway to fill record", "");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let to_fill = report["to_fill"]
+        .as_array()
+        .expect("urzua new's to_fill is returned");
+    assert!(
+        to_fill.iter().any(|f| f.to_string().contains("Deciders")),
+        "{report}"
+    );
+    let record = json_path(&out.stdout);
+    let path = dir.join(&record);
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.lines().any(|l| l == "Deciders:"),
+        "the field to fill is written empty, not null: {text}"
+    );
+
+    // A scaffolded value changed beside an empty field filled: only the change is refused.
+    let scaffolded = status_line(&path);
+    let edited = text
+        .replacen("\nDeciders:\n", "\nDeciders: tester\n", 1)
+        .replacen(&scaffolded, "Status: Accepted", 1);
+    std::fs::write(&path, edited).unwrap();
+    let out = run_step(&dir, &s[1], "", &record);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("scaffolded value of Status"), "{stderr}");
+    assert!(
+        !stderr.contains("Deciders"),
+        "filling an empty field is allowed: {stderr}"
+    );
+    assert!(stderr.contains("fills empty fields"), "{stderr}");
 }
 
 fn sweep_examined(dir: &Path) -> u64 {

@@ -82,13 +82,12 @@ pub fn run(
     };
 
     let stable_id = urzua_id::StableId::generate();
-    let today = urzua_io::today();
     let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
         Ok(id) => id,
         Err(e) => return fail(format!("could not resolve an identity: {e}")),
     };
 
-    let content = render_record(&NewRecordInputs {
+    let (content, to_fill) = render_record(&NewRecordInputs {
         repo_root: &repo_root,
         record_type: &record_type,
         type_config,
@@ -99,7 +98,7 @@ pub fn run(
         title: &title,
         stable_id: stable_id.as_str(),
         author: &identity.name,
-        today: &today,
+        today: &urzua_io::today(),
     });
 
     let (file_path, gate) = (dir.join(&filename), config.authority.as_ref());
@@ -111,16 +110,22 @@ pub fn run(
 
     emit(&NewReport {
         status: ReportStatus::Ok,
-        // An untracked record is not examined unless the repository opts in
-        // (`ADR-92`), so `check` would read it as nothing until it is staged.
-        stage: !config.discovery.include_untracked,
+        stage: needs_staging(&config),
         path: repo_relative(&repo_root, &file_path),
         display_number,
         stable_id: Some(stable_id.as_str().to_string()),
         pull_refs: pull,
         skipped,
+        to_fill,
+        status_from: urzua_core::new_record::status_from(type_config),
         notices,
     })
+}
+
+/// An untracked record is not examined unless the repository opts in
+/// (`ADR-92`), so `check` would read a new record as nothing until it is staged.
+fn needs_staging(config: &urzua_core::config::Config) -> bool {
+    !config.discovery.include_untracked
 }
 
 fn repo_relative(repo_root: &std::path::Path, path: &std::path::Path) -> PathBuf {
@@ -492,10 +497,10 @@ struct NewRecordInputs<'a> {
 
 /// Reads the type's checked-in template, if any, and hands it to the shared
 /// scaffold in core.
-fn render_record(inputs: &NewRecordInputs) -> String {
+fn render_record(inputs: &NewRecordInputs) -> (String, Vec<urzua_core::new_record::FieldToFill>) {
     let template_path = inputs.repo_root.join(template_path(inputs.record_type));
     let template = urzua_io::read_to_string(&template_path).ok();
-    urzua_core::new_record::scaffold_record(
+    urzua_core::new_record::scaffold_record_reporting(
         &urzua_core::new_record::ScaffoldSpec::plain(
             inputs.type_config,
             inputs.compiled,

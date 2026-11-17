@@ -11,7 +11,7 @@
     "display_number": 4,
     "next_action": "git add -- :/docs/adr/ADR-4-golden-title.md",
     "next_action_inputs": [],
-    "next_action_reason": "stages the new record: check examines only tracked records unless discovery.include_untracked is set",
+    "next_action_reason": "stages the new record: check examines only tracked records unless discovery.include_untracked is set; then fill the required Status, Embodiment (listed in to_fill), and run urzua check",
     "notices": [
       {
         "message": "record type 'adr' declares a closed field set (`known_fields`) that does not list `Stable-Id`, yet every record type gets one (ADR-21); the new record carries it and `header.field-set-consistency` will report it until `Stable-Id` is added to the type's `known_fields`",
@@ -30,7 +30,24 @@
     },
     "skipped": [],
     "stable_id": "<STABLE-ID>",
-    "status": "ok"
+    "status": "ok",
+    "status_from": null,
+    "to_fill": [
+      {
+        "allowed": null,
+        "field": "Status",
+        "hint": null,
+        "if_empty": null,
+        "required": true
+      },
+      {
+        "allowed": null,
+        "field": "Embodiment",
+        "hint": null,
+        "if_empty": null,
+        "required": true
+      }
+    ]
   },
-  "written": "---\nStable-Id: <STABLE-ID>\nStatus: null\nEmbodiment: null\n---\n# 4 — Golden title\n"
+  "written": "---\nStable-Id: <STABLE-ID>\nStatus:\nEmbodiment:\n---\n# 4 — Golden title\n"
 }

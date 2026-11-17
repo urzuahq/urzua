@@ -5,17 +5,17 @@
     "claude-code"
   ],
   "files": {
-    ".claude/commands/adr.md": "words-sha256:05afe3488c5504239514d9507dca71826300f6b0aa73bdd8d3c0edfd2e1f892d",
+    ".claude/commands/adr.md": "words-sha256:23db7ed9af35129c06f1441ee2a78489946684d0a5fea7d339540d7b03b30c26",
     ".claude/commands/amend.md": "words-sha256:017bf8f6a84941fca4a0961040e92e441b3d24a7e05568155895762abde47f46",
-    ".claude/commands/bug.md": "words-sha256:ced256fc741549373bf4153947e8b20c4d2ffc3f60381c12272070fc768981b2",
-    ".claude/commands/condition.md": "words-sha256:4495b85fea42e295215940152ed4f4cd1e62d65f612f8aaf5960a98aade46754",
+    ".claude/commands/bug.md": "words-sha256:ca646f82ea4b60c415d618477f61aede715367ceb43aa24b7603534e20890a16",
+    ".claude/commands/condition.md": "words-sha256:e3f06ca19dd28f3f02b3de886dacac1b0f444b3615225cda0f637ea303e033ca",
     ".claude/commands/done.md": "words-sha256:da22cecde2102493e2ca4475f10f92a528b2a79846350a0844cb77d55660430f",
-    ".claude/commands/milestone.md": "words-sha256:f4b39d9b89a5381482c1426b0e63bfb33d9ca8e8eb0d372cdb76ac3685fde11d",
+    ".claude/commands/milestone.md": "words-sha256:d35844861b02957a3863f4c7c4d608659bfc4e68d64ada4f9dacf12c21f51e0b",
     ".claude/commands/repin.md": "words-sha256:b2fcc3662beca9bc0620531d58666b9cfeec0c087601ce50d49d2c1d7f2fe3aa",
     ".claude/commands/reverify.md": "words-sha256:664514d41da06f3b7664c309bb163822da6cd32ae09470c4d9391b185b9c2943",
-    ".claude/commands/rfc.md": "words-sha256:b55d08786030b4cc9d6a33210dbe3ab8bf5bf7e7c60e87c70c18e3cfe5462d91",
-    ".claude/commands/spec.md": "words-sha256:5205b27468871e4f6fcf52eeaf6a311508fe9f91010aa57cad5aec578ad5aad6",
-    ".claude/commands/waiver.md": "words-sha256:f32efe69fddb910a7254ff0b0179969db850302003945e5a05c352ab7fadc577"
+    ".claude/commands/rfc.md": "words-sha256:af62e70c3f97800b3ba44f4de08d61111e03ab4a5f805a869d82ee0d30044dd8",
+    ".claude/commands/spec.md": "words-sha256:cd304e4372edb8a9b6e8eedd53d286114be4337983e24ebf450da6f74042b6e1",
+    ".claude/commands/waiver.md": "words-sha256:766eaa60619436767d051e9a279745a237d845d52430aeecaedd8cf5db164636"
   },
   "entries": [
     {

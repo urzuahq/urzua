@@ -331,20 +331,156 @@ pub fn render_synthetic_yaml(
     required_fields: &[String],
     template_fields: &[String],
 ) -> String {
-    render_yaml_with(params, required_fields, template_fields, &[], &[])
+    render_yaml_with(
+        params,
+        &HeaderPlan {
+            required_fields,
+            template_fields,
+            supplied: &[],
+            omitted: &[],
+            unset: &UnsetFields::default(),
+        },
+    )
+    .0
 }
 
-/// [`render_synthetic_yaml`] with header values the caller supplies: each
-/// `(field, value)` replaces the field's blank value, or adds the field after
-/// the others when the header has none; each `omitted` field is left out of the
-/// header altogether (`urzua waive --from-report`).
-fn render_yaml_with(
-    params: &NewRecordParams,
-    required_fields: &[String],
-    template_fields: &[String],
-    supplied: &[(&str, &str)],
-    omitted: &[&str],
-) -> String {
+/// A header field `urzua new` wrote empty, for the author to fill: whether the
+/// type requires it, what to write (`hint`, `allowed`) and what leaving it empty
+/// means. `new` never writes the hint into the header, so a value is always the
+/// author's own.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FieldToFill {
+    pub field: String,
+    pub required: bool,
+    pub hint: Option<String>,
+    /// The values the type declares for the field in `field_values`, the same
+    /// list `field.quality` names when the field is left empty.
+    pub allowed: Option<Vec<String>>,
+    /// What leaving the field empty means, where the configuration decides it:
+    /// a suppression type's `Expires` and the fields its `permanent` entries read.
+    pub if_empty: Option<String>,
+}
+
+/// Where `new` took a record's starting status from, and the status itself:
+/// `None` when the type does not require its status field or declares no
+/// statuses. Otherwise the first of
+/// `statuses.initial` when the type declares it, else the first of
+/// `statuses.values`. `other_initial` lists the remaining declared initial
+/// states, so a caller sees that the choice among them was made for it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct StatusFrom {
+    pub field: String,
+    pub value: String,
+    pub source: &'static str,
+    pub other_initial: Vec<String>,
+}
+
+/// The starting status `new` writes for `type_config`, and where it came from.
+pub fn status_from(type_config: &crate::config::RecordTypeConfig) -> Option<StatusFrom> {
+    let field = type_config
+        .relation_field(crate::config::RelationRole::Status)
+        .to_string();
+    // The scaffold fills only required fields, so a status field the type does
+    // not require is written empty like any other.
+    if !type_config.required_fields.contains(&field) {
+        return None;
+    }
+    let decl = type_config.status_decl()?;
+    if let Some((first, rest)) = decl.initial.split_first() {
+        return Some(StatusFrom {
+            field,
+            value: first.clone(),
+            source: "statuses.initial[0]",
+            other_initial: rest.to_vec(),
+        });
+    }
+    decl.values.first().map(|v| StatusFrom {
+        field,
+        value: v.clone(),
+        source: "statuses.values[0]",
+        other_initial: Vec::new(),
+    })
+}
+
+/// The template's header text per field, read for `to_fill` hints only.
+#[derive(Default)]
+struct UnsetFields<'a> {
+    template_values: Option<&'a std::collections::HashMap<String, String>>,
+    type_config: Option<&'a crate::config::RecordTypeConfig>,
+}
+
+impl UnsetFields<'_> {
+    fn if_empty(&self, field: &str) -> Option<String> {
+        let t = self.type_config?;
+        if t.role != Some(crate::config::TypeRole::Suppression) {
+            return None;
+        }
+        if field == EXPIRES_FIELD {
+            return Some(
+                "the waiver takes no effect while Expires is present and empty: fill a YYYY-MM-DD date, or remove the line for a waiver without an expiry where the type allows one"
+                    .to_string(),
+            );
+        }
+        let permanent = t.permanent.iter().flatten();
+        for p in permanent {
+            if p.reason_field == field {
+                return Some(format!(
+                    "read only for a waiver without Expires on rule '{}': the declared reason it is permanent",
+                    p.rule
+                ));
+            }
+            if p.cite_field.as_deref() == Some(field) {
+                return Some(format!(
+                    "read only for a waiver without Expires on rule '{}' whose category requires a citation",
+                    p.rule
+                ));
+            }
+        }
+        None
+    }
+
+    fn allowed(&self, field: &str) -> Option<Vec<String>> {
+        self.type_config
+            .and_then(|t| t.field_vocabulary(field))
+            .map(<[String]>::to_vec)
+    }
+
+    /// The declared values in `field.quality`'s ` (allowed: a, b)` form when the
+    /// type declares them, so the hint never disagrees with the finding; the
+    /// template's text otherwise.
+    fn hint(&self, field: &str) -> Option<String> {
+        if let Some(allowed) = self.allowed(field) {
+            return Some(format!("allowed: {}", allowed.join(", ")));
+        }
+        self.template_values
+            .and_then(|t| t.get(field))
+            .map(|v| v.trim())
+            // A hint is offered as something to write: a dash or a built-in
+            // placeholder word (`TBD`, `name(s)`) would invite the author to
+            // write exactly what `field.quality` reports.
+            .filter(|v| {
+                !matches!(*v, "null" | "~")
+                    && !crate::field_state::is_blank_value(v)
+                    && crate::field_state::whole_value_default_state(v).is_none()
+            })
+            .map(str::to_string)
+    }
+}
+
+/// What [`render_yaml_with`] writes: the type's required and template fields,
+/// each `(field, value)` in `supplied` over its value (or added after the
+/// others when the header has none), each `omitted` field left out of the
+/// header altogether (`urzua waive --from-report`), and unset fields written as
+/// `unset` says.
+struct HeaderPlan<'a> {
+    required_fields: &'a [String],
+    template_fields: &'a [String],
+    supplied: &'a [(&'a str, &'a str)],
+    omitted: &'a [&'a str],
+    unset: &'a UnsetFields<'a>,
+}
+
+fn render_yaml_with(params: &NewRecordParams, plan: &HeaderPlan) -> (String, Vec<FieldToFill>) {
     use yaml_serde::Value;
 
     let mut mapping = yaml_serde::Mapping::new();
@@ -352,63 +488,112 @@ fn render_yaml_with(
         Value::String("Stable-Id".to_string()),
         Value::String(params.stable_id.to_string()),
     );
-    // The fields a declaration lets `new` fill beyond the date, author and
-    // status: the title and the starting version (`MILE-74`).
-    let declared_value = |field: &str| -> Option<Value> {
-        if Some(field) == params.title_field {
-            return Some(Value::String(params.title.to_string()));
-        }
-        params
-            .initial_version
-            .filter(|(version_field, _)| *version_field == field)
-            .map(|(_, value)| Value::String(value.to_string()))
-    };
-    let value_for = |field: &str| match field {
-        f if f == params.date_field => Value::String(params.today.to_string()),
-        f if f == params.author_field => Value::String(params.author.to_string()),
-        f if f == params.status_field => params
-            .initial_status
-            .map_or(Value::Null, |s| Value::String(s.to_string())),
-        f => declared_value(f).unwrap_or(Value::Null),
-    };
-    for field in required_fields {
-        // A type that requires `Stable-Id` already has the generated one above;
-        // listing it again as a blank required field would overwrite it with null.
-        if field == "Stable-Id" {
+    let mut to_fill: Vec<FieldToFill> = Vec::new();
+    let required = |field: &str| plan.required_fields.iter().any(|f| f == field);
+    let fields = plan
+        .required_fields
+        .iter()
+        .chain(plan.template_fields)
+        // A type that requires `Stable-Id` already has the generated one above.
+        .filter(|f| f.as_str() != "Stable-Id");
+    for field in fields {
+        let key = Value::String(field.clone());
+        if mapping.contains_key(&key) {
             continue;
         }
-        mapping.insert(Value::String(field.clone()), value_for(field));
-    }
-
-    // Fields the template's header names beyond the required ones (`BUG-188`),
-    // already filtered to those the type declares, stay blank for a human,
-    // unless the type declares a value for them (`MILE-74`).
-    for field in template_fields {
-        let key = Value::String(field.clone());
-        if !mapping.contains_key(&key) {
-            mapping.insert(key, declared_value(field).unwrap_or(Value::Null));
+        if let Some(value) = known_value(params, field, required(field)) {
+            mapping.insert(key, value);
+            continue;
         }
+        mapping.insert(key, Value::Null);
+        to_fill.push(FieldToFill {
+            field: field.clone(),
+            required: required(field),
+            hint: plan.unset.hint(field),
+            allowed: plan.unset.allowed(field),
+            if_empty: plan.unset.if_empty(field),
+        });
     }
 
-    for field in omitted {
+    for field in plan.omitted {
         mapping.shift_remove(Value::String((*field).to_string()));
     }
-    for (field, value) in supplied {
+    for (field, value) in plan.supplied {
         mapping.insert(
             Value::String((*field).to_string()),
             Value::String((*value).to_string()),
         );
     }
+    to_fill.retain(|f| {
+        !plan.omitted.contains(&f.field.as_str())
+            && !plan.supplied.iter().any(|(k, _)| *k == f.field)
+    });
 
     let yaml_body = yaml_serde::to_string(&Value::Mapping(mapping)).unwrap_or_default();
     let mut out = String::from("---\n");
-    out.push_str(yaml_body.trim_start_matches("---\n"));
+    out.push_str(&without_null_scalars(
+        yaml_body.trim_start_matches("---\n"),
+        &to_fill,
+    ));
     if !out.ends_with('\n') {
         out.push('\n');
     }
     out.push_str("---\n");
     out.push_str(&format!("# {} — {}\n", params.h1_number(), params.title));
+    (out, to_fill)
+}
+
+/// `yaml` with each `Field: null` line of a field to fill written `Field:`:
+/// the same YAML null, read the same by every rule, without the word `null`
+/// an author might take for a value.
+fn without_null_scalars(yaml: &str, to_fill: &[FieldToFill]) -> String {
+    let mut out = String::with_capacity(yaml.len());
+    for line in yaml.lines() {
+        let key = line.strip_suffix(": null");
+        let unquoted = key.map(|k| k.trim_matches(|c| c == '\'' || c == '"'));
+        match (key, unquoted) {
+            (Some(k), Some(u)) if to_fill.iter().any(|f| f.field == u) => {
+                out.push_str(k);
+                out.push(':');
+            }
+            _ => out.push_str(line),
+        }
+        out.push('\n');
+    }
     out
+}
+
+/// The value `new` resolves for `field` itself. The date, author and status
+/// fill only a field the type requires: a field only the template lists is the
+/// author's to decide, and `header.scaffold-mismatch` replays this scaffold, so
+/// a value written here would be one the author must not change. The title
+/// and starting version are filled wherever the field appears, since a
+/// declaration names them.
+fn known_value(params: &NewRecordParams, field: &str, required: bool) -> Option<yaml_serde::Value> {
+    use yaml_serde::Value;
+    let resolved = if !required {
+        None
+    } else if field == params.date_field {
+        Some(params.today)
+    } else if field == params.author_field {
+        Some(params.author)
+    } else if field == params.status_field {
+        params.initial_status
+    } else {
+        None
+    };
+    let declared = || {
+        if Some(field) == params.title_field {
+            return Some(params.title);
+        }
+        params
+            .initial_version
+            .filter(|(version_field, _)| *version_field == field)
+            .map(|(_, value)| value)
+    };
+    resolved
+        .or_else(declared)
+        .map(|t| Value::String(t.to_string()))
 }
 
 /// What `scaffold_record` needs to build a record's initial text: the type's
@@ -478,15 +663,11 @@ impl<'a> ScaffoldSpec<'a> {
     }
 }
 
-/// The status a new record's scaffold writes, or `None` when it writes none:
-/// the type's status field must be a required field, which is the only kind
-/// the scaffold fills, and the type must declare a status vocabulary.
+/// The status a new record's scaffold writes, or `None` when it writes none;
+/// [`status_from`] holds the choice, so the scaffold, `new`'s report and
+/// `explain` cannot disagree.
 pub fn scaffold_status(type_config: &crate::config::RecordTypeConfig) -> Option<String> {
-    let field = type_config.relation_field(crate::config::RelationRole::Status);
-    if !type_config.required_fields.iter().any(|f| f == field) {
-        return None;
-    }
-    type_config.status_decl()?.values.into_iter().next()
+    status_from(type_config).map(|s| s.value)
 }
 
 /// The initial text of a record: a synthesized YAML header from the type's
@@ -497,6 +678,15 @@ pub fn scaffold_status(type_config: &crate::config::RecordTypeConfig) -> Option<
 /// (possibly stale) header is never used, only the field names it lists and its
 /// body.
 pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
+    scaffold_record_reporting(spec, template).0
+}
+
+/// [`scaffold_record`] and the header fields it wrote without a value of their
+/// own, which the author still has to fill.
+pub fn scaffold_record_reporting(
+    spec: &ScaffoldSpec,
+    template: Option<&str>,
+) -> (String, Vec<FieldToFill>) {
     let type_config = spec.type_config;
     // The entry state of the type's own vocabulary, not a choice: moving a
     // record on from it stays a human decision.
@@ -526,12 +716,20 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
     supplied.extend(spec.reason);
     supplied.extend(spec.expires.map(|v| (EXPIRES_FIELD, v)));
     supplied.extend(spec.header_fields.iter().copied());
-    let mut out = render_yaml_with(
+    let template_values = template.map(template_header_values);
+    let unset = UnsetFields {
+        template_values: template_values.as_ref(),
+        type_config: Some(type_config),
+    };
+    let (mut out, to_fill) = render_yaml_with(
         &params,
-        &type_config.required_fields,
-        &template_fields,
-        &supplied,
-        spec.omit_fields,
+        &HeaderPlan {
+            required_fields: &type_config.required_fields,
+            template_fields: &template_fields,
+            supplied: &supplied,
+            omitted: spec.omit_fields,
+            unset: &unset,
+        },
     );
     if let Some(body) = template.and_then(template_body) {
         out.push('\n');
@@ -551,7 +749,7 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
             out.push('\n');
         }
     }
-    out
+    (out, to_fill)
 }
 
 /// The header fields `Waiver` reads by name beyond `Rule` and `Scope`.
@@ -922,7 +1120,7 @@ mod tests {
     }
 
     #[test]
-    fn render_synthetic_yaml_lists_required_fields_as_blank() {
+    fn render_synthetic_yaml_writes_unset_fields_empty() {
         let params = NewRecordParams {
             h1_prefix: None,
             h1_width: 0,
@@ -941,11 +1139,10 @@ mod tests {
         let required = vec!["Status".to_string(), "Severity".to_string()];
         let result = render_synthetic_yaml(&params, &required, &[]);
         assert!(result.starts_with("---\n"));
-        // A real YAML serializer renders an unset field as the `null` scalar,
-        // not a bare trailing colon -- both are valid YAML for "unset," but
-        // only the former is what `yaml_serde::to_string` actually emits.
-        assert!(result.contains("Status: null\n"));
-        assert!(result.contains("Severity: null\n"));
+        // No value: the field is written empty, never `null` or a stand-in.
+        assert!(result.contains("\nStatus:\n"), "{result}");
+        assert!(result.contains("\nSeverity:\n"), "{result}");
+        assert!(!result.contains("null"), "{result}");
         assert!(result.contains("# 1 — X"));
     }
 
@@ -1143,7 +1340,7 @@ mod tests {
             "{rendered}"
         );
         assert!(rendered.contains("Owner: beau"), "{rendered}");
-        assert!(rendered.contains("Date: null"), "{rendered}");
+        assert!(rendered.contains("\nDate:\n"), "{rendered}");
     }
 
     #[test]
@@ -1174,15 +1371,15 @@ mod tests {
             rendered.contains("Version: '0.1'") || rendered.contains("Version: \"0.1\""),
             "a version stays a string: {rendered}"
         );
-        assert!(rendered.contains("Other: null"), "{rendered}");
+        assert!(rendered.contains("\nOther:\n"), "{rendered}");
         let undeclared = NewRecordParams {
             title_field: None,
             initial_version: None,
             ..params
         };
         let rendered = render_synthetic_yaml(&undeclared, &required, &[]);
-        assert!(rendered.contains("Subject: null"), "{rendered}");
-        assert!(rendered.contains("Version: null"), "{rendered}");
+        assert!(rendered.contains("\nSubject:\n"), "{rendered}");
+        assert!(rendered.contains("\nVersion:\n"), "{rendered}");
     }
 
     #[test]
@@ -1208,7 +1405,7 @@ mod tests {
         assert!(rendered.contains("# ADR-4 — T\n"), "{rendered}");
         params.initial_status = None;
         let rendered = render_synthetic_yaml(&params, &["State".to_string()], &[]);
-        assert!(rendered.contains("State: null"), "{rendered}");
+        assert!(rendered.contains("\nState:\n"), "{rendered}");
     }
 
     #[test]
@@ -1247,8 +1444,9 @@ mod tests {
         // template field kept and the undeclared one dropped.
         assert!(out.starts_with("---\nStable-Id: 01SYNTH\n"), "{out}");
         assert!(out.contains("Author: tester\n"), "{out}");
-        assert!(out.contains("Status: null\n"), "{out}");
-        assert!(out.contains("Note: null\n"), "{out}");
+        // Fields `new` has no value for are written empty.
+        assert!(out.contains("\nStatus:\n"), "{out}");
+        assert!(out.contains("\nNote:\n"), "{out}");
         assert!(!out.contains("Other"), "{out}");
         assert!(out.contains("# 3 — Synthetic\n"), "{out}");
         // The template's body scaffolding follows the synthesized header.
@@ -1372,7 +1570,7 @@ mod tests {
         };
         let out = scaffold_record(&spec, Some(WAIVER_TEMPLATE));
         assert!(!out.contains("Expires"), "{out}");
-        assert!(out.contains("Owner: null\n"), "{out}");
+        assert!(out.contains("\nOwner:\n"), "{out}");
     }
 
     #[test]
@@ -1391,9 +1589,140 @@ mod tests {
         );
         let out = scaffold_record(&spec, Some(WAIVER_TEMPLATE));
         assert!(
-            out.contains("Rule: null\nScope: null\nReason: null\nExpires: null\nOwner: null\n"),
+            out.contains("Rule:\nScope:\nReason:\nExpires:\nOwner:\n---\n"),
             "{out}"
         );
         assert!(out.ends_with("> |---|---|---|\n"), "{out}");
+    }
+
+    /// A field `new` has no value for is written empty, required or
+    /// optional, pointer or not; `to_fill` lists it with the template's text as
+    /// a hint, and the header never carries that text.
+    #[test]
+    fn unset_fields_are_written_empty_and_listed_with_the_template_hint() {
+        let type_config = crate::config::RecordTypeConfig {
+            dir: "docs/x".to_string(),
+            required_fields: vec!["Kind".to_string(), "Owner".to_string()],
+            known_fields: Some(vec!["Parent".to_string()]),
+            pointer_fields: Some(vec!["Parent".to_string()]),
+            ..Default::default()
+        };
+        let template = "---\nKind: feature | bug | chore\nOwner: —\nParent: the record this belongs to\n---\n# 0 -- T\n\n## What\n";
+        let spec = ScaffoldSpec::plain(
+            &type_config,
+            None,
+            "X",
+            "X-1-t.md",
+            1,
+            "T",
+            "01ID",
+            "a",
+            "2026-11-17",
+        );
+        let (out, to_fill) = scaffold_record_reporting(&spec, Some(template));
+        assert!(out.contains("\nKind:\nOwner:\nParent:\n---\n"), "{out}");
+        assert!(!out.contains("null"), "{out}");
+        assert!(!out.contains("feature"), "{out}");
+        assert!(!out.contains("belongs"), "{out}");
+        let hint = |s: &str| Some(s.to_string());
+        assert_eq!(
+            to_fill,
+            vec![
+                FieldToFill {
+                    field: "Kind".to_string(),
+                    required: true,
+                    hint: hint("feature | bug | chore"),
+                    allowed: None,
+                    if_empty: None,
+                },
+                FieldToFill {
+                    field: "Owner".to_string(),
+                    required: true,
+                    hint: None,
+                    allowed: None,
+                    if_empty: None,
+                },
+                FieldToFill {
+                    field: "Parent".to_string(),
+                    required: false,
+                    hint: hint("the record this belongs to"),
+                    allowed: None,
+                    if_empty: None,
+                },
+            ]
+        );
+        let header = crate::header::parse(&out);
+        assert_eq!(header.get("Kind").map(str::trim), Some(""));
+    }
+
+    /// `new` starts a record at the type's declared `statuses.initial`, not at
+    /// the first of `statuses.values`; without `initial` it keeps the first value.
+    #[test]
+    fn the_status_starts_at_the_declared_initial_state() {
+        let yaml = "schema_version: 2\nrecord_types:\n  t:\n    dir: docs/t\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    statuses:\n      values: [Done, Todo]\n      initial: [Todo]\n      transitions:\n        Todo: [Done]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let spec = |c: &'static crate::config::RecordTypeConfig| {
+            ScaffoldSpec::plain(c, None, "T", "T-1-t.md", 1, "T", "01ID", "a", "2026-11-17")
+        };
+        let declared: &'static crate::config::RecordTypeConfig =
+            Box::leak(Box::new(config.record_types["t"].clone()));
+        assert!(scaffold_record(&spec(declared), None).contains("\nStatus: Todo\n"));
+        let mut plain = declared.clone();
+        plain.statuses = Some(yaml_serde::from_str("values: [Done, Todo]").unwrap());
+        let plain: &'static crate::config::RecordTypeConfig = Box::leak(Box::new(plain));
+        assert!(scaffold_record(&spec(plain), None).contains("\nStatus: Done\n"));
+    }
+
+    /// A field only the template lists stays empty even when it is the date,
+    /// author or status field: those fill a field the type requires.
+    #[test]
+    fn template_only_date_author_and_status_fields_stay_empty() {
+        let yaml = "schema_version: 2\nrecord_types:\n  t:\n    dir: docs/t\n    header_shape: yaml-frontmatter\n    required_fields: [Stable-Id, Owner]\n    known_fields: [Date, Author, Status]\n    statuses:\n      values: [Open, Done]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let t = &config.record_types["t"];
+        let template = "---\nOwner: a person\nDate: YYYY-MM-DD\nAuthor: name\nStatus: Open | Done\n---\n# 0 -- T\n";
+        let spec = ScaffoldSpec::plain(
+            t,
+            None,
+            "T",
+            "T-1-t.md",
+            1,
+            "T",
+            "01ID",
+            "ann",
+            "2026-11-17",
+        );
+        let (out, to_fill) = scaffold_record_reporting(&spec, Some(template));
+        for f in ["Owner", "Date", "Author", "Status"] {
+            assert!(out.contains(&format!("\n{f}:\n")), "{f}: {out}");
+            assert!(to_fill.iter().any(|e| e.field == f), "{f}");
+        }
+    }
+
+    /// A template's dash or built-in placeholder word is never offered as a hint.
+    #[test]
+    fn a_placeholder_word_or_dash_in_the_template_is_no_hint() {
+        let type_config = crate::config::RecordTypeConfig {
+            dir: "docs/x".to_string(),
+            required_fields: vec!["Owner".to_string(), "Lead".to_string(), "Kind".to_string()],
+            ..Default::default()
+        };
+        let template = "---\nOwner: TBD\nLead: --\nKind: feature | bug\n---\n# 0 -- T\n";
+        let spec = ScaffoldSpec::plain(
+            &type_config,
+            None,
+            "X",
+            "X-1-t.md",
+            1,
+            "T",
+            "01ID",
+            "a",
+            "2026-11-17",
+        );
+        let (_, to_fill) = scaffold_record_reporting(&spec, Some(template));
+        let hint = |f: &str| to_fill.iter().find(|e| e.field == f).unwrap().hint.clone();
+        assert_eq!(hint("Owner"), None);
+        assert_eq!(hint("Lead"), None);
+        assert_eq!(hint("Kind").as_deref(), Some("feature | bug"));
     }
 }
