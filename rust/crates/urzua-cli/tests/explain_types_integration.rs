@@ -12,11 +12,11 @@ const FIXTURE: &str = include_str!("fixtures/explain_types/config.yaml");
 const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 
 /// The summary of the three-type fixture, as printed, stays under this many bytes.
-const MAX_SUMMARY_BYTES: usize = 3_500;
+const MAX_SUMMARY_BYTES: usize = 2_200;
 /// The full report of the three-type fixture stays under this many bytes.
-const MAX_FULL_BYTES: usize = 16_000;
+const MAX_FULL_BYTES: usize = 10_200;
 /// The summary of this repository's own configuration stays under this many bytes.
-const MAX_OWN_SUMMARY_BYTES: usize = 6_000;
+const MAX_OWN_SUMMARY_BYTES: usize = 5_900;
 
 fn repo(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-explain-types-{name}"));
@@ -173,48 +173,6 @@ fn every_declaration_is_reported_with_its_position() {
         "{r}"
     );
 }
-
-#[test]
-fn rules_set_on_by_declaration_and_declared_but_not_enabled() {
-    let dir = repo("rules", FIXTURE);
-    let (_, r) = run(&dir, &["explain", "--types", "--full"]);
-    let rules = &r["rules"];
-    let set = rules["set"].as_array().unwrap();
-    assert_eq!(set.len(), 2);
-    assert_eq!(set[1]["id"], "status.transition-allowed");
-    assert_eq!(set[1]["level"], "warn");
-    let on = rules["on_by_declaration"].as_array().unwrap();
-    let values = on
-        .iter()
-        .find(|e| e["id"] == "field.value-not-declared")
-        .unwrap();
-    assert_eq!(values["default"], true);
-    assert_eq!(values["source"], "default_on");
-    assert!(values.get("at").is_none());
-    assert_eq!(
-        values["declared_by"][0],
-        "record_types.issue.field_values:11"
-    );
-    let required = on
-        .iter()
-        .find(|e| e["id"] == "status.required-field-missing")
-        .unwrap();
-    assert_eq!(
-        required["declared_by"][0],
-        "record_types.issue.statuses.require:25"
-    );
-    let off = rules["declared_but_not_enabled"].as_array().unwrap();
-    let undeclared = off
-        .iter()
-        .find(|e| e["id"] == "status.undeclared-value")
-        .unwrap();
-    assert_eq!(
-        undeclared["declared_by"][0],
-        "record_types.issue.statuses.values:18"
-    );
-    assert!(off.iter().all(|e| e["id"] != "status.transition-allowed"));
-}
-
 #[test]
 fn one_type_and_an_unknown_type() {
     let dir = repo("one", FIXTURE);
@@ -231,16 +189,6 @@ fn one_type_and_an_unknown_type() {
     let message = r["error"].as_str().unwrap();
     assert!(message.contains("issue, note, task"), "{message}");
 }
-
-#[test]
-fn one_type_keeps_only_the_rules_that_act_on_it() {
-    let dir = repo("scoped", FIXTURE);
-    let (_, r) = run(&dir, &["explain", "--type", "note"]);
-    let listed = rule_ids(&r, "from_declarations");
-    assert_eq!(listed, ["header.required-fields"], "{r}");
-    assert!(r["next_action"].is_null());
-}
-
 #[test]
 fn the_summary_is_compact_and_points_at_the_detail() {
     let dir = repo("summary", FIXTURE);
@@ -257,19 +205,7 @@ fn the_summary_is_compact_and_points_at_the_detail() {
         of(&r, "task")["prefix"],
         json!({"value": "TASK", "default": true, "source": "type_name_uppercased"})
     );
-    assert_eq!(
-        r["rules"]["on_by_declaration"]["field.value-not-declared"],
-        "error"
-    );
-    assert_eq!(
-        r["rules"]["declared_but_not_enabled"]["status.undeclared-value"],
-        "off"
-    );
-    assert_eq!(
-        r["rules"]["on_by_declaration"]["status.required-field-missing"],
-        "error"
-    );
-    assert!(r["rules"].get("set").is_none());
+    assert!(r.get("rules").is_none(), "the summary names no rule: {r}");
     assert_eq!(r["next_action"], "urzua explain --type <name>");
     assert!(r.get("repository").is_none());
 }
@@ -316,7 +252,10 @@ fn a_bare_type_prints_nothing_it_does_not_declare() {
     keys.sort();
     assert_eq!(keys, ["at", "create", "dirs", "name", "prefix"], "{note}");
     assert_eq!(note["prefix"]["default"], true);
-    assert!(r.get("rules").is_none(), "an empty object is omitted: {r}");
+    assert!(
+        r.get("rules_set_in_configuration").is_none(),
+        "no rule is set, so the section is omitted: {r}"
+    );
     let repo_keys: Vec<&String> = r["repository"].as_object().unwrap().keys().collect();
     assert_eq!(repo_keys, ["schema_version"], "{r}");
 }
@@ -459,65 +398,6 @@ fn every_top_level_key_but_types_and_rules_is_under_repository() {
         );
     }
 }
-
-const ITEMS: &str = "schema_version: 2
-record_types:
-  work:
-    dir: docs/work
-    required_fields: [Status, Stable-Id]
-    known_fields: [Realized-by]
-    statuses:
-      values: [Planned, Doing, Done]
-      success: [Done]
-      delivery:
-        delivered_tiers: [Implemented]
-        unevidenced_tiers: [Not started]
-        not_done: [Planned, Doing]
-        set_status: Done
-        items:
-          section: Done means
-          clause_separator: \" - \"
-          evidence_marker: \"evidence:\"
-          waiver_marker: \"waived:\"
-          partial_status: Doing
-    sections: {from: headings, depth: 2, required: [{name: Done means}]}
-";
-
-#[test]
-fn rules_on_by_a_status_declaration_are_shown_in_effect_for_the_type() {
-    let dir = repo("items", ITEMS);
-    std::fs::create_dir_all(dir.join("docs/work")).unwrap();
-    let (out, r) = run(&dir, &["explain", "--type", "work"]);
-    assert_eq!(out.status.code(), Some(0), "{r}");
-    let on = r["rules"]["from_declarations"].as_array().unwrap();
-    for id in [
-        "status.delivery-agreement",
-        "status.done-items-shape",
-        "status.waived-item-stale",
-    ] {
-        let rule = on
-            .iter()
-            .find(|e| e["id"] == id)
-            .unwrap_or_else(|| panic!("{id} not in effect: {r}"));
-        assert_eq!(rule["default"], true);
-        let by: Vec<&str> = rule["declared_by"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap())
-            .collect();
-        assert!(
-            by.iter()
-                .any(|b| b.starts_with("record_types.work.statuses.delivery")),
-            "{id}: {by:?}"
-        );
-    }
-    assert!(
-        on.iter().all(|e| e.get("at").is_none()),
-        "rules: names none of them: {r}"
-    );
-}
-
 fn write_repo(name: &str, config: &str) -> common::TempDir {
     let dir = repo(name, config);
     for d in ["docs/a", "docs/b", "docs/note"] {
@@ -525,67 +405,6 @@ fn write_repo(name: &str, config: &str) -> common::TempDir {
     }
     dir
 }
-
-fn rule_ids(r: &Value, list: &str) -> Vec<String> {
-    r["rules"][list]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .map(|e| e["id"].as_str().unwrap().to_string())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-const NOTE_EXPIRY: &str = "schema_version: 2
-record_types:
-  note:
-    dir: docs/note
-    required_fields: [Status, Last-audited]
-    known_fields: [Realized-by]
-    statuses: {values: [Open, Done]}
-rules:
-  embodiment.claim-expired:
-    level: LEVEL
-    anchor_field: Last-audited
-    periods: [{type: note, status: [Done], days: 45}]
-";
-
-#[test]
-fn expiry_is_shown_only_while_its_rule_is_in_effect_and_the_rule_is_listed() {
-    let off = write_repo("expiry-off", &NOTE_EXPIRY.replace("LEVEL", "off"));
-    let (_, r) = run(&off, &["explain", "--type", "note"]);
-    assert!(of(&r, "note")["states"].get("expiry").is_none(), "{r}");
-    let on = write_repo("expiry-on", &NOTE_EXPIRY.replace("LEVEL", "warn"));
-    let (_, r) = run(&on, &["explain", "--type", "note"]);
-    assert_eq!(of(&r, "note")["states"]["expiry"][0]["days"], 45, "{r}");
-    assert!(
-        rule_ids(&r, "from_declarations").contains(&"embodiment.claim-expired".to_string()),
-        "{r}"
-    );
-}
-
-#[test]
-fn one_type_lists_rules_declared_outside_its_own_keys() {
-    let (_, r) = run(&own_root(), &["explain", "--type", "adr"]);
-    assert!(
-        rule_ids(&r, "from_declarations").contains(&"diff.decider-required".to_string()),
-        "an authority gate on the type: {}",
-        r["rules"]
-    );
-    let (_, r) = run(&own_root(), &["explain", "--type", "milestone"]);
-    let set = rule_ids(&r, "from_declarations");
-    for id in [
-        "relation.pair-reciprocity",
-        "sequence.cycle",
-        "sequence.unresolved-blocker",
-        "sequence.status-agreement",
-        "embodiment.claim-expired",
-    ] {
-        assert!(set.contains(&id.to_string()), "{id}: {set:?}");
-    }
-}
-
 const NARROWED: &str = "schema_version: 2
 record_types:
   a:
@@ -654,251 +473,6 @@ fn an_undeclared_initial_state_requires_no_start_status() {
     assert_eq!(initial["default"], true);
     assert!(initial.get("value").is_none(), "{initial}");
 }
-
-#[test]
-fn the_summary_marks_its_defaults() {
-    let dir = repo("summary-defaults", FIXTURE);
-    let (_, r) = run(&dir, &["explain", "--types"]);
-    let task = of(&r, "task");
-    assert_eq!(task["prefix"]["default"], true);
-    assert_eq!(task["states"]["initial"]["default"], true);
-    assert_eq!(
-        of(&r, "issue")["prefix"],
-        "ISS",
-        "a declared prefix stays plain"
-    );
-}
-
-#[test]
-fn no_record_type_is_an_empty_list_and_a_plain_error() {
-    let dir = repo("empty", "schema_version: 2\nrecord_types: {}\n");
-    let (out, r) = run(&dir, &["explain", "--types"]);
-    assert_eq!(out.status.code(), Some(0), "{r}");
-    assert_eq!(r["types"], json!([]));
-    let (_, r) = run(&dir, &["explain", "--type", "x"]);
-    let error = r["error"].as_str().unwrap();
-    assert!(error.ends_with("declares no record type"), "{error}");
-}
-
-#[test]
-fn full_goes_with_types_only() {
-    let dir = repo("full-type", FIXTURE);
-    let (out, r) = run(&dir, &["explain", "--type", "task", "--full"]);
-    assert_eq!(out.status.code(), Some(2), "{r}");
-    assert!(r["error"].as_str().unwrap().contains("--full"), "{r}");
-    assert_eq!(r["next_action"], "urzua explain --type task");
-}
-
-#[test]
-fn conditions_whose_rule_is_off_are_counted_apart() {
-    let config = format!("{FIXTURE}  status.forbidden-field-present: off\n");
-    let dir = repo("conditions-off", &config);
-    let (_, r) = run(&dir, &["explain", "--types"]);
-    let issue = of(&r, "issue");
-    assert_eq!(issue["conditions"], 1, "{issue}");
-    assert_eq!(issue["conditions_not_enabled"], 1, "{issue}");
-    let (_, r) = run(&dir, &["explain", "--type", "issue"]);
-    let forbid = &of(&r, "issue")["conditions"][1];
-    assert_eq!(forbid["rule"]["level"], "off", "{forbid}");
-}
-
-#[test]
-fn an_aliased_declaration_cites_where_it_is_defined() {
-    let config = "schema_version: 2
-record_types:
-  a:
-    dir: docs/a
-    required_fields: [Status]
-    statuses: &st
-      values: [Open, Done]
-  b:
-    dir: docs/b
-    required_fields: [Status]
-    statuses: *st
-";
-    let dir = write_repo("alias", config);
-    let (_, r) = run(&dir, &["explain", "--type", "b"]);
-    assert_eq!(
-        of(&r, "b")["aliases"],
-        json!([{"at": "record_types.b.statuses:11", "defined_at": "record_types.a.statuses:6"}])
-    );
-}
-
-#[test]
-fn built_in_pending_words_apply_when_none_are_declared() {
-    let dir = repo("built-in-pending", FIXTURE);
-    let (_, r) = run(&dir, &["explain", "--type", "issue"]);
-    let missing = &of(&r, "issue")["conditions"][0]["counts_as_missing"];
-    assert_eq!(
-        missing["pending"],
-        json!({"default": true, "source": "built_in_list"})
-    );
-    assert_eq!(
-        missing["placeholders"],
-        json!({"default": true, "source": "built_in_list"})
-    );
-}
-
-const ORACLE: &str = "schema_version: 2
-record_types:
-  a:
-    dir: docs/a
-    required_fields: [Status, Kind]
-    known_fields: [Up, Note]
-    field_values: {Kind: [x, y]}
-    pointer_fields: [Up]
-    narrative_fields: [Note]
-    statuses:
-      values: [Open, Done]
-      require: [{when: [Done], fields: [Note]}]
-    sections: {from: headings, depth: 2, required: [{name: Goal}]}
-  b:
-    dir: docs/b
-    required_fields: [Status]
-    known_fields: [Down]
-    pointer_fields: [Down]
-    narrative_fields: []
-    statuses: {values: [Open]}
-relation_pairs:
-  - {name: tree, forward: Up, inverse: Down, reciprocity: required, target_types: [b]}
-rules:
-  header.required-fields: error
-  header.field-set-consistency: warn
-  pointer.resolution: error
-  status.undeclared-value: error
-  section.required: error
-  relation.pair-reciprocity: error
-  narrative-field.stale: {level: warn, terminal_statuses: [Done]}
-  pointer.target-status: {level: warn, not_in: [Done]}
-";
-
-fn oracle_repo(name: &str, only: &str) -> common::TempDir {
-    let dir = write_repo(name, ORACLE);
-    let records = [
-        ("a", "docs/a/A-1-x.md", "---\nStatus: Open\nKind: x\nUp: B-1\nNote: see B-1\n---\n# 1 \u{2014} x\n\n## Goal\n\nText.\n"),
-        ("b", "docs/b/B-1-y.md", "---\nStatus: Open\nDown: A-1\n---\n# 1 \u{2014} y\n"),
-    ];
-    for (t, path, text) in records {
-        if t == only {
-            std::fs::write(dir.join(path), text).unwrap();
-        }
-    }
-    assert!(Command::new("git")
-        .args(["add", "-A"])
-        .current_dir(&dir)
-        .status()
-        .unwrap()
-        .success());
-    dir
-}
-
-#[test]
-fn every_rule_listed_for_a_type_examines_that_types_records() {
-    for t in ["a", "b"] {
-        let dir = oracle_repo(&format!("oracle-{t}"), t);
-        let (_, r) = run(&dir, &["explain", "--type", t]);
-        let listed: Vec<&Value> = r["rules"]["from_declarations"]
-            .as_array()
-            .unwrap_or_else(|| panic!("{r}"))
-            .iter()
-            .filter(|e| e.get("judges_only_under_base").is_none())
-            .collect();
-        assert!(!listed.is_empty(), "{r}");
-        let (_, check) = run(&dir, &["check"]);
-        let executed = check["rules_executed"]
-            .as_array()
-            .unwrap_or_else(|| panic!("{check}"));
-        for rule in listed {
-            assert!(
-                rule["declared_by"]
-                    .as_array()
-                    .is_some_and(|b| !b.is_empty()),
-                "{rule}"
-            );
-            let id = rule["id"].as_str().unwrap();
-            let run = executed
-                .iter()
-                .find(|e| e["rule"] == id)
-                .unwrap_or_else(|| panic!("{t}: {id} listed but not executed"));
-            assert!(
-                run["population"]["examined"]
-                    .as_u64()
-                    .is_some_and(|n| n > 0),
-                "{t}: {id} is listed but examined no record of the type: {run}"
-            );
-        }
-    }
-}
-
-#[test]
-fn rules_not_tied_to_a_types_declarations_are_not_listed_for_it() {
-    let dir = oracle_repo("false-listings", "b");
-    let (_, r) = run(&dir, &["explain", "--type", "b"]);
-    let ids = rule_ids(&r, "from_declarations");
-    for id in [
-        "narrative-field.stale",
-        "pointer.target-type",
-        "pointer.target-status",
-    ] {
-        assert!(!ids.contains(&id.to_string()), "{id} listed for b: {ids:?}");
-    }
-    assert!(r["rules"]["repository_wide"].is_string(), "{r}");
-    let (_, rfc) = run(&own_root(), &["explain", "--type", "rfc"]);
-    let ids = rule_ids(&rfc, "from_declarations");
-    assert!(
-        !ids.contains(&"embodiment.claim-expired".to_string()),
-        "no period names rfc: {ids:?}"
-    );
-    assert!(
-        !ids.iter().any(|i| i.starts_with("embodiment.")),
-        "rfc declares no evidence field: {ids:?}"
-    );
-    let (_, full) = run(&own_root(), &["explain", "--types", "--full"]);
-    let repo_rules: Vec<&str> = full["repository"]["rules"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|e| e["id"].as_str().unwrap())
-        .collect();
-    assert!(repo_rules.contains(&"identity.collision"), "{repo_rules:?}");
-    let set = rule_ids(&full, "set");
-    assert!(
-        repo_rules.iter().all(|id| !set.contains(&id.to_string())),
-        "listed once"
-    );
-}
-
-#[test]
-fn a_rule_whose_setting_names_the_type_is_listed_with_that_entry() {
-    let (_, adr) = run(&own_root(), &["explain", "--type", "adr"]);
-    let rules = adr["rules"]["from_declarations"].as_array().unwrap();
-    let by = |id: &str| -> Vec<String> {
-        rules
-            .iter()
-            .find(|e| e["id"] == id)
-            .unwrap_or_else(|| panic!("{id} not listed for adr"))["declared_by"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap().to_string())
-            .collect()
-    };
-    assert!(by("index.freshness")
-        .iter()
-        .any(|b| b.contains(".indexes[0].type")));
-    assert!(by("diff.source-requires-record")
-        .iter()
-        .any(|b| b.contains(".decision_types.adr")));
-    assert!(by("embodiment.claim-expired")
-        .iter()
-        .any(|b| b.contains(".periods[")));
-    let decider = rules
-        .iter()
-        .find(|e| e["id"] == "diff.decider-required")
-        .unwrap();
-    assert_eq!(decider["judges_only_under_base"], true);
-}
-
 const UNREQUIRED_STATUS: &str = "schema_version: 2
 record_types:
   note:
@@ -962,4 +536,194 @@ fn a_path_gate_matches_directories_with_case_folded() {
         json!(["DOCS/Notes"]),
         "{r}"
     );
+}
+
+#[test]
+fn the_full_report_lists_the_rules_set_as_written() {
+    let dir = repo("rules-set", FIXTURE);
+    let (_, r) = run(&dir, &["explain", "--types", "--full"]);
+    let section = &r["rules_set_in_configuration"];
+    assert_eq!(
+        section["rules"],
+        json!([
+            {"id": "header.required-fields", "level": "error", "at": "rules[\"header.required-fields\"]:57"},
+            {"id": "status.transition-allowed", "level": "warn", "at": "rules[\"status.transition-allowed\"]:58"}
+        ])
+    );
+    assert!(section["note"].as_str().unwrap().contains("urzua check"));
+    for t in r["types"].as_array().unwrap() {
+        assert!(
+            t.get("rules").is_none(),
+            "no type names a rule as applying: {t}"
+        );
+    }
+    let (_, one) = run(&dir, &["explain", "--type", "issue"]);
+    assert!(one.get("rules").is_none(), "{one}");
+    assert_eq!(
+        of(&one, "issue")["conditions"][0]["rule"],
+        "status.required-field-missing"
+    );
+}
+
+const NOTE_PERIOD: &str = "schema_version: 2
+record_types:
+  note:
+    dir: docs/note
+    required_fields: [Status, Last-audited]
+    known_fields: [Realized-by]
+    statuses: {values: [Open, Done]}
+rules:
+  embodiment.claim-expired:
+    level: off
+    anchor_field: Last-audited
+    periods: [{type: note, status: [Done], days: 45}]
+";
+
+#[test]
+fn a_claim_period_is_shown_as_declared_with_the_level_as_written() {
+    let dir = write_repo("period", NOTE_PERIOD);
+    let (_, r) = run(&dir, &["explain", "--type", "note"]);
+    let expiry = &of(&r, "note")["states"]["expiry"];
+    assert_eq!(expiry["periods"][0]["days"], 45, "{r}");
+    assert_eq!(
+        expiry["periods"][0]["at"],
+        "rules[\"embodiment.claim-expired\"].periods[0]:12"
+    );
+    assert_eq!(expiry["level"]["value"], "off");
+}
+
+#[test]
+fn a_type_urzua_new_refuses_has_no_create_command() {
+    let config = "schema_version: 2
+record_types:
+  log:
+    dir: docs/a
+    header_shape: none
+    statuses: {values: [Open]}
+";
+    let dir = write_repo("no-header", config);
+    let (_, r) = run(&dir, &["explain", "--type", "log"]);
+    let log = of(&r, "log");
+    assert!(log.get("create").is_none(), "{log}");
+    assert!(log["states"].get("new_writes").is_none(), "{log}");
+    let (out, refused) = run(&dir, &["new", "log", "x", "--by", "someone"]);
+    assert_eq!(out.status.code(), Some(2), "{refused}");
+    assert_eq!(
+        log["cannot_create"], refused["error"],
+        "the engine's own reason"
+    );
+    let (_, s) = run(&dir, &["explain", "--types"]);
+    assert!(of(&s, "log").get("create").is_none());
+}
+
+#[test]
+fn glob_path_gates_are_matched_as_the_engine_matches_them() {
+    let config = "schema_version: 2
+record_types:
+  d:
+    dir: docs/d
+    required_fields: [Status]
+  e:
+    dir: docs/e
+    required_fields: [Status]
+  f:
+    dir: docs/f
+    required_fields: [Status]
+  g:
+    dir: docs/g
+    identity: {from: filename, pattern: '^(?P<prefix>G)-(?P<number>\\d+)-(?P<slug>.+)$'}
+    required_fields: [Status]
+authority:
+  deciders:
+    owners: {logins: [someone]}
+  gates:
+    - paths: ['docs/**']
+      by: owners
+    - paths: ['**/D-*.md']
+      by: owners
+    - paths: ['docs/*/E-*.md']
+      by: owners
+    - paths: ['other/**']
+      by: owners
+";
+    let dir = write_repo("glob-gates", config);
+    for d in ["docs/d", "docs/e", "docs/f", "docs/g"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    let gate_paths = |t: &str| -> Vec<Value> {
+        let (_, r) = run(&dir, &["explain", "--type", t]);
+        of(&r, t)["gates"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .map(|g| g["paths"][0].clone())
+            .collect()
+    };
+    assert_eq!(gate_paths("d"), [json!("docs/**"), json!("**/D-*.md")]);
+    assert_eq!(gate_paths("e"), [json!("docs/**"), json!("docs/*/E-*.md")]);
+    assert_eq!(
+        gate_paths("f"),
+        [json!("docs/**")],
+        "f's file names are decidable"
+    );
+    assert_eq!(
+        gate_paths("g"),
+        [json!("docs/**"), json!("**/D-*.md"), json!("docs/*/E-*.md")]
+    );
+    let (_, r) = run(&dir, &["explain", "--type", "g"]);
+    let gates = of(&r, "g")["gates"].as_array().unwrap().clone();
+    assert!(
+        gates[0].get("may_cover").is_none(),
+        "docs/** covers g: {gates:?}"
+    );
+    assert_eq!(gates[1]["may_cover"]["value"], true, "{gates:?}");
+    assert_eq!(gates[2]["may_cover"]["value"], true, "{gates:?}");
+}
+
+#[test]
+fn a_pair_forward_field_outside_pointer_fields_shows_the_pairs_targets() {
+    let config = "schema_version: 2
+record_types:
+  a:
+    dir: docs/a
+    required_fields: [Status]
+    known_fields: [Up]
+  b:
+    dir: docs/b
+    required_fields: [Status]
+    known_fields: [Down]
+  c:
+    dir: docs/note
+    required_fields: [Status]
+relation_pairs:
+  - {name: tree, forward: Up, inverse: Down, reciprocity: none, target_types: [c]}
+";
+    let dir = write_repo("pair-forward", config);
+    let (out, r) = run(&dir, &["explain", "--type", "a"]);
+    assert_eq!(out.status.code(), Some(0), "{r}");
+    let up = &field(of(&r, "a"), "Up")["pointer"];
+    assert_eq!(up["pair_target_types"][0]["value"], json!(["c"]), "{up}");
+    assert_eq!(
+        up["pair_target_types"][0]["at"],
+        "relation_pairs[0].target_types:15"
+    );
+    assert_eq!(up["effective_targets"], json!(["c"]));
+    let (_, s) = run(&dir, &["explain", "--types"]);
+    assert_eq!(of(&s, "a")["references"]["Up"], json!(["c"]));
+    assert!(
+        of(&s, "b").get("references").is_none(),
+        "b carries only the inverse"
+    );
+}
+
+#[test]
+fn full_alone_and_an_empty_summary_name_no_type_command() {
+    let dir = repo("full-alone", FIXTURE);
+    let (out, r) = run(&dir, &["explain", "--full"]);
+    assert_eq!(out.status.code(), Some(2), "{r}");
+    assert_eq!(r["next_action"], "urzua explain --types --full");
+    let empty = repo("empty-next", "schema_version: 2\nrecord_types: {}\n");
+    let (_, r) = run(&empty, &["explain", "--types"]);
+    assert!(r["next_action"].is_null(), "{r}");
 }

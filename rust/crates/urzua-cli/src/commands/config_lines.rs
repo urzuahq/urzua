@@ -192,7 +192,11 @@ impl ConfigLines {
 
 fn parent_of(path: &str) -> Option<&str> {
     if let Some(stripped) = path.strip_suffix(']') {
-        let open = stripped.rfind("[\"").or_else(|| stripped.rfind('['))?;
+        let open = if stripped.ends_with('"') {
+            stripped.rfind("[\"")?
+        } else {
+            stripped.rfind('[')?
+        };
         return Some(&path[..open]);
     }
     path.rfind('.').map(|i| &path[..i])
@@ -234,6 +238,7 @@ mod tests {
         assert_eq!(l.line("a[\"k.v\"]"), Some(6));
         assert_eq!(l.line("rules[\"status.x\"]"), Some(8));
         assert_eq!(l.line("a.list[1].targets[0]"), Some(5));
+        assert_eq!(l.line("rules[\"status.x\"][0]"), Some(8));
     }
 
     #[test]

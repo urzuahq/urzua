@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.27'
+Version: '0.28'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c, code:rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:6be486c4a3973e4bd7720541abc9adf42dc9ee0bdb62cd6fe2af5ee3ff9c513a, code:rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e73c3877572225ccf18ba3e734ce163920e6c7efd08c8dadc8a552852f1baae3, test:rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:e3ff880de76af928cfa2e3c8d9f0cfe396d81fcd99bcf2a47567788655389a37
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c, code:rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:83467de65c2d84aa2490de810f9d78451b996c543c56400050d1495cbcdcbf3d, code:rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:7e2b163249726b0f362acf03c8f35fcc76f2c4c601141fd7129bed039d396e98, test:rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:0addf2725ab174c4cee6991c9fd94548e21b43a633eea0355b66b85f2d457c96
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -87,74 +87,64 @@ corpus: the report is the build's rule table and the repository's configuration.
 
 What the configuration declares for its record types, read from the configuration file and nothing
 else (`MILE-329`). Types are listed in name order, not declaration order; a configuration with no
-record type prints `types` as an empty list. A name the configuration does not declare exits 2 with a
-`not-run` report naming the declared types, or saying that none is declared. `--full` goes with
-`--types` only; `--type <name>` is always the full detail of one type, and `--type <name> --full`
-exits 2 with `urzua explain --type <name>` as its `next_action`.
+record type prints `types` as an empty list and no `next_action`. A name the configuration does not
+declare exits 2 with a `not-run` report naming the declared types, or saying that none is declared.
+`--full` goes with `--types` only: `--type <name> --full` exits 2 with `urzua explain --type <name>`
+as its `next_action`, and `--full` alone exits 2 with `urzua explain --types --full`.
 
 `urzua explain --types` prints a summary: per type `name`, `at`, `prefix`, `dirs`, `create` (the
-`urzua new` command for it), `required` and `optional` field names, `states` (`values` and
-`initial`), `references` (each reference field with the types it may name, or `"any"`),
-`conditions` (the requirements and prohibitions whose rule is in effect) and
-`conditions_not_enabled` (those whose rule is off); then `rules` with `on_by_declaration` and
-`declared_but_not_enabled` as `id: level`. A declared value is printed bare; a default keeps its
-marker object. Its `next_action` is `urzua explain --type <name>`.
+`urzua new` command for it, or `cannot_create` with the reason `urzua new` gives when it refuses the
+type), `required` and `optional` field names, `states` (`values` and `initial`), `references` (each
+reference field with the types it may name, `"any"`, or `none`) and the number of `conditions`. A
+declared value is printed bare; a default keeps its marker object. Its `next_action` is
+`urzua explain --type <name>`.
 
-`urzua explain --types --full` prints every declaration of every type, `rules`, and `repository`:
-every declared top-level key other than `record_types` and `rules`, each as `{value, at}`, and
-`repository.rules`, every rule the configuration sets that no type's declaration ties, with its
-level. `urzua explain --type <name>` prints the same detail for one type.
+`urzua explain --types --full` prints every declaration of every type, `rules_set_in_configuration`
+(each rule as written under `rules:`, with its level and line, and a fixed note), and `repository`:
+every declared top-level key other than `record_types` and `rules`, each as `{value, at}`.
+`urzua explain --type <name>` prints the same detail for one type.
 
-For one type, `rules.from_declarations` lists only the rules tied to something that type declares
-or that a rule's own setting names it in, each with `declared_by` (the key path and line of each tie);
-a rule with no tie is not listed. A tie is: the per-type declaration the rule table says the rule
-reads (`reads_declaration`), present and non-empty; a relation pair the type carries, where the rule
-needs one (an acyclic one where it needs that); an `authority` gate on the type's states or
-directories, where the rule needs one; a target list on a reference field whose forward side the
-type carries, for the target-type rule; and any entry of the rule's setting that names the type (a
-mapping key equal to the type name, or a `type`, `types`, `*_type` or `*_types` value holding it).
-A rule that judges only under `check --base` is marked `judges_only_under_base`.
-`rules.declared_but_not_enabled` lists the tied rules that are off, and `rules.repository_wide` is a
-fixed sentence: repository-wide rules also apply, and `--types --full` lists them under
-`repository.rules`. The list is therefore not every rule that can examine the type's records: each
-rule decides its own population in code, and only the ties above are known from the configuration.
-
-Per type in detail: `name`, `at`, `create`, `prefix`, `dirs`, `template`, `header_fields` (each with
-`required`, `values` from `field_values`, `pointer`, `narrative`, `roles` from `relation_fields`),
-`relation_pairs` (every key each pair declares), `states`, `conditions`, `gates`, `aliases`. A
-`pointer` gives the field's own `targets` with their line when it declares any, each carried
-relation pair's `target_types` with its line under `pair_target_types`, and `effective_targets`: the
-types the field may name once every declaration applies, `"any"` when nothing constrains it, or
-`{"value": "none", "note": ...}` when no type satisfies every declaration. `states` holds the status lists,
-`initial`, `new_writes` (the status `urzua new` writes, from the function `urzua new` uses; absent
-when it writes none), `transitions` in declaration order, every other `statuses` key raw, and `expiry`: the
-claim periods the claim-expiry rule sets for the type, shown only while that rule is in effect.
+Per type in detail: `name`, `at`, `create` or `cannot_create`, `prefix`, `dirs`, `template`,
+`header_fields` (each with `required`, `values` from `field_values`, `pointer`, `narrative`, `roles`
+from `relation_fields`), `relation_pairs` (every key each pair declares), `states`, `conditions`,
+`gates`, `aliases`. A reference field is a `pointer_fields` entry or the forward field of a relation
+pair the type carries that names `target_types`; its `pointer` gives the field's own `targets` with
+their line when it declares any, each such pair's `target_types` with its line under
+`pair_target_types`, and `effective_targets`: the types the field may name once every declaration
+applies, `"any"` when nothing constrains it, or `{"value": "none", "note": ...}` when no type
+satisfies every declaration. `states` holds the status lists, `initial`, `new_writes` (the status
+`urzua new` writes, from the function `urzua new` uses; absent when it writes none or refuses the
+type), `transitions` in declaration order, every other `statuses` key raw, and `expiry`: the claim
+periods the claim-expiry rule's setting declares for the type, with that setting's level as written.
 `conditions` gives each `statuses.require` and `statuses.forbid` entry with its `when`,
-`when_field` and `fields` keys, the `rule` that reports it with its level, one generated
-`sentence`, and for a requirement `counts_as_missing`: the type's `pending` and `placeholders`
-with their lines, or, where the type declares none, a marker that the engine's built-in list
-applies. `gates` lists the `authority` gates on the type's states or on a path overlapping its
-directories (compared with case folded, as a gate matches a path), with `by` and `logins`. `aliases` lists each YAML alias under the type with the line
-of its anchor (`defined_at`), once per alias, since a key inside an aliased value has no line of its
-own. Every
-other declared key of the type is printed raw under its own name as `{value, at}`.
+`when_field` and `fields` keys, the `rule` id the engine reports an unmet entry under, one
+generated `sentence`, and for a requirement `counts_as_missing`: the type's `pending` and
+`placeholders` with their lines, or, where the type declares none, a marker that the engine's
+built-in list applies. `gates` lists the `authority` gates on the type's states, and the path gates
+the engine's own path matcher matches against the type's directory or the file name `urzua new`
+gives (a literal path compared with case folded); where a declared identity pattern leaves the file
+names undecidable, a glob gate whose literal part overlaps the directory is listed with
+`may_cover`. `aliases` lists each YAML alias under the type with the line of its anchor
+(`defined_at`), once per alias. Every other declared key of the type is printed raw under its own name
+as `{value, at}`.
 
-`rules` holds `set` (each rule the configuration names, with its level), `on_by_declaration` (a
-default-on rule whose condition a declaration meets, with the keys that declare it) and
-`declared_but_not_enabled` (a rule that reads a declaration in the report and is off, with those
-keys).
+The report does not say which rules apply to a type. Which records a rule judges is decided inside
+each rule's code, and a mapping kept outside the rules drifts from it, so no per-type output names a
+rule as applying. `rules_set_in_configuration` lists what `rules:` says, nothing more: rules on by
+default or by a declaration do not appear there, and `urzua check` reports every rule that ran and
+how many records each examined.
 
 Every entry read from the configuration carries `at`, its key path and line (`path:line`). Lines come
 from a second pass over the YAML text; a key inside a multi-line flow collection or an aliased value
 is given its nearest enclosing key's line. Nothing the configuration does not declare is printed,
 with these exceptions, each marked `"default": true` with a `source` and no `at`: a type's
 `initial` when `statuses.initial` is not declared, which says no starting status is required of a
-record (`required_of_records: false`, `no_initial_declared`); `new_writes`
-(`urzua_new_scaffold`); a rule on by declaration (`default_on`); the identifier prefix when `prefix`
-is not declared (`type_name_uppercased`); the template path when the conventional template file
-exists (`conventional_template_path`); and the built-in pending and placeholder lists in
-`counts_as_missing` (`built_in_list`). Empty lists, empty objects and absent settings are omitted.
-The only prose is the `sentence` of a condition.
+record (`required_of_records: false`, `no_initial_declared`); `new_writes` (`urzua_new_scaffold`);
+the identifier prefix when `prefix` is not declared (`type_name_uppercased`); the template path when
+the conventional template file exists (`conventional_template_path`); and the built-in pending and
+placeholder lists in `counts_as_missing` (`built_in_list`). Empty lists, empty objects and absent
+settings are omitted. The only prose is the `sentence` of a condition, the reason in `cannot_create`
+and the fixed notes.
 
 ## `urzua graph`
 
@@ -268,3 +258,5 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-17 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:08015e93ad9d, rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e73c38775722, rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:6ceceef0feb2 Reason: explain_types.rs builds the explain --types and --type reports this spec's section describes; config_lines.rs gives each entry its key path and line; explain_types_integration.rs tests each stated behaviour **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |
 > | 2026-11-17 | Bumped to `0.27`. One type's rules are now `rules.from_declarations`: only rules tied to a declaration of the type or to an entry of a rule's setting naming it, each with `declared_by`, base-only rules marked; repository-wide rules move to `repository.rules` under `--types --full`, and each type points there in a fixed sentence. `new_writes` is read from the function `urzua new` uses and is absent when it writes no status; an empty target intersection reads `none`; gate paths compare with case folded; `--type --full` names the command to run. **Why:** review of 2026-11-17 showed that which rules examine a type cannot be derived from the rule table; the narrower claim was decided by the orchestrator on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` 08015e93ad9d -> 6be486c4a397, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 6ceceef0feb2 -> e3ff880de76a. Reason: explain_types.rs: one type's rules are those tied to its declarations or to a rule setting naming it, repository-wide rules move to repository.rules, new_writes comes from scaffold_status, an empty target intersection reads none, gate paths fold case; explain_types_integration.rs: tests for each **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.28`. The report no longer says which rules apply to a type: per-type rule lists, rule ties and the repository-wide rule list are removed, and a paragraph says why (each rule decides its own population). `--types --full` lists `rules_set_in_configuration` as written, with a note that rules on by default or by declaration do not appear and `urzua check` reports what ran. Expiry shows the periods and the setting's level as written. A type `urzua new` refuses shows `cannot_create` with its reason instead of `create` and `new_writes`. Path gates use the engine's matcher, with `may_cover` where a glob cannot be decided. A pair's forward field outside `pointer_fields` is shown as a reference. **Why:** review of 2026-11-17 found the rule ties false three times; the cut was decided by the orchestrator on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` 6be486c4a397 -> 83467de65c2d, `rust/crates/urzua-cli/src/commands/config_lines.rs` e73c38775722 -> 7e2b16324972, `rust/crates/urzua-cli/tests/explain_types_integration.rs` e3ff880de76a -> 0addf2725ab1. Reason: explain_types.rs: per-type rule ties are removed, --types --full lists the rules set as written, expiry shows periods and the level as written, a type urzua new refuses shows cannot_create, path gates use the engine's matcher, a pair's forward field is a reference; config_lines.rs: an index under a quoted key falls back to the right parent; explain_types_integration.rs: tests follow **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

@@ -183,15 +183,23 @@ pub(crate) fn lookup_record_type<'a>(
         ));
     };
 
-    // `none` declares this type has nowhere for a header, and therefore
-    // nowhere to write a `Stable-Id` -- generating a record with no identity
-    // would be worse than refusing (`ADR-50`).
-    if type_config.header_shape == urzua_core::header::HeaderShape::None {
-        return Err(format!(
-            "record type '{record_type}' declares header_shape: none -- urzua new cannot generate an identity for a type with no header"
-        ));
+    if let Some(refusal) = scaffold_refusal(record_type, type_config) {
+        return Err(refusal);
     }
     Ok(type_config)
+}
+
+/// Why `urzua new` cannot create a record of this type, or `None` when it can.
+/// `none` declares this type has nowhere for a header, and therefore nowhere to
+/// write a `Stable-Id` -- generating a record with no identity would be worse
+/// than refusing (`ADR-50`).
+pub(crate) fn scaffold_refusal(
+    record_type: &str,
+    type_config: &urzua_core::config::RecordTypeConfig,
+) -> Option<String> {
+    (type_config.header_shape == urzua_core::header::HeaderShape::None).then(|| format!(
+        "record type '{record_type}' declares header_shape: none -- urzua new cannot generate an identity for a type with no header"
+    ))
 }
 
 /// What numbering a new record settles: the type's identity grammar and the

@@ -230,7 +230,7 @@ enum Command {
         /// A file, directory, glob or `path#scope`. Always a path, even when
         /// it spells a rule id; use `--rule` for a rule.
         #[arg(
-            required_unless_present_any = ["rule", "types", "record_type"],
+            required_unless_present_any = ["rule", "types", "record_type", "full"],
             conflicts_with_all = ["rule", "types", "record_type"]
         )]
         path: Option<String>,
@@ -743,6 +743,7 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
                 commands::explain_types::run(config, commands::explain_types::Mode::One(t))
             }
         }
+        Command::Explain { full: true, .. } => commands::explain_types::refuse_full_alone(),
         Command::Explain { path, rule, .. } => commands::explain::run(config, path, rule),
         Command::Graph => commands::graph::run(config),
         Command::Roadmap => commands::roadmap::run(config),
