@@ -399,12 +399,7 @@ fn commands_carry_no_schema_knowledge_of_their_own() {
     .to_vec();
     for t in ["adr", "rfc", "milestone"] {
         let d = fixture(&format!("vocab-{t}"));
-        let out = run_step(
-            &d,
-            &format!("urzua harness record new {t} Vocab"),
-            "",
-            "",
-        );
+        let out = run_step(&d, &format!("urzua harness record new {t} Vocab"), "", "");
         let p = d.join(json_path(&out.stdout));
         for line in std::fs::read_to_string(p).unwrap().lines().skip(1) {
             if line == "---" {
@@ -427,7 +422,10 @@ fn commands_carry_no_schema_knowledge_of_their_own() {
     .unwrap();
     let helper = helper.split("#[cfg(test)]").next().unwrap();
     for word in ["Status", "Accepted", "Proposed", "Deciders", "Implements"] {
-        assert!(!helper.contains(word), "urzua harness record restates `{word}`");
+        assert!(
+            !helper.contains(word),
+            "urzua harness record restates `{word}`"
+        );
     }
 }
 

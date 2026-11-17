@@ -128,7 +128,10 @@ fn install_writes_the_translator_settings_block_and_lock_and_dry_run_writes_noth
     for rel in [OWNED, SETTINGS, LOCK] {
         assert!(dir.join(rel).is_file(), "{rel}");
     }
-    assert!(!dir.join(".claude/hooks").exists(), "nothing executable is installed");
+    assert!(
+        !dir.join(".claude/hooks").exists(),
+        "nothing executable is installed"
+    );
     // The dry run listed the same things the install did.
     let paths = |v: &serde_json::Value| {
         let mut p: Vec<String> = states(v).into_iter().map(|(p, _)| p).collect();
@@ -392,8 +395,10 @@ fn a_settings_file_that_is_not_json_or_holds_an_edited_entry_is_refused() {
     // An entry with our key that a person edited.
     let dir = fixture("edited-entry", &config(""));
     install(&dir);
-    let edited =
-        read(&dir, SETTINGS).replace("urzua harness hook claude-code edit", "urzua harness hook claude-code edit --quiet");
+    let edited = read(&dir, SETTINGS).replace(
+        "urzua harness hook claude-code edit",
+        "urzua harness hook claude-code edit --quiet",
+    );
     std::fs::write(dir.join(SETTINGS), &edited).unwrap();
     let (code, v) = harness(&dir, &["install"]);
     assert_eq!(code, 2, "{v}");
@@ -569,10 +574,7 @@ fn uninstall_removes_what_matches_the_lock_and_reports_what_a_person_changed() {
     let (code, v) = harness(&dir, &["uninstall"]);
     assert_eq!(code, 1, "{v}");
     assert_eq!(state_of(&v, "commands/done.md"), "kept-modified");
-    assert!(
-        dir.join(OWNED).exists(),
-        "a changed file is not deleted"
-    );
+    assert!(dir.join(OWNED).exists(), "a changed file is not deleted");
     assert!(!dir.join(LOCK).exists(), "the lock goes last, always");
     assert!(
         !dir.join(SETTINGS).exists(),

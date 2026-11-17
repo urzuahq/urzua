@@ -259,7 +259,14 @@ fn translate_home(
 ) -> serde_json::Value {
     let envs: Vec<(&str, &std::ffi::OsStr)> =
         home.map(|h| ("HOME", h.as_os_str())).into_iter().collect();
-    let out = common::run_hook(dir, "edit", payload, common::engine_or_own(engine), None, &envs);
+    let out = common::run_hook(
+        dir,
+        "edit",
+        payload,
+        common::engine_or_own(engine),
+        None,
+        &envs,
+    );
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     // An allowed call prints nothing.
     if out.stdout.is_empty() {

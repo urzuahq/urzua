@@ -564,7 +564,10 @@ fn the_claude_code_adapter_wires_a_post_tool_use_hook_on_bash_and_relays_the_rep
     git(&dir, &["add", "-A"]);
     git(&dir, &["commit", "-q", "-m", "install"]);
     let cmd = hook_command(&dir, "Bash");
-    assert!(cmd.contains("urzua harness hook claude-code post-command"), "{cmd}");
+    assert!(
+        cmd.contains("urzua harness hook claude-code post-command"),
+        "{cmd}"
+    );
 
     // A clean tree: the hook says nothing.
     let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);

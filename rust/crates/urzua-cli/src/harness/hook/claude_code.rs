@@ -221,7 +221,13 @@ impl Run {
         }
     }
 
-    fn unjudged_edit(&mut self, message: &str, cwd: Option<&str>, paths: Vec<String>, failed: bool) {
+    fn unjudged_edit(
+        &mut self,
+        message: &str,
+        cwd: Option<&str>,
+        paths: Vec<String>,
+        failed: bool,
+    ) {
         let r = self.unjudged_result(message, cwd, paths, failed, true);
         self.decide(&[r]);
     }
@@ -267,7 +273,7 @@ fn py_str(j: Option<&J>) -> String {
 fn j_truthy(j: Option<&J>) -> bool {
     match j {
         None | Some(J::Null) | Some(J::Bool(false)) => false,
-        Some(J::Num(n)) => n.parse::<f64>().map_or(true, |f| f != 0.0),
+        Some(J::Num(n)) => n.parse::<f64>().ok().is_none_or(|f| f != 0.0),
         Some(J::Str(t)) => !t.is_empty(),
         Some(J::Arr(a)) => !a.is_empty(),
         Some(J::Obj(o)) => !o.is_empty(),
@@ -276,7 +282,8 @@ fn j_truthy(j: Option<&J>) -> bool {
 }
 
 fn read_text(path: &str) -> Result<String, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("cannot read {path}: {}", py_os_error(&e, path)))?;
+    let bytes = std::fs::read(path)
+        .map_err(|e| format!("cannot read {path}: {}", py_os_error(&e, path)))?;
     String::from_utf8(bytes).map_err(|e| format!("cannot read {path}: {e}"))
 }
 
@@ -294,8 +301,7 @@ fn py_os_error(e: &std::io::Error, path: &str) -> String {
 /// The notebook as it will be once NotebookEdit has run.
 fn notebook_proposed(inp: &J, path: &str) -> Result<String, String> {
     let text = read_text(path).map_err(|e| e.replacen("cannot read", "cannot read notebook", 1))?;
-    let mut nb = json::parse(&text)
-        .map_err(|e| format!("cannot read notebook {path}: {e}"))?;
+    let mut nb = json::parse(&text).map_err(|e| format!("cannot read notebook {path}: {e}"))?;
     let Some(J::Arr(cells)) = nb.get_mut("cells") else {
         return Err(format!("{path} is not a notebook with cells"));
     };
@@ -344,7 +350,10 @@ fn notebook_proposed(inp: &J, path: &str) -> Result<String, String> {
             } else {
                 cells[i].set("source", source);
                 if j_truthy(inp.get("cell_type")) {
-                    cells[i].set("cell_type", inp.get("cell_type").cloned().unwrap_or(J::Null));
+                    cells[i].set(
+                        "cell_type",
+                        inp.get("cell_type").cloned().unwrap_or(J::Null),
+                    );
                 }
             }
         }
@@ -379,7 +388,11 @@ fn proposed(tool: &str, inp: &J, path: &str) -> Result<J, String> {
         };
         let (old, new) = (field("old_string")?, field("new_string")?);
         let all = j_truthy(e.get("replace_all"));
-        let n = if old.is_empty() { 0 } else { text.matches(old.as_str()).count() };
+        let n = if old.is_empty() {
+            0
+        } else {
+            text.matches(old.as_str()).count()
+        };
         if n == 0 {
             return Err("an old_string is not in the file".into());
         }
@@ -418,8 +431,9 @@ pub fn translate(event: &str, payload: &[u8], project: Option<&Path>) -> String 
                 .cloned()
                 .or_else(|| e.downcast_ref::<&str>().map(|t| t.to_string()))
                 .unwrap_or_default();
-            let message =
-                format!("urzua harness: the translator failed ({why}), so this call was NOT judged");
+            let message = format!(
+                "urzua harness: the translator failed ({why}), so this call was NOT judged"
+            );
             if event == "edit" {
                 run.unjudged_edit(&message, None, Vec::new(), true);
             } else {
@@ -438,7 +452,8 @@ fn main(run: &mut Run, payload: &[u8]) {
     let payload = match parsed {
         Ok(p @ J::Obj(_)) => p,
         _ => {
-            let message = "urzua harness: the hook payload was unreadable, so this call was NOT judged";
+            let message =
+                "urzua harness: the hook payload was unreadable, so this call was NOT judged";
             if event == "edit" {
                 let project = run.project.clone();
                 return run.unjudged_edit(message, project.as_deref(), Vec::new(), false);
@@ -489,7 +504,11 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
         }
         return;
     }
-    let key = if tool == "NotebookEdit" { "notebook_path" } else { "file_path" };
+    let key = if tool == "NotebookEdit" {
+        "notebook_path"
+    } else {
+        "file_path"
+    };
     let raw = inp.get(key);
     if !EDIT_TOOLS.contains(&tool) || !j_truthy(raw) {
         return;
@@ -554,8 +573,16 @@ fn judge_simple(run: &mut Run, request: serde_json::Value, cwd: Option<&str>) {
         return;
     }
     if verdict.get("agent").is_some() || verdict.get("person").is_some() {
-        let person = if truthy(verdict.get("person")) { vtext(&verdict, "person") } else { "" };
-        let agent = if truthy(verdict.get("agent")) { vtext(&verdict, "agent") } else { "" };
+        let person = if truthy(verdict.get("person")) {
+            vtext(&verdict, "person")
+        } else {
+            ""
+        };
+        let agent = if truthy(verdict.get("agent")) {
+            vtext(&verdict, "agent")
+        } else {
+            ""
+        };
         return run.relay_post_command(person, agent);
     }
     run.relay_post_command("", message);

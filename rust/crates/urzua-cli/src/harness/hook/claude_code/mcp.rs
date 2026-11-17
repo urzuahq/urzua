@@ -23,31 +23,90 @@ use super::text::{as_paths, words_of};
 use super::{Kind, Result1, Run, ALLOWED_NOTES};
 
 const CONTENT_KEYS: [&str; 10] = [
-    "content", "contents", "file_text", "fileText", "text", "new_source", "body", "data", "payload",
+    "content",
+    "contents",
+    "file_text",
+    "fileText",
+    "text",
+    "new_source",
+    "body",
+    "data",
+    "payload",
     "value",
 ];
 const EDIT_KEYS: [&str; 16] = [
-    "edits", "old_string", "new_string", "old_str", "new_str", "old_text", "new_text", "oldText",
-    "newText", "patch", "diff", "changes", "operations", "insert_text", "replacement", "append",
+    "edits",
+    "old_string",
+    "new_string",
+    "old_str",
+    "new_str",
+    "old_text",
+    "new_text",
+    "oldText",
+    "newText",
+    "patch",
+    "diff",
+    "changes",
+    "operations",
+    "insert_text",
+    "replacement",
+    "append",
 ];
 const PATH_WORDS: [&str; 20] = [
-    "path", "paths", "file", "files", "filepath", "filename", "source", "src", "dest",
-    "destination", "target", "from", "to", "uri", "url", "dir", "directory", "folder", "old", "new",
+    "path",
+    "paths",
+    "file",
+    "files",
+    "filepath",
+    "filename",
+    "source",
+    "src",
+    "dest",
+    "destination",
+    "target",
+    "from",
+    "to",
+    "uri",
+    "url",
+    "dir",
+    "directory",
+    "folder",
+    "old",
+    "new",
 ];
 const PARTIAL_WORDS: [&str; 12] = [
     "append", "insert", "patch", "edit", "replace", "modify", "update", "move", "rename", "delete",
     "remove", "copy",
 ];
 const WRITE_EXTRA: [&str; 11] = [
-    "write", "create", "save", "put", "overwrite", "mv", "rm", "touch", "mkdir", "set", "upload",
+    "write",
+    "create",
+    "save",
+    "put",
+    "overwrite",
+    "mv",
+    "rm",
+    "touch",
+    "mkdir",
+    "set",
+    "upload",
 ];
 const READ_WORDS: [&str; 27] = [
-    "read", "get", "list", "search", "find", "stat", "view", "show", "cat", "head", "tail", "fetch",
-    "query", "describe", "info", "tree", "grep", "glob", "exists", "diff", "status", "log", "count",
-    "check", "lookup", "browse", "inspect",
+    "read", "get", "list", "search", "find", "stat", "view", "show", "cat", "head", "tail",
+    "fetch", "query", "describe", "info", "tree", "grep", "glob", "exists", "diff", "status",
+    "log", "count", "check", "lookup", "browse", "inspect",
 ];
 const DEST_WORDS: [&str; 11] = [
-    "output", "out", "outfile", "outpath", "dest", "destination", "target", "save", "saveas", "into",
+    "output",
+    "out",
+    "outfile",
+    "outpath",
+    "dest",
+    "destination",
+    "target",
+    "save",
+    "saveas",
+    "into",
     "sink",
 ];
 
@@ -375,7 +434,9 @@ fn gates(
             return Err(message.to_string());
         }
         match verdict.get("record") {
-            None if ALLOWED_NOTES.contains(&kind) => results.push((Kind::Note, message.to_string())),
+            None if ALLOWED_NOTES.contains(&kind) => {
+                results.push((Kind::Note, message.to_string()))
+            }
             None => {}
             Some(flag) if truthy(Some(flag)) => records.push((path.clone(), content.clone())),
             Some(_) => {}
@@ -385,8 +446,20 @@ fn gates(
 }
 
 /// The parts of the call that are not judged as whole-file writes.
-fn unplaced(run: &mut Run, tool: &str, target: &Target, cwd: Option<&str>, caps: &Caps, results: &mut Vec<Result1>) {
-    let overflow: Vec<String> = target.items.iter().skip(caps.items).map(|(p, _)| p.clone()).collect();
+fn unplaced(
+    run: &mut Run,
+    tool: &str,
+    target: &Target,
+    cwd: Option<&str>,
+    caps: &Caps,
+    results: &mut Vec<Result1>,
+) {
+    let overflow: Vec<String> = target
+        .items
+        .iter()
+        .skip(caps.items)
+        .map(|(p, _)| p.clone())
+        .collect();
     if !overflow.is_empty() {
         let message = format!("urzua harness: urzua did NOT judge this edit ({tool} writes {} files, more than the {} it reads in one call; the first {} were judged against the gates). {}", target.items.len(), caps.items, caps.items, unjudged_tail());
         let r = run.unjudged_result(&message, cwd, overflow, false, true);
@@ -426,7 +499,11 @@ pub fn judge(run: &mut Run, tool: &str, target: Target, cwd: Option<&str>, caps:
         return run.decide(&results);
     }
     if records.len() > caps.records {
-        let shown: Vec<&str> = records.iter().take(caps.records).map(|(p, _)| p.as_str()).collect();
+        let shown: Vec<&str> = records
+            .iter()
+            .take(caps.records)
+            .map(|(p, _)| p.as_str())
+            .collect();
         let message = format!("urzua harness: urzua did NOT judge this edit ({tool} writes {} files that are checked as records, more than the {} it judges in one call: {}). Write them in separate calls. {}", records.len(), caps.records, shown.join(", ") + ", ...", unjudged_tail());
         let paths = records.iter().map(|(p, _)| p.clone()).collect();
         let r = run.unjudged_result(&message, cwd, paths, false, true);
@@ -450,4 +527,25 @@ pub fn judge(run: &mut Run, tool: &str, target: Target, cwd: Option<&str>, caps:
         }
     }
     run.decide(&results);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_no_configuration_the_caps_are_the_floors() {
+        let caps = Caps::configured(Some("/nonexistent-urzua-dir"));
+        assert_eq!(
+            (
+                caps.depth,
+                caps.path,
+                caps.string,
+                caps.loose,
+                caps.records,
+                caps.items
+            ),
+            (24, 4096, 65536, 512, 8, 512)
+        );
+    }
 }

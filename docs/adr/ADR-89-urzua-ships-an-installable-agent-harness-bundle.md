@@ -989,6 +989,45 @@ baseline recorded, or a configuration change while the baseline records no rule,
 `error` and lowers nothing for that command; with the configuration file unchanged, a differing recorded rule
 is reported as an edited baseline. The agent receives its own line in every case, not the person's text.
 
+## Amendment (2026-11-17): the enforcer lives in the binary, and the script and its pin are removed
+
+Accepted by the maintainer on 2026-11-17, for these points, in their words: the translation belongs in the
+binary ("it should [be] in urzua. This is much better. If we just own that code, then we don't also have to
+install it, and then they have to be in their repo and everything"); the binary holds all the code and an agent
+plugin only tells the agent to call it ("will actually just basically tell [Claude] Code to call the binary");
+there is no harness migration and the removal is manual, a breaking change ("we don't need a harness update.
+We're going to do a manual removal ... we can just do a breaking migration"); and it ships as one change ("all
+in one single PR, because it can all be tested together").
+
+Where the enforcer lives. The translation the installed script did (an agent's hook event in, the neutral
+request of section 6, the verdict back out as the agent's hook output) is `urzua harness hook <adapter>
+<event>`, in the binary, one module per adapter. The drafting helper is `urzua harness record`. `urzua harness
+install` writes no executable file into the repository, and no settings entry carries a file hash: the hook
+entries call the binary, the generated commands call the binary, and the lock records the rest. The amendment
+of 2026-11-08 that pinned the translator's sha256 in the hook command is superseded by this one.
+
+What verifies it. The binary is verified when it is installed (the release's build attestation, or the
+archive's sha256 the installer is given, `docs/reference/install.md`); code that lives in it needs no second
+check, and nothing in the repository can be edited to change what judges an edit. What is left for an agent to
+edit is the agent's settings file, which holds the hook entries, and the configuration; both stay protected
+paths wherever the configuration gates them, as this repository's does. The property the pin gave is kept: an
+agent cannot weaken the enforcer by editing a file in the repository.
+
+No migration command. A repository installed by an older release keeps the script, the drafting helper and the
+pinned entries until a person removes them; `urzua harness status`, `urzua doctor`, `urzua harness install` and
+the session-start check name each leftover with the steps that remove it, and the release notes list them.
+
+Decided by the builder, pending maintainer review: the hook command falls back, only when the binary cannot
+run (not on `PATH`, a release without `harness hook`), to reading `.urzua/config.yaml` as text and refusing an
+edit where `acceptance` or `protected-paths` is on without `on_unjudged: allow`, so a missing binary closes the
+gate it would have enforced; a generated instruction or command file is compared by its words, so a formatter
+is not drift; an allowed edit says nothing about an editor hook the session's own configuration turned off; a
+hook registered twice (repository settings and the plugin) judges a call once and both registrations print the
+same answer; the plugin ships the hooks and the lifecycle commands, and per-type drafting commands stay with
+`harness install`; `status` reports which registration is in effect, never more than the files it reads show;
+and a debug build reads a stand-in engine from `URZUA_HOOK_ENGINE_FOR_TESTS` for its tests, which a release
+build ignores.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1041,3 +1080,4 @@ is reported as an edited baseline. The agent receives its own line in every case
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): path gates bind the commands that write for someone`, decided by the builder on 2026-11-16, pending maintainer review: `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal says who can make the change; the gate rests on the verified login, since `--actor human` is a claim, and is weaker than the edit hook. `Status` stays Accepted. **Why:** `MILE-289` -- an agent's `fix --apply` wrote a record the edit hook would have refused. | **substantive** |
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): the post-command report weighs a gate event by the base branch`: the "arrived by a git move" wording and the stash tracking are removed, and a gate event matching the configured base ref is reported in one sentence at a lower level, still printed. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the maintainer reported on 2026-11-16 that the report after a pull could not be understood. | **substantive** |
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): a match lowers the report only against a remote-tracking ref`, correcting the earlier amendment of that day: raw-byte and mode matching, deletion-only absent-from-both, non-UTF-8 names never match, the remote-tracking-only downgrade, the rule-change event, and the agent's own line. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the third review of its pull request. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17): the enforcer lives in the binary, and the script and its pin are removed`: the translation is `urzua harness hook`, the drafting helper `urzua harness record`, nothing executable is installed and no entry carries a hash, the binary is verified at install, the settings file and the configuration stay protected, and leftovers are removed by hand with no migration command. **Why:** `MILE-339` and `MILE-280`; accepted by the maintainer on 2026-11-17 for the points quoted in the amendment, the rest decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |

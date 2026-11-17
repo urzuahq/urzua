@@ -286,8 +286,8 @@ never accept a record or touch a guardrail rests on this file and on the person 
   between the judgement and the write is not seen;
 - a Bash command that writes what the edit tools cannot: `.urzua/cache`, `.urzua/harness.lock`, the override
   log, `.git/hooks` and `.git/config`. Nothing reports it;
-- without `python3` or the translator, the editor hook's command reads `.urzua/config.yaml` as text and
-  refuses every edit if it finds `acceptance` or `protected-paths` enabled without `on_unjudged: allow`; a
+- without `urzua` on `PATH` (or with a release too old for `urzua harness hook`), the editor hook's command
+  reads `.urzua/config.yaml` as text and refuses every edit if it finds `acceptance` or `protected-paths` enabled without `on_unjudged: allow`; a
   configuration that scan misreads is read as not closed, and an invalid or empty `.urzua/config.yaml` (only
   a Bash write makes one, and it is reported) lets every edit through with a message;
 - a repository the session did not start in can add restrictions, never remove them: an edit is judged by

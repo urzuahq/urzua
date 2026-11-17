@@ -334,7 +334,10 @@ pub fn run_hook(
         .current_dir(dir)
         .env(
             "CLAUDE_PROJECT_DIR",
-            project.map_or_else(|| "/nonexistent-project".into(), |p| p.as_os_str().to_owned()),
+            project.map_or_else(
+                || "/nonexistent-project".into(),
+                |p| p.as_os_str().to_owned(),
+            ),
         )
         .env_remove("URZUA_HOOK_ENGINE_FOR_TESTS");
     if let Some(argv) = engine {
@@ -363,8 +366,13 @@ pub fn engine_or_own<'a>(engine: &'a [&'a str]) -> Option<&'a [&'a str]> {
 /// `PATH` with this build's `urzua` first, for running an installed hook
 /// command the way the agent runs it.
 pub fn path_with_urzua() -> std::ffi::OsString {
-    let bin = Path::new(env!("CARGO_BIN_EXE_urzua")).parent().unwrap().to_path_buf();
+    let bin = Path::new(env!("CARGO_BIN_EXE_urzua"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
     let mut dirs = vec![bin];
-    dirs.extend(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()));
+    dirs.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
     std::env::join_paths(dirs).unwrap()
 }

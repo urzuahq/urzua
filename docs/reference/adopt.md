@@ -209,7 +209,42 @@ See [Local hooks](ci.md#local-hooks).
 ## 10. Optional: agent hooks
 
 If agents write records in your repository, install the harness so their edits are judged before they
-land. See [the agent harness](agent-harness.md).
+land. See [the agent harness](agent-harness.md). There are two ways to register its hooks, and they can
+be used together.
+
+| | Install once per machine (the plugin) | Commit to the repository (`urzua harness install`) |
+|---|---|---|
+| What it is | A Claude Code plugin that registers the three hooks and `/amend`, `/done`, `/repin`, `/reverify` (as `/urzua:amend` and so on). It holds no logic: each hook calls `urzua harness hook claude-code <event>`. | Hook entries in `.claude/settings.json`, one drafting command per record type plus the four lifecycle commands in `.claude/commands/`, the instructions block, and `.urzua/harness.lock`. |
+| Who it covers | Every session on that machine whose user enabled it, in any repository. | Everyone who opens the repository with Claude Code, with nothing to install but `urzua`. |
+| What it adds | Nothing per repository: the rules come from each repository's `.urzua/config.yaml`. | The per-type drafting commands (generated from the configuration), the instructions block, and `status` drift checks against the lock. |
+| Needs | `urzua` on `PATH`. | `urzua` on `PATH`. |
+
+Install the plugin once per machine:
+
+```sh
+claude plugin marketplace add urzuahq/urzua
+claude plugin install urzua@urzua            # user scope; --scope project writes enabledPlugins in .claude/settings.json
+```
+
+In a session, `/plugin marketplace add urzuahq/urzua` then `/plugin install urzua@urzua` does the same.
+
+Commit to the repository:
+
+```sh
+urzua harness install
+git add .claude .urzua/harness.lock AGENTS.md && git commit -m "Install the urzua harness"
+```
+
+Both at once is safe: Claude Code runs both registrations, and the hook judges each call once and prints
+the same answer for both. `urzua harness status` reports which is in effect (`registration`).
+
+The known limit, and what the plugin changes about it: a hook in a repository's own settings runs only for
+a session opened in that repository. A user-level plugin's hook runs for every session, so a session opened
+in another directory that edits this repository's files is judged too: the hook finds the configuration
+from the file's path, not from the session's directory (tested with the session's directory and the hook's
+working directory outside the repository). Not verified without a live agent: that Claude Code fires a
+user-level plugin's hooks for every session as documented, and how an organization's managed settings can
+force the plugin on.
 
 ## Adopting records that have no header block
 

@@ -114,7 +114,10 @@ fn words(text: &str) -> String {
             Some('-' | '*' | '+') if digits == 0 => &line[1..],
             _ => line,
         };
-        out.extend(line.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()));
+        out.extend(
+            line.split(|c: char| !c.is_alphanumeric())
+                .filter(|w| !w.is_empty()),
+        );
     }
     out.join(" ")
 }
@@ -167,10 +170,14 @@ mod tests {
     #[test]
     fn a_reformatted_text_matches_and_changed_words_do_not() {
         let text = "# /done\n\n1. Run this:\n   - `urzua harness record done \"$RECORD\"`  \n";
-        let reflowed = "# /done\n\n3)  Run\n    this:\n\n    * `urzua harness record done \"$RECORD\"`\n";
+        let reflowed =
+            "# /done\n\n3)  Run\n    this:\n\n    * `urzua harness record done \"$RECORD\"`\n";
         assert!(text_matches(&text_hash(text), reflowed));
         assert!(same_text(text, reflowed));
-        assert!(!text_matches(&text_hash(text), &text.replace("done", "amend")));
+        assert!(!text_matches(
+            &text_hash(text),
+            &text.replace("done", "amend")
+        ));
         assert!(text_matches(&hash(text), text));
         assert!(!text_matches(&hash(text), reflowed));
     }
@@ -180,7 +187,10 @@ mod tests {
         let mut lock = Lock::new(vec!["a".into()]);
         lock.files.insert("f.md".into(), text_hash("x"));
         let text = lock.to_text();
-        let reformatted = text.replace("\n  ", "\n    ").replace(": ", ":").replace('\n', "\r\n");
+        let reformatted = text
+            .replace("\n  ", "\n    ")
+            .replace(": ", ":")
+            .replace('\n', "\r\n");
         assert_eq!(Lock::parse(&reformatted).unwrap(), lock);
     }
 

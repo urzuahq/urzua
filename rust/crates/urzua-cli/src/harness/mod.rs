@@ -38,8 +38,8 @@ use crate::session::Workspace;
 use json::J;
 use lock::{BlockHash, EntryHash, Lock, LOCK_PATH};
 
-pub use post_command::run_post_command;
 pub use hook::run_hook;
+pub use post_command::run_post_command;
 pub use record::run_record;
 pub use run::{run_edit, run_session_start};
 
@@ -582,20 +582,7 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
         report.notice(NoticeSeverity::Warning, p.clone());
     }
     report.problems.extend(unprovided);
-    let off: Vec<&str> = GUARDRAILS
-        .iter()
-        .map(|g| g.name)
-        .filter(|g| !env.harness.as_ref().is_some_and(|h| h.enabled(g)))
-        .collect();
-    if !off.is_empty() {
-        report.notice(
-            NoticeSeverity::Info,
-            format!(
-                "skipped by the configuration: the guardrail(s) {}; their hook entries are installed and say nothing while off. Each is enabled by harness.guardrails.<name>.enabled: true in .urzua/config.yaml",
-                off.join(", ")
-            ),
-        );
-    }
+    skipped_notice(env, &mut report);
 
     let new_lock = install_lock(&want, adapters);
     report.item(
@@ -610,6 +597,25 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
     match write_install(env, &plan, &new_lock) {
         Ok(()) => report,
         Err(m) => report.refuse(m),
+    }
+}
+
+/// Names the guardrails the configuration leaves off and the key that turns
+/// each on: an install skips nothing without saying so.
+fn skipped_notice(env: &Env, report: &mut HarnessReport) {
+    let off: Vec<&str> = GUARDRAILS
+        .iter()
+        .map(|g| g.name)
+        .filter(|g| !env.harness.as_ref().is_some_and(|h| h.enabled(g)))
+        .collect();
+    if !off.is_empty() {
+        report.notice(
+            NoticeSeverity::Info,
+            format!(
+                "skipped by the configuration: the guardrail(s) {}; their hook entries are installed and say nothing while off. Each is enabled by harness.guardrails.<name>.enabled: true in .urzua/config.yaml",
+                off.join(", ")
+            ),
+        );
     }
 }
 
@@ -718,7 +724,9 @@ fn install_lock(want: &Desired, adapters: Vec<String>) -> Lock {
     let mut new_lock = Lock::new(adapters);
     new_lock.adapters.sort();
     for (path, content) in &want.files {
-        new_lock.files.insert(path.clone(), lock::text_hash(content));
+        new_lock
+            .files
+            .insert(path.clone(), lock::text_hash(content));
     }
     for (file, entry) in &want.entries {
         new_lock.entries.push(entry_hash(file, entry, entry.hash()));
@@ -1703,7 +1711,11 @@ pub(crate) fn doctor_checks(
     for name in &adapters {
         if let Some(r) = presence::registration(root, name) {
             out.push((
-                if r.in_effect == "none" { Level::Warn } else { Level::Ok },
+                if r.in_effect == "none" {
+                    Level::Warn
+                } else {
+                    Level::Ok
+                },
                 "harness-registration",
                 format!("{name}: {} ({})", r.in_effect, r.note),
             ));

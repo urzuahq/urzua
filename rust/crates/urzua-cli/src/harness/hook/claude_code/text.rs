@@ -20,7 +20,15 @@ fn splitlines(text: &str) -> Vec<&str> {
     while let Some((i, c)) = chars.next() {
         let breaks = matches!(
             c,
-            '\n' | '\r' | '\u{b}' | '\u{c}' | '\u{1c}' | '\u{1d}' | '\u{1e}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+            '\n' | '\r'
+                | '\u{b}'
+                | '\u{c}'
+                | '\u{1c}'
+                | '\u{1d}'
+                | '\u{1e}'
+                | '\u{85}'
+                | '\u{2028}'
+                | '\u{2029}'
         );
         if !breaks {
             continue;
@@ -95,7 +103,9 @@ pub fn config_closes(d: &Path) -> Option<bool> {
         else {
             continue;
         };
-        let Some(mut body) = skip_space(after).strip_prefix(':').map(|b| skip_space(b).to_string())
+        let Some(mut body) = skip_space(after)
+            .strip_prefix(':')
+            .map(|b| skip_space(b).to_string())
         else {
             continue;
         };
@@ -146,7 +156,8 @@ pub fn words_of(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < c.len() {
-        let run = |from: usize, f: &dyn Fn(char) -> bool| c[from..].iter().take_while(|x| f(**x)).count();
+        let run =
+            |from: usize, f: &dyn Fn(char) -> bool| c[from..].iter().take_while(|x| f(**x)).count();
         let len = if low(c[i]) {
             run(i, &low)
         } else if up(c[i]) && c.get(i + 1).is_some_and(|x| low(*x)) {
@@ -180,7 +191,9 @@ fn home_expanded(value: &str) -> Option<String> {
             .strip_prefix(h)
             .is_some_and(|r| r.is_empty() || r.starts_with('/'))
     })?;
-    let home = std::env::var("HOME").ok().filter(|h| !h.is_empty() && h != "~")?;
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.is_empty() && h != "~")?;
     Some(format!("{home}{}", &value[head.len()..]))
 }
 
@@ -206,7 +219,10 @@ fn unquote(s: &str) -> String {
 
 /// The path `urllib.parse.urlparse` finds in a `file:` URL.
 fn url_path(value: &str) -> String {
-    let mut rest: String = value[5..].chars().filter(|c| !matches!(c, '\t' | '\r' | '\n')).collect();
+    let mut rest: String = value[5..]
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\r' | '\n'))
+        .collect();
     if let Some(after) = rest.strip_prefix("//") {
         let end = after.find(['/', '?', '#']).unwrap_or(after.len());
         rest = after[end..].to_string();
@@ -301,9 +317,18 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("urzua-closes-{}", std::process::id()));
         std::fs::create_dir_all(dir.join(".urzua")).unwrap();
         for (text, want) in [
-            ("harness:\n  guardrails:\n    acceptance:\n      enabled: true\n", true),
-            ("harness:\n  guardrails:\n    acceptance: {enabled: true, on_unjudged: 'allow'}\n", false),
-            ("harness:\n  guardrails:\n    protected-paths:\n      enabled: false\n", false),
+            (
+                "harness:\n  guardrails:\n    acceptance:\n      enabled: true\n",
+                true,
+            ),
+            (
+                "harness:\n  guardrails:\n    acceptance: {enabled: true, on_unjudged: 'allow'}\n",
+                false,
+            ),
+            (
+                "harness:\n  guardrails:\n    protected-paths:\n      enabled: false\n",
+                false,
+            ),
         ] {
             std::fs::write(dir.join(".urzua/config.yaml"), text).unwrap();
             assert_eq!(config_closes(&dir), Some(want), "{text}");

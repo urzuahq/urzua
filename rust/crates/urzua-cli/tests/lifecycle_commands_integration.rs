@@ -38,7 +38,6 @@ fn json(out: &Output) -> serde_json::Value {
     })
 }
 
-
 const BASE: &str = "schema_version: 2\nrules:\n  status.delivery-agreement: error\n  embodiment.locator-exists: error\nharness:\n  adapters: [claude-code]\n  guardrails:\n    editor-hook: {enabled: true}\nrecord_types:\n  milestone:\n    dir: \"docs/milestones\"\n    prefix: \"MILE\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Realized-by\"]\n    header_shape: \"yaml-frontmatter\"\n    statuses:\n      values: [Planned, InProgress, Done, WontDo]\n      success: [Done]\n      failure: [WontDo]\n      delivery:\n        delivered_tiers: [Implemented, Verified]\n        unevidenced_tiers: [\"Not started\"]\n        not_done: [Planned, InProgress]\n        set_status: Done\n  note:\n    dir: \"docs/notes\"\n    prefix: \"NOTE\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n    statuses:\n      values: [Open, Closed]\n";
 
 const MILESTONE_BUILT: &str = "---\nStatus: Planned\nRealized-by: code:src/a.rs\n---\n# MILE-1 — X\n\n## What\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-11-04 | Filed. | **substantive** |\n";
@@ -173,7 +172,10 @@ fn no_generated_command_names_a_field_or_status_of_the_configuration() {
     .unwrap();
     let helper = helper.split("#[cfg(test)]").next().unwrap();
     for word in &literals {
-        assert!(!helper.contains(word), "urzua harness record restates `{word}`");
+        assert!(
+            !helper.contains(word),
+            "urzua harness record restates `{word}`"
+        );
     }
 }
 

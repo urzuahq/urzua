@@ -31,7 +31,10 @@ const FIX: &str = "Install urzua (https://github.com/urzuahq/urzua/blob/main/doc
 /// session-start hooks only ever report, so they only say what is wrong and how
 /// to fix it. `$w` holds no quote or backslash, so it is safe inside the JSON.
 pub fn hook_command(event: &str) -> Option<String> {
-    let run = format!("urzua harness hook {} {event} && exit 0; c=$?; ", super::NAME);
+    let run = format!(
+        "urzua harness hook {} {event} && exit 0; c=$?; ",
+        super::NAME
+    );
     let why = r#"if command -v urzua >/dev/null 2>&1; then w="urzua exited $c: it may be a release older than urzua harness hook"; else w="urzua is not on PATH"; fi; "#;
     let tail = match event {
         "edit" => format!(

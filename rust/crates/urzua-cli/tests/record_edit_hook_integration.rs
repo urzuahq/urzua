@@ -238,13 +238,7 @@ fn when_urzua_cannot_judge_the_edit_proceeds_and_says_so() {
         .unwrap()
         .contains("did NOT judge"));
     // No binary at all.
-    let v = adapter(
-        &root,
-        "write-wrong",
-        &[
-            ("PATH", "/usr/bin:/bin"),
-        ],
-    );
+    let v = adapter(&root, "write-wrong", &[("PATH", "/usr/bin:/bin")]);
     assert!(!denied(&v), "{v}");
     assert!(
         v["systemMessage"]

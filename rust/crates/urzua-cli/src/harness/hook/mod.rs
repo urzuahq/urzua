@@ -203,7 +203,10 @@ pub(super) fn engine(
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
     let verdict: serde_json::Value =
         serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
-    if !verdict.as_object().is_some_and(|o| o.contains_key("verdict")) {
+    if !verdict
+        .as_object()
+        .is_some_and(|o| o.contains_key("verdict"))
+    {
         return Err("the engine did not answer with a verdict".into());
     }
     Ok(verdict)

@@ -246,10 +246,17 @@ fn the_settings_command_refuses_when_it_cannot_run_and_the_configuration_says_de
     let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
         .as_str()
         .unwrap();
-    assert!(reason.contains("on_unjudged") && reason.contains("urzua is not on PATH"), "{reason}");
+    assert!(
+        reason.contains("on_unjudged") && reason.contains("urzua is not on PATH"),
+        "{reason}"
+    );
     assert!(reason.contains("install.md"), "names the fix: {reason}");
     // A urzua too old to have `harness hook` (its parser exits 2): the same.
-    std::fs::write(tools.join("urzua"), "#!/bin/sh\necho 'unrecognized subcommand' >&2\nexit 2\n").unwrap();
+    std::fs::write(
+        tools.join("urzua"),
+        "#!/bin/sh\necho 'unrecognized subcommand' >&2\nexit 2\n",
+    )
+    .unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(tools.join("urzua"), std::fs::Permissions::from_mode(0o755)).unwrap();
     let v = run_command(&dir, &dir, Some(&dir), Some(tools.path()), &payload);
@@ -503,7 +510,10 @@ fn session_start_compares_the_installed_files_the_hook_entries_and_the_kill_swit
     let p = problems(&v);
     assert_eq!(p.len(), 1, "{v}");
     assert_eq!(p[0].0, "leftover");
-    assert!(p[0].1.contains("git rm .claude/hooks/urzua-claude-code.py"), "{v}");
+    assert!(
+        p[0].1.contains("git rm .claude/hooks/urzua-claude-code.py"),
+        "{v}"
+    );
     std::fs::remove_dir_all(leftover.parent().unwrap()).unwrap();
     assert_eq!(session(&dir)["verdict"], "allow", "removed");
 
@@ -804,10 +814,16 @@ fn status_of(dir: &Path) -> serde_json::Value {
 fn no_hook_command_runs_a_file_of_the_repository_or_carries_a_hash() {
     let dir = fixture("s1", &config(""));
     install(&dir);
-    assert!(!dir.join(".claude/hooks").exists(), "nothing executable is installed");
+    assert!(
+        !dir.join(".claude/hooks").exists(),
+        "nothing executable is installed"
+    );
     for handler in ["edit", "post-command", "session-start"] {
         let command = hook_command(&dir, handler);
-        assert!(!command.contains("sha256") && !command.contains(".claude/hooks"), "{handler}: {command}");
+        assert!(
+            !command.contains("sha256") && !command.contains(".claude/hooks"),
+            "{handler}: {command}"
+        );
     }
     let lock = std::fs::read_to_string(dir.join(".urzua/harness.lock")).unwrap();
     assert!(!lock.contains(".claude/hooks"), "{lock}");

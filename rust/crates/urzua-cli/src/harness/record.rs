@@ -39,15 +39,23 @@ fn urzua(args: &[&str]) -> Result<(i32, String), String> {
         .map_err(|e| e.to_string())?;
     Ok((
         out.status.code().unwrap_or(1),
-        String::from_utf8_lossy(&out.stdout).trim_end_matches('\n').to_string(),
+        String::from_utf8_lossy(&out.stdout)
+            .trim_end_matches('\n')
+            .to_string(),
     ))
 }
 
 fn git(args: &[&str]) -> Option<String> {
-    let out = Command::new("git").args(args).stderr(Stdio::null()).output().ok()?;
-    out.status
-        .success()
-        .then(|| String::from_utf8_lossy(&out.stdout).trim_end_matches('\n').to_string())
+    let out = Command::new("git")
+        .args(args)
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    out.status.success().then(|| {
+        String::from_utf8_lossy(&out.stdout)
+            .trim_end_matches('\n')
+            .to_string()
+    })
 }
 
 fn git_add(path: &str) -> Result<(), String> {
@@ -93,7 +101,10 @@ fn snapshots(root: &Path) -> PathBuf {
 }
 
 fn scaffold_of(root: &Path, path: &str) -> PathBuf {
-    let name = Path::new(path).file_name().unwrap_or_default().to_string_lossy();
+    let name = Path::new(path)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
     snapshots(root).join(format!("{name}.scaffold"))
 }
 
@@ -115,7 +126,10 @@ fn check_record(path: &str, done: &str) -> Result<ExitCode, ExitCode> {
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
     if examined < 1 {
-        return Err(fail(1, &format!("urzua check examined no records; {path} is NOT verified")));
+        return Err(fail(
+            1,
+            &format!("urzua check examined no records; {path} is NOT verified"),
+        ));
     }
     eprintln!("{P}: {done}; urzua check examined {examined} record(s)");
     Ok(ExitCode::from(u8::try_from(rc).unwrap_or(1)))
@@ -140,7 +154,10 @@ fn new(root: &Path, ty: &str, title: &str) -> ExitCode {
         .and_then(|()| std::fs::copy(&path, scaffold_of(root, &path)));
     match copied {
         Ok(_) => ExitCode::SUCCESS,
-        Err(e) => fail(1, &format!("could not snapshot the scaffold of {path}: {e}")),
+        Err(e) => fail(
+            1,
+            &format!("could not snapshot the scaffold of {path}: {e}"),
+        ),
     }
 }
 
@@ -155,7 +172,10 @@ fn header_problems(scaffold: &str, now: &str) -> Vec<String> {
     };
     let mut problems = Vec::new();
     for i in 0..old.len().max(new.len()) {
-        let (o, n) = (old.get(i).copied().unwrap_or(""), new.get(i).copied().unwrap_or(""));
+        let (o, n) = (
+            old.get(i).copied().unwrap_or(""),
+            new.get(i).copied().unwrap_or(""),
+        );
         if key(o) != key(n) {
             problems.push(format!("header field {} became {}", key(o), key(n)));
         } else if value(n) != value(o) && value(o) != "null" {
@@ -188,7 +208,10 @@ fn finish(root: &Path, path: &str) -> ExitCode {
         for p in &problems {
             eprintln!("{p}");
         }
-        return fail(1, "refusing; a drafting command fills null fields and the body only");
+        return fail(
+            1,
+            "refusing; a drafting command fills null fields and the body only",
+        );
     }
     if let Err(e) = git_add(path) {
         return fail(1, &e);
@@ -234,7 +257,9 @@ fn amendment_problems(diff: &str, path: &str) -> Vec<String> {
         return vec![format!("refusing; an amendment only adds lines, and {removed} existing line(s) of {path} were changed or removed")];
     }
     if !diff.lines().any(|l| l.starts_with("+## Amendment (")) {
-        return vec![format!("refusing; no added '## Amendment (YYYY-MM-DD): ...' section in {path}")];
+        return vec![format!(
+            "refusing; no added '## Amendment (YYYY-MM-DD): ...' section in {path}"
+        )];
     }
     if !diff.lines().any(|l| l.starts_with("+> |")) {
         return vec![format!("refusing; no added revision-log row in {path}")];
@@ -259,7 +284,10 @@ fn amend_finish(path: &str) -> ExitCode {
 }
 
 fn needs_reason(reason: &str, what: &str) -> Option<ExitCode> {
-    reason.trim().is_empty().then(|| fail(1, &format!("refusing; {what}")))
+    reason
+        .trim()
+        .is_empty()
+        .then(|| fail(1, &format!("refusing; {what}")))
 }
 
 fn repin(path: &str, reason: &str) -> ExitCode {
@@ -267,13 +295,30 @@ fn repin(path: &str, reason: &str) -> ExitCode {
         return c;
     }
     let Some(by) = identity() else {
-        return fail(2, "no identity; set URZUA_BY to the person who authorised the re-pin");
+        return fail(
+            2,
+            "no identity; set URZUA_BY to the person who authorised the re-pin",
+        );
     };
-    eprintln!("{P}: the stale pins of {path} (look at the diff of each pinned file before going on):");
+    eprintln!(
+        "{P}: the stale pins of {path} (look at the diff of each pinned file before going on):"
+    );
     if let Ok((_, review)) = urzua(&["fix", "--rebaseline", "--ids", path]) {
         eprintln!("{review}");
     }
-    let (rc, out) = match urzua(&["fix", "--rebaseline", "--apply", "--ids", path, "--by", &by, "--actor", "agent", "--reason", reason]) {
+    let (rc, out) = match urzua(&[
+        "fix",
+        "--rebaseline",
+        "--apply",
+        "--ids",
+        path,
+        "--by",
+        &by,
+        "--actor",
+        "agent",
+        "--reason",
+        reason,
+    ]) {
         Ok(r) => r,
         Err(e) => return fail(2, &format!("could not run urzua fix: {e}")),
     };
@@ -293,16 +338,26 @@ fn repin(path: &str, reason: &str) -> ExitCode {
 }
 
 fn reverify(path: &str, reason: &str) -> ExitCode {
-    if let Some(c) = needs_reason(reason, "a renewal needs a non-empty reason that says what you checked, not that the claim was old") {
+    if let Some(c) = needs_reason(
+        reason,
+        "a renewal needs a non-empty reason that says what you checked, not that the claim was old",
+    ) {
         return c;
     }
     let Some(by) = identity() else {
-        return fail(2, "no identity; set URZUA_BY to the person who authorised the renewal");
+        return fail(
+            2,
+            "no identity; set URZUA_BY to the person who authorised the renewal",
+        );
     };
     eprintln!("{P}: the review of {path} (read every locator and span it lists before going on):");
-    let review = urzua(&["reverify", "--ids", path]).map(|r| r.1).unwrap_or_default();
+    let review = urzua(&["reverify", "--ids", path])
+        .map(|r| r.1)
+        .unwrap_or_default();
     eprintln!("{review}");
-    let (rc, out) = match urzua(&["reverify", "--apply", "--ids", path, "--by", &by, "--actor", "agent", "--reason", reason]) {
+    let (rc, out) = match urzua(&[
+        "reverify", "--apply", "--ids", path, "--by", &by, "--actor", "agent", "--reason", reason,
+    ]) {
         Ok(r) => r,
         Err(e) => return fail(2, &format!("could not run urzua reverify: {e}")),
     };
@@ -326,9 +381,14 @@ fn reverify(path: &str, reason: &str) -> ExitCode {
 
 fn done(path: &str) -> ExitCode {
     let Some(by) = identity() else {
-        return fail(2, "no identity; set URZUA_BY to the person who authorised this");
+        return fail(
+            2,
+            "no identity; set URZUA_BY to the person who authorised this",
+        );
     };
-    let (rc, out) = match urzua(&["fix", "--apply", "--ids", path, "--by", &by, "--actor", "agent"]) {
+    let (rc, out) = match urzua(&[
+        "fix", "--apply", "--ids", path, "--by", &by, "--actor", "agent",
+    ]) {
         Ok(r) => r,
         Err(e) => return fail(2, &format!("could not run urzua fix: {e}")),
     };
@@ -373,11 +433,19 @@ mod tests {
 
     #[test]
     fn only_a_null_field_may_be_filled() {
-        assert!(header_problems(SCAFFOLD, &SCAFFOLD.replace("Owner: null", "Owner: ann")).is_empty());
+        assert!(
+            header_problems(SCAFFOLD, &SCAFFOLD.replace("Owner: null", "Owner: ann")).is_empty()
+        );
         let changed = header_problems(SCAFFOLD, &SCAFFOLD.replace("Draft", "Accepted"));
-        assert_eq!(changed, ["scaffolded value of Status was changed (Draft -> Accepted)"]);
+        assert_eq!(
+            changed,
+            ["scaffolded value of Status was changed (Draft -> Accepted)"]
+        );
         let added = header_problems(SCAFFOLD, &SCAFFOLD.replace("Date:", "Extra: 1\nDate:"));
-        assert!(added[0].starts_with("header field Date became Extra"), "{added:?}");
+        assert!(
+            added[0].starts_with("header field Date became Extra"),
+            "{added:?}"
+        );
         let removed = header_problems(SCAFFOLD, &SCAFFOLD.replace("Owner: null\n", ""));
         assert!(!removed.is_empty());
     }
@@ -388,7 +456,11 @@ mod tests {
         assert!(amendment_problems(ok, "x").is_empty());
         let removes = format!("{ok}@@ -3 +3 @@\n-old\n+new\n");
         assert!(amendment_problems(&removes, "x")[0].contains("1 existing line"));
-        assert!(amendment_problems("@@ -1,0 +2 @@\n+> | r |\n", "x")[0].contains("no added '## Amendment"));
-        assert!(amendment_problems("@@ -1,0 +2 @@\n+## Amendment (d): t\n", "x")[0].contains("revision-log row"));
+        assert!(amendment_problems("@@ -1,0 +2 @@\n+> | r |\n", "x")[0]
+            .contains("no added '## Amendment"));
+        assert!(
+            amendment_problems("@@ -1,0 +2 @@\n+## Amendment (d): t\n", "x")[0]
+                .contains("revision-log row")
+        );
     }
 }

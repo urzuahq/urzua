@@ -14,7 +14,11 @@ const CONFIG: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/
 const PROPOSED: &str = "---\nStatus: Proposed\n---\n# ADR-1: T\n\nprose\n";
 
 fn git(dir: &Path, args: &[&str]) {
-    let out = Command::new("git").args(args).current_dir(dir).output().unwrap();
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
     assert!(out.status.success(), "git {args:?}: {out:?}");
 }
 
@@ -36,7 +40,11 @@ fn repo(name: &str, config: &str) -> common::TempDir {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> (i32, serde_json::Value) {
-    let out = common::urzua().args(args).current_dir(dir).output().unwrap();
+    let out = common::urzua()
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
     let v = serde_json::from_slice(&out.stdout)
         .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&out.stdout)));
     (out.status.code().unwrap(), v)
@@ -78,18 +86,34 @@ fn install_writes_no_executable_file_and_no_hash_and_names_what_it_skipped() {
         }
     }
     let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
-    assert!(!settings.contains("sha256") && !settings.contains("python3"), "{settings}");
+    assert!(
+        !settings.contains("sha256") && !settings.contains("python3"),
+        "{settings}"
+    );
     for item in v["items"].as_array().unwrap() {
-        assert!(!item["path"].as_str().unwrap().is_empty(), "an item with no path: {v}");
+        assert!(
+            !item["path"].as_str().unwrap().is_empty(),
+            "an item with no path: {v}"
+        );
     }
     let notices = v["notices"].to_string();
     assert!(
-        notices.contains("skipped by the configuration") && notices.contains("editor-hook") && notices.contains("harness.guardrails.<name>.enabled"),
+        notices.contains("skipped by the configuration")
+            && notices.contains("editor-hook")
+            && notices.contains("harness.guardrails.<name>.enabled"),
         "{v}"
     );
-    let bare = repo("no-instructions", &CONFIG.replace("  instructions_file: AGENTS.md\n", ""));
+    let bare = repo(
+        "no-instructions",
+        &CONFIG.replace("  instructions_file: AGENTS.md\n", ""),
+    );
     let (_, v) = urzua(&bare, &["harness", "install"]);
-    assert!(v["notices"].to_string().contains("set it to the file the agent reads"), "{v}");
+    assert!(
+        v["notices"]
+            .to_string()
+            .contains("set it to the file the agent reads"),
+        "{v}"
+    );
 }
 
 /// Every file an install writes, reformatted the way a common formatter for its
@@ -119,7 +143,10 @@ fn reformat_everything(dir: &Path) {
             let body = line.trim_start();
             let body = if let Some(rest) = body.strip_prefix("- ") {
                 format!("* {rest}")
-            } else if let Some((n, rest)) = body.split_once(". ").filter(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
+            } else if let Some((n, rest)) = body
+                .split_once(". ")
+                .filter(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+            {
                 let _ = n;
                 format!("1)  {rest}")
             } else {
@@ -157,16 +184,26 @@ fn reformatting_every_file_the_install_wrote_leaves_status_ok_and_the_hook_worki
     std::fs::write(&done, text).unwrap();
     // The reformatted settings still run the hook, which still refuses.
     let settings: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap()).unwrap();
-    let cmd = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"].as_str().unwrap();
+        serde_json::from_str(&std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap())
+            .unwrap();
+    let cmd = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
     let payload = serde_json::json!({"tool_name": "Write", "cwd": dir.to_string_lossy(), "tool_input": {"file_path": dir.join(".claude/x.json").to_string_lossy(), "content": "{}"}}).to_string();
     let out = run_sh(&dir, cmd, &payload, Some(dir.path()));
     assert!(out.contains("\"permissionDecision\": \"deny\""), "{out}");
     // The session-start check, the one that compares the files with the lock, agrees.
-    let start = serde_json::json!({"hook_event_name": "SessionStart", "cwd": dir.to_string_lossy()}).to_string();
-    let cmd = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"].as_str().unwrap();
+    let start =
+        serde_json::json!({"hook_event_name": "SessionStart", "cwd": dir.to_string_lossy()})
+            .to_string();
+    let cmd = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
     let out = run_sh(&dir, cmd, &start, Some(dir.path()));
-    assert!(!out.contains("[file]") && !out.contains("[hook-entry]") && !out.contains("[lock]"), "{out}");
+    assert!(
+        !out.contains("[file]") && !out.contains("[hook-entry]") && !out.contains("[lock]"),
+        "{out}"
+    );
 }
 
 fn run_sh(dir: &Path, cmd: &str, payload: &str, project: Option<&Path>) -> String {
@@ -192,10 +229,18 @@ fn run_sh(dir: &Path, cmd: &str, payload: &str, project: Option<&Path>) -> Strin
 /// The settings entries and files an older bundle left, as the bundle of 0.4.7 wrote them.
 fn leave_the_old_bundle(dir: &Path) {
     std::fs::create_dir_all(dir.join(".claude/hooks")).unwrap();
-    std::fs::write(dir.join(".claude/hooks/urzua-claude-code.py"), "import sys\n").unwrap();
+    std::fs::write(
+        dir.join(".claude/hooks/urzua-claude-code.py"),
+        "import sys\n",
+    )
+    .unwrap();
     std::fs::write(dir.join(".claude/hooks/urzua-record.sh"), "#!/bin/sh\n").unwrap();
     let settings = serde_json::json!({"hooks": {"PreToolUse": [{"matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*", "hooks": [{"type": "command", "command": "t=\"$r/.claude/hooks/urzua-claude-code.py\"; python3 -I -c 'import hashlib' \"$t\" 0123 edit -- urzua harness run edit"}]}]}});
-    std::fs::write(dir.join(".claude/settings.json"), serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+    std::fs::write(
+        dir.join(".claude/settings.json"),
+        serde_json::to_string_pretty(&settings).unwrap(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -205,10 +250,24 @@ fn status_doctor_and_install_name_a_leftover_script_and_pinned_entry_with_the_re
     let (code, v) = urzua(&dir, &["harness", "install"]);
     assert_eq!(code, 2, "the old entry has the key of the new one: {v}");
     let text = v.to_string();
-    assert!(text.contains("git rm .claude/hooks/urzua-claude-code.py") && text.contains("git rm .claude/hooks/urzua-record.sh"), "{v}");
-    assert!(text.contains("Remove that entry from .claude/settings.json by hand"), "{v}");
+    assert!(
+        text.contains("git rm .claude/hooks/urzua-claude-code.py")
+            && text.contains("git rm .claude/hooks/urzua-record.sh"),
+        "{v}"
+    );
+    assert!(
+        text.contains("Remove that entry from .claude/settings.json by hand"),
+        "{v}"
+    );
     let (_, v) = urzua(&dir, &["doctor"]);
-    let leftovers: Vec<&serde_json::Value> = v["checks"].as_array().map(|c| c.iter().filter(|c| c.to_string().contains("harness-leftover")).collect()).unwrap_or_default();
+    let leftovers: Vec<&serde_json::Value> = v["checks"]
+        .as_array()
+        .map(|c| {
+            c.iter()
+                .filter(|c| c.to_string().contains("harness-leftover"))
+                .collect()
+        })
+        .unwrap_or_default();
     assert_eq!(leftovers.len(), 3, "{v}");
     // The manual steps, done: the install then succeeds and status is ok.
     std::fs::remove_dir_all(dir.join(".claude/hooks")).unwrap();
@@ -225,25 +284,44 @@ fn status_says_which_registration_is_in_effect_and_never_claims_a_plugin_it_cann
     let dir = installed("registration");
     let home = common::TempDir::new("urzua-binhook-home");
     let status = |dir: &Path| {
-        let out = common::urzua().args(["harness", "status"]).current_dir(dir).env("HOME", home.path()).output().unwrap();
+        let out = common::urzua()
+            .args(["harness", "status"])
+            .current_dir(dir)
+            .env("HOME", home.path())
+            .output()
+            .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
         v["registration"][0].clone()
     };
     assert_eq!(status(&dir)["in_effect"], "repository-settings");
     std::fs::create_dir_all(home.join(".claude")).unwrap();
-    std::fs::write(home.join(".claude/settings.json"), r#"{"enabledPlugins": {"urzua@urzua": true}}"#).unwrap();
+    std::fs::write(
+        home.join(".claude/settings.json"),
+        r#"{"enabledPlugins": {"urzua@urzua": true}}"#,
+    )
+    .unwrap();
     let r = status(&dir);
     assert_eq!(r["in_effect"], "both", "{r}");
     assert_eq!(r["plugin_enabled_in"], "~/.claude/settings.json");
     // A project setting that disables it outranks the user's.
     let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
-    std::fs::write(dir.join(".claude/settings.local.json"), r#"{"enabledPlugins": {"urzua@urzua": false}}"#).unwrap();
+    std::fs::write(
+        dir.join(".claude/settings.local.json"),
+        r#"{"enabledPlugins": {"urzua@urzua": false}}"#,
+    )
+    .unwrap();
     assert_eq!(status(&dir)["in_effect"], "repository-settings");
     std::fs::remove_file(dir.join(".claude/settings.local.json")).unwrap();
     std::fs::write(dir.join(".claude/settings.json"), "{}\n").unwrap();
     let r = status(&dir);
     assert_eq!(r["in_effect"], "plugin", "{r}");
-    assert!(r["note"].as_str().unwrap().contains("not something the binary can read"), "{r}");
+    assert!(
+        r["note"]
+            .as_str()
+            .unwrap()
+            .contains("not something the binary can read"),
+        "{r}"
+    );
     std::fs::write(dir.join(".claude/settings.json"), settings).unwrap();
 }
 
@@ -251,8 +329,12 @@ fn status_says_which_registration_is_in_effect_and_never_claims_a_plugin_it_cann
 fn a_hook_registered_twice_judges_a_call_once_and_both_print_the_same_answer() {
     let dir = installed("twice");
     let settings: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap()).unwrap();
-    let cmd = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"].as_str().unwrap().to_string();
+        serde_json::from_str(&std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap())
+            .unwrap();
+    let cmd = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // A stand-in engine (a debug build's seam) that logs every request it is
     // sent and refuses: how many times the call was judged is the log's length.
     let log = dir.join("engine.log");
@@ -306,11 +388,21 @@ fn a_session_rooted_elsewhere_is_judged_by_the_repository_that_holds_the_file() 
     let payload = serde_json::json!({"tool_name": "Write", "cwd": elsewhere.to_string_lossy(), "tool_input": {"file_path": dir.join(".claude/settings.json").to_string_lossy(), "content": "{}"}}).to_string();
     // The session's project holds no configuration (a user-level plugin in
     // another directory), and the process runs there too.
-    let out = common::run_hook(&elsewhere, "edit", &payload, None, Some(elsewhere.path()), &[]);
+    let out = common::run_hook(
+        &elsewhere,
+        "edit",
+        &payload,
+        None,
+        Some(elsewhere.path()),
+        &[],
+    );
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("\"permissionDecision\": \"deny\""), "{text}");
     let accepted = PROPOSED.replace("Proposed", "Accepted");
     let payload = serde_json::json!({"tool_name": "Write", "cwd": elsewhere.to_string_lossy(), "tool_input": {"file_path": dir.join("docs/adr/ADR-1-a.md").to_string_lossy(), "content": accepted}}).to_string();
     let out = common::run_hook(&elsewhere, "edit", &payload, None, None, &[]);
-    assert!(String::from_utf8_lossy(&out.stdout).contains("acceptance"), "{out:?}");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("acceptance"),
+        "{out:?}"
+    );
 }
