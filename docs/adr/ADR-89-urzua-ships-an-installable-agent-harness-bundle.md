@@ -1004,18 +1004,21 @@ request of section 6, the verdict back out as the agent's hook output) is `urzua
 <event>`, in the binary, one module per adapter. The drafting helper is `urzua harness record`. `urzua harness
 install` writes no executable file into the repository, and no settings entry carries a file hash: the hook
 entries call the binary, the generated commands call the binary, and the lock records the rest. The amendment
-of 2026-11-08 that pinned the translator's sha256 in the hook command is superseded by this one.
+of 2026-11-08 that pinned the translator's sha256 in the hook command is superseded by this one (decided by
+the builder, pending maintainer review).
 
 What verifies it. The binary is verified when it is installed (the release's build attestation, or the
 archive's sha256 the installer is given, `docs/reference/install.md`); code that lives in it needs no second
 check, and nothing in the repository can be edited to change what judges an edit. What is left for an agent to
 edit is the agent's settings file, which holds the hook entries, and the configuration; both stay protected
 paths wherever the configuration gates them, as this repository's does. The property the pin gave is kept: an
-agent cannot weaken the enforcer by editing a file in the repository.
+agent cannot weaken the enforcer by editing a file in the repository. (This paragraph: decided by the builder,
+pending maintainer review.)
 
 No migration command. A repository installed by an older release keeps the script, the drafting helper and the
 pinned entries until a person removes them; `urzua harness status`, `urzua doctor`, `urzua harness install` and
-the session-start check name each leftover with the steps that remove it, and the release notes list them.
+the session-start check name each leftover with the steps that remove it, and the release notes list them
+(how leftovers are named: decided by the builder, pending maintainer review).
 
 Decided by the builder, pending maintainer review: the hook command falls back, only when the binary cannot
 run (not on `PATH`, a release without `harness hook`), to reading `.urzua/config.yaml` as text and refusing an
