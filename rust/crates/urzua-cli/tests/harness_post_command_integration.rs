@@ -1663,3 +1663,41 @@ fn a_shallow_clones_pull_still_matches() {
     let v = post(&dir);
     assert_eq!(base_paths(&v).len(), 3, "{v}");
 }
+
+const SHALLOW_GRAFT: &str = "git config log.showRoot false && git pull -q --ff-only && echo evil >> .github/workflows/ci.yml && git commit -qam E && git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml && git commit -qam F && git rev-parse HEAD >> \"$(git rev-parse --git-path shallow)\"";
+
+fn assert_truncated(dir: &Path) {
+    bash(dir, SHALLOW_GRAFT);
+    let v = post(dir);
+    assert!(v["base_match"].is_null(), "{v}");
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error")
+            && person.contains("the command truncated the history"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_hand_edited_shallow_file_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("shallow-graft");
+    upstream_change(&up);
+    assert_truncated(&dir);
+}
+
+#[test]
+fn a_hand_edited_shallow_file_in_a_shallow_clone_does_not_make_a_change_match() {
+    let up = launder_fixture("shallow-graft-depth-up");
+    let holder = common::TempDir::new("urzua-postcmd-shallow-graft-depth-clone");
+    let dir = holder.join("work");
+    let url = format!("file://{}", up.display());
+    git(
+        &holder,
+        &["clone", "-q", "--depth", "1", &url, dir.to_str().unwrap()],
+    );
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    upstream_change(&up);
+    assert_truncated(&dir);
+}

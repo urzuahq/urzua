@@ -59,9 +59,60 @@ const GUARDRAIL: &str = "post-command";
 
 /// Every git call of this module runs with replace refs off: a local
 /// `refs/replace` entry would otherwise change the trees and history the base
-/// comparison reads.
+/// comparison reads. `log.showRoot` is pinned so the repository's config
+/// cannot hide a root commit's paths from the log.
 fn git_run() -> GitRun {
-    GitRun::new().env("GIT_NO_REPLACE_OBJECTS", "1")
+    GitRun::new()
+        .env("GIT_NO_REPLACE_OBJECTS", "1")
+        .args(["-c", "log.showRoot=true"])
+}
+
+/// The content of the shallow file, empty when there is none. `None` when git
+/// cannot name it.
+fn shallow_content(repo_root: &Path) -> Option<String> {
+    let out = git_run()
+        .cwd(repo_root)
+        .args(["--no-optional-locks", "rev-parse", "--git-path", "shallow"])
+        .discard_stderr()
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    Some(std::fs::read_to_string(repo_root.join(path)).unwrap_or_default())
+}
+
+/// Whether the command truncated history: the shallow file changed since the
+/// baseline, or a commit in `start..HEAD` is a shallow boundary (a hand-edited
+/// shallow file acts as a graft). A boundary in the base's history, as in an
+/// ordinary shallow clone, does not count.
+fn history_truncated(repo_root: &Path, start: &str, prior: Option<&ProtectedState>) -> bool {
+    let Some(shallow) = shallow_content(repo_root) else {
+        return true;
+    };
+    let sig = urzua_io::sha256_hex_of_str(&shallow);
+    if prior
+        .and_then(|p| p.post_shallow.as_deref())
+        .is_some_and(|old| old != sig)
+    {
+        return true;
+    }
+    if start == "HEAD" || shallow.trim().is_empty() {
+        return false;
+    }
+    let Some(out) = git_run()
+        .cwd(repo_root)
+        .args(["--no-optional-locks", "rev-list", &format!("{start}..HEAD")])
+        .discard_stderr()
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+    else {
+        return true;
+    };
+    let bounds: HashSet<&str> = shallow.lines().map(str::trim).collect();
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .any(|c| bounds.contains(c.trim()))
 }
 
 /// Whether replace refs or a grafts file exist. Git still honours grafts with
@@ -667,7 +718,8 @@ fn base_gates(
         event_paths.push(&config_rel);
     }
     let rewritten = history_rewritten(repo_root);
-    let matched = if base_ref.is_empty() || rewritten {
+    let truncated = history_truncated(repo_root, start, prior);
+    let matched = if base_ref.is_empty() || rewritten || truncated {
         None
     } else {
         let deleted: HashSet<String> = paths
@@ -697,6 +749,8 @@ fn base_gates(
         unresolved: (!compared).then(|| {
             if rewritten {
                 "replace refs or grafts are present, so nothing was compared with the base".to_string()
+            } else if truncated {
+                "the command truncated the history (a shallow boundary in its own commits, or a changed shallow file), so nothing was compared with the base".to_string()
             } else if base_ref.is_empty() {
                 "no base ref to compare with: the command changed the configuration and the comparison rule it had before is not known".to_string()
             } else {
@@ -1044,6 +1098,7 @@ fn committed_state(
         log.extend(
             [
                 "log",
+                "--root",
                 "--full-history",
                 "--cc",
                 "--format=",
@@ -1582,6 +1637,9 @@ struct ProtectedState {
     post_base: Option<String>,
     #[serde(default)]
     post_level: Option<String>,
+    /// The hash of the shallow file's content (empty when there is none).
+    #[serde(default)]
+    post_shallow: Option<String>,
 }
 
 fn read_protected(top: &Path) -> Option<ProtectedState> {
@@ -1814,6 +1872,7 @@ fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool
                 )
                 .to_string(),
             ),
+            post_shallow: shallow_content(root).map(|s| urzua_io::sha256_hex_of_str(&s)),
         },
     );
     scan
