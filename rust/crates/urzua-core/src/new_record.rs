@@ -382,7 +382,7 @@ pub fn status_from(type_config: &crate::config::RecordTypeConfig) -> Option<Stat
         .to_string();
     // The scaffold fills only required fields, so a status field the type does
     // not require is written empty like any other.
-    if !type_config.required_fields.iter().any(|f| *f == field) {
+    if !type_config.required_fields.contains(&field) {
         return None;
     }
     let decl = type_config.status_decl()?;
