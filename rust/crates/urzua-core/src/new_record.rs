@@ -352,16 +352,32 @@ pub struct FieldToFill {
     pub field: String,
     pub required: bool,
     pub hint: Option<String>,
+    /// The values the type declares for the field in `field_values`, the same
+    /// list `field.quality` names when the field is left empty.
+    pub allowed: Option<Vec<String>>,
 }
 
 /// The template's header text per field, read for `to_fill` hints only.
 #[derive(Default)]
 struct UnsetFields<'a> {
     template_values: Option<&'a std::collections::HashMap<String, String>>,
+    type_config: Option<&'a crate::config::RecordTypeConfig>,
 }
 
 impl UnsetFields<'_> {
+    fn allowed(&self, field: &str) -> Option<Vec<String>> {
+        self.type_config
+            .and_then(|t| t.field_vocabulary(field))
+            .map(<[String]>::to_vec)
+    }
+
+    /// The declared values in `field.quality`'s ` (allowed: a, b)` form when the
+    /// type declares them, so the hint never disagrees with the finding; the
+    /// template's text otherwise.
     fn hint(&self, field: &str) -> Option<String> {
+        if let Some(allowed) = self.allowed(field) {
+            return Some(format!("allowed: {}", allowed.join(", ")));
+        }
         self.template_values
             .and_then(|t| t.get(field))
             .map(|v| v.trim())
@@ -418,6 +434,7 @@ fn render_yaml_with(params: &NewRecordParams, plan: &HeaderPlan) -> (String, Vec
             field: field.clone(),
             required: required(field),
             hint: plan.unset.hint(field),
+            allowed: plan.unset.allowed(field),
         });
     }
 
@@ -588,9 +605,11 @@ pub fn scaffold_record_reporting(
             .and_then(|c| c.identify(spec.filename).number)
             .map_or(0, |n| n.len()),
         h1_prefix: spec.compiled.map(|_| spec.type_prefix),
+        // The declared entry state when the type names one; the first value
+        // otherwise, since a type without `initial` declares no lifecycle.
         initial_status: status_decl
             .as_ref()
-            .and_then(|d| d.values.first())
+            .and_then(|d| d.initial.first().or_else(|| d.values.first()))
             .map(String::as_str),
         status_field: type_config.relation_field(crate::config::RelationRole::Status),
         date_field: type_config.date_field(),
@@ -610,6 +629,7 @@ pub fn scaffold_record_reporting(
     let template_values = template.map(template_header_values);
     let unset = UnsetFields {
         template_values: template_values.as_ref(),
+        type_config: Some(type_config),
     };
     let (mut out, to_fill) = render_yaml_with(
         &params,
@@ -1523,20 +1543,41 @@ mod tests {
                     field: "Kind".to_string(),
                     required: true,
                     hint: hint("feature | bug | chore"),
+                    allowed: None,
                 },
                 FieldToFill {
                     field: "Owner".to_string(),
                     required: true,
                     hint: None,
+                    allowed: None,
                 },
                 FieldToFill {
                     field: "Parent".to_string(),
                     required: false,
                     hint: hint("the record this belongs to"),
+                    allowed: None,
                 },
             ]
         );
         let header = crate::header::parse(&out);
         assert_eq!(header.get("Kind").map(str::trim), Some(""));
+    }
+
+    /// `new` starts a record at the type's declared `statuses.initial`, not at
+    /// the first of `statuses.values`; without `initial` it keeps the first value.
+    #[test]
+    fn the_status_starts_at_the_declared_initial_state() {
+        let yaml = "schema_version: 2\nrecord_types:\n  t:\n    dir: docs/t\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    statuses:\n      values: [Done, Todo]\n      initial: [Todo]\n      transitions:\n        Todo: [Done]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let spec = |c: &'static crate::config::RecordTypeConfig| {
+            ScaffoldSpec::plain(c, None, "T", "T-1-t.md", 1, "T", "01ID", "a", "2026-11-17")
+        };
+        let declared: &'static crate::config::RecordTypeConfig =
+            Box::leak(Box::new(config.record_types["t"].clone()));
+        assert!(scaffold_record(&spec(declared), None).contains("\nStatus: Todo\n"));
+        let mut plain = declared.clone();
+        plain.statuses = Some(yaml_serde::from_str("values: [Done, Todo]").unwrap());
+        let plain: &'static crate::config::RecordTypeConfig = Box::leak(Box::new(plain));
+        assert!(scaffold_record(&spec(plain), None).contains("\nStatus: Done\n"));
     }
 }

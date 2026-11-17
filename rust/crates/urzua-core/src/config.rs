@@ -63,6 +63,11 @@ pub struct Config {
     /// raw document at load; the typed parse keeps only the names.
     #[serde(skip)]
     pub pointer_targets: crate::pointer_targets::PointerTargets,
+    /// Which status entries some type declares, read once at load so a rule
+    /// that is on by declaration does not parse every type's `statuses` again
+    /// each time it is asked whether it applies.
+    #[serde(skip)]
+    pub declared_status_entries: crate::status_model::DeclaredStatusEntries,
     /// The committed log of editor-hook overrides (`ADR-78`, `MILE-188`): a
     /// repository-relative path. The hook appends to it and
     /// `override.unreviewed` reads it. Absent means no log is declared.
@@ -3309,6 +3314,7 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
     crate::field_values::validate(&config.record_types)?;
     let status_decls = crate::status_model::validate(&config.record_types, &config.embodiment)?;
+    config.declared_status_entries = crate::status_model::DeclaredStatusEntries::of(&status_decls);
     crate::status_model::validate_items_rule(&config.record_types, &status_decls, &config.rules)?;
     validate_relation_pairs(&config)?;
     crate::pointer_targets::validate(&config)?;

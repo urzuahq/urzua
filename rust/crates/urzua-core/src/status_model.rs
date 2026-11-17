@@ -423,6 +423,90 @@ fn invalid(record_type: &str, reason: String) -> ConfigError {
     }
 }
 
+/// The status entries some type declares, which decide whether the rules that
+/// read them are on by default.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DeclaredStatusEntries {
+    pub require: bool,
+    pub forbid: bool,
+    pub delivery_items: bool,
+}
+
+impl DeclaredStatusEntries {
+    pub(crate) fn of(decls: &BTreeMap<String, StatusDecl>) -> Self {
+        let any = |f: fn(&StatusDecl) -> bool| decls.values().any(f);
+        DeclaredStatusEntries {
+            require: any(|d| !d.require.is_empty()),
+            forbid: any(|d| !d.forbid.is_empty()),
+            delivery_items: any(|d| d.delivery.as_ref().is_some_and(|d| d.items.is_some())),
+        }
+    }
+}
+
+/// The smallest declaration of a checklist that loads: every key it needs, no
+/// optional one. Names are the repository's to replace; the load error shows
+/// it, and a test loads it.
+pub const SMALLEST_CHECKLIST: &str = "\
+statuses:
+  values: [Open, InProgress, Done]
+  success: [Done]
+  delivery:
+    delivered_tiers: [Implemented]
+    unevidenced_tiers: []
+    not_done: [Open, InProgress]
+    set_status: Done
+    items:
+      section: Acceptance
+      clause_separator: \" — \"
+      evidence_marker: \"evidence:\"
+      waiver_marker: \"waived:\"
+      partial_status: InProgress
+sections: {from: headings, depth: 2, required: [{name: Acceptance}]}";
+
+const DELIVERY_KEYS: [&str; 4] = [
+    "delivered_tiers",
+    "unevidenced_tiers",
+    "not_done",
+    "set_status",
+];
+const ITEMS_KEYS: [&str; 5] = [
+    "section",
+    "clause_separator",
+    "evidence_marker",
+    "waiver_marker",
+    "partial_status",
+];
+
+/// An incomplete checklist declaration says which key is missing, where it
+/// belongs, and shows the smallest declaration that loads.
+fn checklist_hint(raw: &yaml_serde::Value, reason: String) -> String {
+    let Some(delivery) = raw.get("delivery") else {
+        return reason;
+    };
+    let declares_items = delivery.get("items").is_some();
+    let missing = reason
+        .strip_prefix("missing field `")
+        .and_then(|r| r.split('`').next());
+    let location = match missing {
+        Some(k) if ITEMS_KEYS.contains(&k) && declares_items => {
+            Some(format!("statuses.delivery.items.{k}"))
+        }
+        Some(k) if DELIVERY_KEYS.contains(&k) && declares_items => {
+            Some(format!("statuses.delivery.{k}"))
+        }
+        _ => None,
+    };
+    let section_not_required = reason.starts_with("`delivery.items.section` names");
+    let reason = match location {
+        Some(at) => format!("`{at}` is missing"),
+        None if section_not_required => reason,
+        None => return reason,
+    };
+    format!(
+        "{reason}. The smallest checklist declaration that loads, as the record type's keys (replace the names with its own):\n{SMALLEST_CHECKLIST}"
+    )
+}
+
 /// A list that must hold at least one non-blank, distinct entry.
 fn check_list(what: &str, list: &[String], allow_empty: bool) -> Result<(), String> {
     if list.is_empty() && !allow_empty {
@@ -777,11 +861,15 @@ fn validate_delivery(
         ));
     }
     let locator = rt.relation_field(crate::config::RelationRole::EmbodimentLocator);
-    if let Some(known) = rt.known_fields.as_ref().map(|_| rt.declared_fields()) {
-        if !known.contains(&crate::values::FieldName::new(locator)) {
-            return Err(format!(
+    // A type judged from checklist items reads each item's own evidence
+    // clause; the header field only adds to it, so it need not be declared.
+    if delivery.items.is_none() {
+        if let Some(known) = rt.known_fields.as_ref().map(|_| rt.declared_fields()) {
+            if !known.contains(&crate::values::FieldName::new(locator)) {
+                return Err(format!(
                 "`delivery` reads the evidence field '{locator}', which is in neither `required_fields` nor `known_fields`"
             ));
+            }
         }
     }
     if let Some(items) = &delivery.items {
@@ -1023,34 +1111,35 @@ pub(crate) fn validate(
                 "present with no value; give it a mapping or remove the key".into(),
             ));
         }
-        let decl: StatusDecl =
-            yaml_serde::from_value(raw.clone()).map_err(|e| invalid(name, e.to_string()))?;
-        validate_one(rt, &decl, embodiment).map_err(|reason| invalid(name, reason))?;
+        let decl: StatusDecl = yaml_serde::from_value(raw.clone())
+            .map_err(|e| invalid(name, checklist_hint(raw, e.to_string())))?;
+        validate_one(rt, &decl, embodiment)
+            .map_err(|reason| invalid(name, checklist_hint(raw, reason)))?;
         out.insert(name.clone(), decl);
     }
     Ok(out)
 }
 
-/// A type that declares `delivery.items` needs `status.delivery-agreement`
-/// on: the guaranteed `DoneWithUnresolvedItems` finding is that rule's, so with
-/// it off the declaration would compute a status nothing holds the record to
-/// (`ADR-96` section 4, `BUG-44`).
+/// A type that declares `delivery.items` is held to it by
+/// `status.delivery-agreement`, which is on by declaration; a configuration
+/// that turns it off would compute a status nothing holds the record to
+/// (`ADR-96` section 4, `BUG-44`), so that one is refused.
 pub(crate) fn validate_items_rule(
     types: &BTreeMap<String, RecordTypeConfig>,
     decls: &BTreeMap<String, StatusDecl>,
     rules: &BTreeMap<String, crate::config::RuleSetting>,
 ) -> Result<(), ConfigError> {
     let rule = crate::rules::RULE_STATUS_DELIVERY_AGREEMENT;
-    let on = rules
+    let off = rules
         .get(rule)
-        .is_some_and(|s| s.level != crate::config::RuleLevel::Off);
+        .is_some_and(|s| s.level == crate::config::RuleLevel::Off);
     for (name, decl) in decls {
         let declares = decl.delivery.as_ref().is_some_and(|d| d.items.is_some());
-        if declares && !on && types.contains_key(name) {
+        if declares && off && types.contains_key(name) {
             return Err(invalid(
                 name,
                 format!(
-                    "`delivery.items` is declared, but `{rule}` is off or absent: its `DoneWithUnresolvedItems` finding is what holds a status to the items, so turn the rule on"
+                    "`delivery.items` is declared, but `{rule}` is turned off under `rules:`: its `DoneWithUnresolvedItems` finding is what holds a status to the items, so remove the entry (the rule is on wherever a checklist is declared) or give it a level"
                 ),
             ));
         }
@@ -1060,7 +1149,7 @@ pub(crate) fn validate_items_rule(
 
 #[cfg(test)]
 mod tests {
-    use super::Triggered;
+    use super::{Triggered, SMALLEST_CHECKLIST};
     use crate::config::{parse, ConfigError};
 
     fn cfg(statuses: &str) -> String {
@@ -1430,5 +1519,118 @@ mod tests {
         );
         assert!(e("      require: [{when_field: {Kind: [bug]}, fields: [Cause]}]\n      forbid: [{when: [Open], fields: [Cause]}]\n").contains("both required and forbidden"));
         assert!(kinds("      require: [{when_field: {Kind: [bug]}, fields: [Cause]}]\n      forbid: [{when_field: {Kind: [chore]}, fields: [Cause]}]\n").is_ok());
+    }
+
+    fn type_with(block: &str, known: &str) -> String {
+        let indented: String = block.lines().map(|l| format!("    {l}\n")).collect();
+        format!(
+            "schema_version: 2\nrecord_types:\n  task:\n    dir: docs/task\n    required_fields: [Status]\n    known_fields: {known}\n    header_shape: yaml-frontmatter\n{indented}"
+        )
+    }
+
+    #[test]
+    fn the_smallest_checklist_loads_with_no_evidence_field_declared() {
+        let c = parse(&type_with(SMALLEST_CHECKLIST, "[]")).expect("the shown block loads");
+        let d = c.record_types["task"].status_decl().unwrap();
+        assert!(d.delivery.unwrap().items.is_some());
+    }
+
+    #[test]
+    fn a_delivery_without_items_still_needs_its_evidence_field() {
+        let no_items = SMALLEST_CHECKLIST
+            .split("    items:")
+            .next()
+            .unwrap()
+            .to_string();
+        let e = parse(&type_with(&no_items, "[]")).unwrap_err().to_string();
+        assert!(e.contains("evidence field 'Realized-by'"), "{e}");
+        assert!(parse(&type_with(&no_items, "[Realized-by]")).is_ok());
+    }
+
+    #[test]
+    fn a_missing_checklist_key_is_named_with_where_it_belongs_and_the_smallest_block() {
+        for (key, at) in [
+            ("partial_status", "statuses.delivery.items.partial_status"),
+            (
+                "clause_separator",
+                "statuses.delivery.items.clause_separator",
+            ),
+            ("not_done", "statuses.delivery.not_done"),
+        ] {
+            let broken: String = SMALLEST_CHECKLIST
+                .lines()
+                .filter(|l| !l.trim_start().starts_with(&format!("{key}:")))
+                .map(|l| format!("{l}\n"))
+                .collect();
+            let e = parse(&type_with(&broken, "[]")).unwrap_err().to_string();
+            assert!(e.contains(&format!("`{at}` is missing")), "{e}");
+            assert!(e.contains(SMALLEST_CHECKLIST), "{e}");
+        }
+    }
+
+    #[test]
+    fn the_checklist_rules_apply_by_declaration_and_a_named_level_stands() {
+        use crate::config::RuleLevel;
+        use crate::rules::{
+            effective_level, RULE_STATUS_DELIVERY_AGREEMENT, RULE_STATUS_DONE_ITEMS_SHAPE,
+            RULE_STATUS_WAIVED_ITEM_STALE,
+        };
+        let declared = parse(&type_with(SMALLEST_CHECKLIST, "[]")).unwrap();
+        assert_eq!(
+            effective_level(&declared, RULE_STATUS_DELIVERY_AGREEMENT),
+            RuleLevel::Error
+        );
+        assert_eq!(
+            effective_level(&declared, RULE_STATUS_DONE_ITEMS_SHAPE),
+            RuleLevel::Error
+        );
+        assert_eq!(
+            effective_level(&declared, RULE_STATUS_WAIVED_ITEM_STALE),
+            RuleLevel::Warn
+        );
+        let named = parse(&format!(
+            "{}rules:\n  status.done-items-shape: info\n",
+            type_with(SMALLEST_CHECKLIST, "[]")
+        ))
+        .unwrap();
+        assert_eq!(
+            effective_level(&named, RULE_STATUS_DONE_ITEMS_SHAPE),
+            RuleLevel::Info
+        );
+        let none = parse(&cfg("      values: [Open]\n")).unwrap();
+        assert_eq!(
+            effective_level(&none, RULE_STATUS_DELIVERY_AGREEMENT),
+            RuleLevel::Off
+        );
+    }
+
+    #[test]
+    fn the_requirement_rules_apply_where_an_entry_is_declared() {
+        use crate::config::RuleLevel;
+        use crate::rules::{
+            effective_level, RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+            RULE_STATUS_REQUIRED_FIELD_MISSING,
+        };
+        let c = parse(&cfg(
+            "      values: [Open, Fixed]\n      require: [{when: [Fixed], fields: [Fixed-in]}]\n",
+        ))
+        .unwrap();
+        assert_eq!(
+            effective_level(&c, RULE_STATUS_REQUIRED_FIELD_MISSING),
+            RuleLevel::Error
+        );
+        assert_eq!(
+            effective_level(&c, RULE_STATUS_FORBIDDEN_FIELD_PRESENT),
+            RuleLevel::Off
+        );
+        let off = parse(&format!(
+            "{}rules:\n  status.required-field-missing: warn\n",
+            cfg("      values: [Open, Fixed]\n      require: [{when: [Fixed], fields: [Fixed-in]}]\n")
+        ))
+        .unwrap();
+        assert_eq!(
+            effective_level(&off, RULE_STATUS_REQUIRED_FIELD_MISSING),
+            RuleLevel::Warn
+        );
     }
 }

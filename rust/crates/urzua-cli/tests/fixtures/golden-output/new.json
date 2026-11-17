@@ -33,11 +33,13 @@
     "status": "ok",
     "to_fill": [
       {
+        "allowed": null,
         "field": "Status",
         "hint": null,
         "required": true
       },
       {
+        "allowed": null,
         "field": "Embodiment",
         "hint": null,
         "required": true

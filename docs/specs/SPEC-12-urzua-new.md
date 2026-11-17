@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.38'
+Version: '0.39'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -26,8 +26,9 @@ configured field is emitted as a frontmatter key (see "A field `new` has no valu
 config alone drives what an author has to fill in. Fields `new` can compute are filled: a freshly generated `Stable-Id`, the date and
 author fields (`relation_fields.date`/`author`, default `Date`/`Author`; the author resolved the same way `fix --apply` resolves an identity: `gh api user` wins even over an
 explicit `--by`, which wins over `git config user.name` -- SPEC-8's identity tiering, reused rather
-than redesigned), and the type's status field, which starts at the first value of the type's
-declared `statuses.values` (`MILE-151`). That is the vocabulary's entry state rather than a
+than redesigned), and the type's status field, which starts at the first of the type's
+declared `statuses.initial`, or at the first of `statuses.values` when the type declares no `initial`
+(`MILE-151`). That is the vocabulary's entry state rather than a
 decision, so moving a record on from it stays a human's; a type that declares no `statuses` leaves
 the field blank. A type may also name the field that takes the record's title
 (`relation_fields.title`, a spec's `Subject`) and the version a record starts at
@@ -44,13 +45,16 @@ unchanged, so an author fills an optional field without adding a line. `new` nev
 author's behalf (it asserts "deliberately no value") and never copies a template's text into a header
 field.
 
-The report's `to_fill` lists each such field as `{field, required, hint}`: `required` says whether the
-type requires it, and `hint` is the template's text for that field (`feature | bug | chore`,
-`name(s)`), or `null` when the template has none. `next_action_reason` names the fields to fill; when
+The report's `to_fill` lists each such field as `{field, required, hint, allowed}`: `required` says
+whether the type requires it; `allowed` is the list the type declares for it in `field_values`, or
+`null`; `hint` is that list in `field.quality`'s form (`allowed: a, b`) when there is one, else the
+template's text for the field (`feature | bug | chore`, `name(s)`), or `null` when the template has
+none or its text is the `—` sentinel. `next_action_reason` names the fields to fill; when
 the record needs no staging, `next_action` is `urzua check <path>` once they are filled.
 
 `new` followed by `git add` and `check` then reports, for a field `new` wrote, only the true
-`field.quality` finding on an empty required field ("field 'Kind' is Blank"). An empty optional field
+`field.quality` finding on an empty required field ("field 'Kind' is empty", naming the allowed
+values when the type declares `field_values` for it). An empty optional field
 draws no finding from any rule that only judges it: it names no reference, no date and no vocabulary
 value. A field whose emptiness would widen what is allowed is the exception: a present but empty
 `Expires` on a suppression record (`Expires:`, or an older `Expires: null`) leaves the record without
@@ -291,3 +295,4 @@ steps and in seconds, for each record type.
 > | 2026-11-17 | Bumped to `0.37`. Replaces the design described in the `0.36` rows (template text, the `—` sentinel or omission) with the empty-value design. Rewrites `## A field `new` has no value for`: such a field is written empty, required or optional, never as the template's text, the `—` sentinel or `null`, and the field set is unchanged; `to_fill` entries are `{field, required, hint}` with the template's text as `hint`; an empty required field keeps `field.quality`'s Blank finding and an empty optional field draws none; `header.scaffold-mismatch` compares against the empty form. **Why:** maintainer decision of 2026-11-17 on `MILE-322` ("leave it empty and tell the agent what to fill"), after review found template prose landing in pointer, date and grouping fields under `0.36`. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 048a39513924 -> 79c4d91d065f, `rust/crates/urzua-cli/tests/new_integration.rs` eafc3593c1d4 -> e25c6bfd1efb. Reason: new_integration.rs: two assertions now expect the empty form (Deciders:, Gist:) instead of template text and the em-dash sentinel; new_record.rs writes a field new has no value for empty (Field:), never the template's text, the em-dash sentinel or null, keeps the same field set, and returns to_fill entries {field, required, hint} with the template's text as hint; the unset_as_null comparison flag is removed since an empty field reads as null; its unit tests assert the empty form. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.38`. States that a present but empty `Expires` on a suppression record leaves it without effect and is reported, as on release 0.4.7, and that an empty optional field is silent only where silence cannot widen what is allowed. **Why:** review of `MILE-322`'s pull request found that reading an empty `Expires` as absent made a waiver permanent. | **substantive** |
+> | 2026-11-17 | Bumped to `0.39`. `to_fill` entries carry `allowed`, the type's declared `field_values` for the field, and `hint` gives that list in `field.quality`'s `allowed:` form when it exists; a `—` template value is no hint; the status field starts at `statuses.initial` when declared, not the first of `statuses.values`; the empty required field's finding is quoted in the wording main adopted ("is empty"). **Why:** merging main, whose `field.quality` names declared values (`MILE-327`), into `MILE-322`'s pull request, so the hint and the finding agree. | **substantive** |

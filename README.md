@@ -19,6 +19,16 @@ It's a record engine, not a record format: you declare what a record type looks 
 
 **Using urzua:** the user documentation starts at [`docs/reference/`](docs/reference/README.md): [install](docs/reference/install.md), [adopt an existing corpus](docs/reference/adopt.md), the [config file](docs/reference/config.md), the [command reference](docs/reference/commands.md) and [CI](docs/reference/ci.md).
 
+## Who uses urzua
+
+- **[urzua](https://github.com/urzuahq/urzua)** itself: its decisions, specs, bugs and backlog are urzua records under [`docs/`](docs/), checked on every pull request by the gate in this repository's CI.
+- **[decision-agent-kit](https://github.com/urzuahq/decision-agent-kit)**: tooling that lets a coding agent's harness ask a decision model whether the work is really done. Its work is three record types its own configuration declares, a task that points at a milestone that points at an epic. A finished task must cite evidence for each acceptance check, and accepting a decision is reserved for a named decider.
+- **taskmarket** ([daydreamsai/taskmarket](https://github.com/daydreamsai/taskmarket), private): its decision records are checked by the urzua gate in CI.
+
+The board below is decision-agent-kit's plan, laid out by about forty lines of script from one file, the output of `urzua export --format json`: each epic, the milestones under it, and each milestone's tasks, with what is ready and what waits on what taken from the order of work the export carries. It is a plan in progress, so its records have changed since the picture was taken and will change again. None of those three types, their names or their fields is built into urzua; that repository's [`.urzua/config.yaml`](https://github.com/urzuahq/decision-agent-kit/blob/main/.urzua/config.yaml) declares them.
+
+![decision-agent-kit's epics, milestones and tasks, laid out from its urzua records](docs/assets/decision-agent-kit-board.png)
+
 ## What a record looks like
 
 A record's header is YAML frontmatter: real structured data, deserialized rather than a set of text lines a regex pulls apart.

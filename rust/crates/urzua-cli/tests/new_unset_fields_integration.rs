@@ -69,7 +69,7 @@ fn to_fill_entries(report: &serde_json::Value) -> Vec<serde_json::Value> {
 }
 
 /// Every finding about a header field `new` left empty is `field.quality`'s
-/// true "Blank" on a required field; an optional one draws nothing.
+/// true "empty" on a required field; an optional one draws nothing.
 fn only_blank_required(findings: &[serde_json::Value], report: &serde_json::Value) {
     let entries = to_fill_entries(report);
     let named = |field: &str| entries.iter().find(|e| e["field"] == field).cloned();
@@ -83,7 +83,7 @@ fn only_blank_required(findings: &[serde_json::Value], report: &serde_json::Valu
                 continue;
             }
             assert_eq!(f["rule"], "field.quality", "{f}");
-            assert!(message.contains("is Blank"), "{f}");
+            assert!(message.contains("is empty"), "{f}");
             assert_eq!(named(field).unwrap()["required"], true, "{f}");
         }
         assert_ne!(f["rule"], "header.pointer-field-clean", "{f}");
@@ -219,7 +219,7 @@ fn custom_repo(label: &str) -> common::TempDir {
 
 /// Pointer, relation, date, vocabulary and narrative fields left empty and
 /// optional draw no finding from any of their rules; the empty required fields
-/// draw `field.quality`'s true "Blank".
+/// draw `field.quality`'s true "empty".
 #[test]
 fn empty_optional_fields_of_every_kind_trip_no_rule_and_empty_required_ones_are_blank() {
     let dir = custom_repo("custom");
@@ -233,6 +233,16 @@ fn empty_optional_fields_of_every_kind_trip_no_rule_and_empty_required_ones_are_
     assert_eq!(
         fields,
         ["Kind", "Owner", "Parent", "Up", "Down", "Decided", "Labels", "Notes"],
+        "{report}"
+    );
+    let labels = to_fill_entries(&report)
+        .into_iter()
+        .find(|e| e["field"] == "Labels")
+        .unwrap();
+    assert_eq!(labels["hint"], "allowed: ui, api", "{report}");
+    assert_eq!(
+        labels["allowed"],
+        serde_json::json!(["ui", "api"]),
         "{report}"
     );
     let path = report["path"].as_str().unwrap();

@@ -2,14 +2,15 @@ use super::*;
 use crate::embodiment_model::{EmbodimentDecl, Evidence};
 
 /// A record's `Realized-by` field, categorized (ADR-0018's MVP scope --
-/// three flat lists, not RFC-0005's full claim graph). `spec:`/`code:`/
-/// `test:` prefixes; an unrecognized prefix is dropped rather than reported,
+/// flat lists, not RFC-0005's full claim graph). `spec:`/`code:`/
+/// `test:`/`record:` prefixes; an unrecognized prefix is dropped rather than reported,
 /// since this field's closure isn't this rule's concern.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct RealizedBy {
     pub(crate) spec: Vec<String>,
     pub(crate) code: Vec<String>,
     pub(crate) test: Vec<String>,
+    pub(crate) record: Vec<String>,
 }
 
 /// Lexical normalization of a locator path: drops `.` segments and empty
@@ -56,13 +57,14 @@ pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
             "spec" => result.spec.push(locator),
             "code" => result.code.push(locator),
             "test" => result.test.push(locator),
+            "record" => result.record.push(locator),
             _ => {}
         }
     }
     result
 }
 
-/// Every locator path across all three categories, flattened -- what a
+/// Every locator path across every category, flattened -- what a
 /// caller needs to walk each one's git history for drift detection
 /// (ADR-0032). Order isn't meaningful; only membership is.
 pub fn realized_by_locator_paths(value: &str) -> Vec<String> {
@@ -72,6 +74,7 @@ pub fn realized_by_locator_paths(value: &str) -> Vec<String> {
         .into_iter()
         .chain(parsed.code)
         .chain(parsed.test)
+        .chain(parsed.record)
         .collect()
 }
 
@@ -98,6 +101,7 @@ pub(crate) fn compute_embodiment<'a>(
         Evidence::Test => !realized_by.test.is_empty() || test_pointed,
         Evidence::Code => !realized_by.code.is_empty() || back_pointed,
         Evidence::Spec => !realized_by.spec.is_empty(),
+        Evidence::Record => !realized_by.record.is_empty(),
     })
 }
 
@@ -126,6 +130,7 @@ pub(crate) fn resolving_realized_by(
             "spec" => result.spec.push(path),
             "code" => result.code.push(path),
             "test" => result.test.push(path),
+            "record" => result.record.push(path),
             _ => {}
         }
     }
@@ -462,6 +467,37 @@ impl<'a> LocatorEnv<'a> {
 /// Shared with the Done-means items (`ADR-96`), whose locators are held to the
 /// same test.
 pub(crate) fn locator_defect(
+    entry: &crate::locator::LocatorEntry,
+    field: &str,
+    env: &LocatorEnv<'_>,
+) -> Option<LocatorDefect> {
+    file_locator_defect(entry, field, env).or_else(|| record_locator_defect(entry, field, env))
+}
+
+/// A `record:` locator names a record of a declared type, in a Done-means item
+/// and in a `Realized-by` header alike. `None` for any other category.
+pub(crate) fn record_locator_defect(
+    entry: &crate::locator::LocatorEntry,
+    field: &str,
+    env: &LocatorEnv<'_>,
+) -> Option<LocatorDefect> {
+    if entry.category != "record" {
+        return None;
+    }
+    let path = match &entry.parsed {
+        Ok(l) => l.path.clone(),
+        Err(_) => normalize_locator(&entry.raw),
+    };
+    let is_record = env.records.iter().any(|r| r.path == Path::new(&path));
+    (!is_record).then(|| {
+        (
+            "locator-missing",
+            format!("{field} names '{path}' under `record:`, which is not a record of any declared type"),
+        )
+    })
+}
+
+pub(crate) fn file_locator_defect(
     entry: &crate::locator::LocatorEntry,
     field: &str,
     env: &LocatorEnv<'_>,

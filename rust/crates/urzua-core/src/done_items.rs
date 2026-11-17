@@ -676,7 +676,8 @@ pub fn locator_problems(clause: &str) -> Vec<String> {
     }
     if let Some(lead) = crate::locator::realized_by_unrecognised(clause) {
         problems.push(format!(
-            "the evidence clause holds '{lead}', text that belongs to no locator entry: write `category:path` with no backticks, quotes or link (grammar: {})",
+            "the evidence clause holds '{lead}', text that belongs to no locator entry: write `category:path` with no backticks, quotes or link, where the category is one of {} (`record:` cites a record by its path; each category counts toward the tier `embodiment.tiers` gives it, and `record` has none until a tier declares `evidence: record`) (grammar: {})",
+            crate::locator::CATEGORIES.join(", "),
             crate::locator::GRAMMAR
         ));
     }
@@ -693,7 +694,7 @@ pub fn locator_problems(clause: &str) -> Vec<String> {
     problems
 }
 
-fn is_record_id(text: &str) -> bool {
+pub(crate) fn is_record_id(text: &str) -> bool {
     let Some((prefix, number)) = text.rsplit_once('-') else {
         return false;
     };

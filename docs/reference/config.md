@@ -183,11 +183,11 @@ with `cross_type: false` may list only types that carry its forward field.
 | `claim_retained` | Statuses that keep a record's evidence claim even though it is no longer current. |
 | `initial` | Statuses a record may be filed in. Declared only with `transitions`; one without the other is a load error. |
 | `transitions` | `{From: [To, ...]}`: the lawful moves. |
-| `require`, `forbid` | Lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields: [field, ...]}`: fields that must, or must not (absent or blank), hold a value when the status is one of `when` and each `when_field` field holds one of its values. Declare `when`, `when_field` or both. These entries report only when the rules `status.required-field-missing` and `status.forbidden-field-present` are enabled under `rules:`; a freshly initialised config does not enable them. |
+| `require`, `forbid` | Lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields: [field, ...]}`: fields that must, or must not (absent or blank), hold a value when the status is one of `when` and each `when_field` field holds one of its values. Declare `when`, `when_field` or both. `status.required-field-missing` is on at `error` wherever some type declares a `require` entry, and `status.forbidden-field-present` wherever one declares a `forbid` entry; a rule you name under `rules:` keeps the level you give, and `urzua doctor` warns of an entry whose rule you turned off. A finding says whether the field is `missing from the header` or `empty`, and names the values the field may hold when the type declares `field_values` for it. |
 | `pending` | The type's placeholder vocabulary: whole values (`unknown`) and `{pattern: <regex>}` entries that count as missing. |
 | `placeholders` | Whole values (compared without case) that are unedited template text, replacing the built-in words `name`, `name(s)`, `yyyy-mm-dd`, `tbd`, `todo`, `(project lead)`, `(session author)` for this type. An empty list is a load error. |
 | `blocked`, `progress` | Statuses read by the derived `blocked` value and `sequence.status-agreement`. |
-| `delivery` | How a status agrees with delivery evidence, including per-item evidence in a list-form "Done means" section (`items`). See `SPEC-3`, "Done-means items". |
+| `delivery` | How a status agrees with delivery evidence, including per-item evidence in a list-form "Done means" section (`items`). See [the checklist page](checklist.md) for a complete block and record, and `SPEC-3`, "Done-means items". |
 
 A vocabulary and a requirement keyed on another field: `Kind` must be one of three values, and a bug must carry a `Severity`.
 

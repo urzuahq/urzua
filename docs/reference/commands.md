@@ -124,11 +124,12 @@ fetched are invisible). With `new.check_open_prs: true` in the config it also
 fetches pull request head refs so numbers taken by open pull requests are skipped.
 
 The header is built from the type's `required_fields`, with the `Stable-Id`, the date, the author
-(from `--by`, `gh`, or `git config user.name`) and the first declared status filled in; every other
+(from `--by`, `gh`, or `git config user.name`) and the type's declared initial status (or its first status when it declares none) filled in; every other
 field is left for you. A field left for you is written empty (`Kind:`), required or optional, never
-with the template's text, `—` or `null`. `to_fill` lists each such field as `{field, required, hint}`,
-`hint` being the template's text for it or `null`, and `next_action_reason` names them. `check` then
-reports an empty required field as Blank and an empty optional field not at all. If `.urzua/templates/<type>.md` exists, its body (title and sections) is
+with the template's text, `—` or `null`. `to_fill` lists each such field as `{field, required, hint, allowed}`:
+`allowed` is the type's declared `field_values` for it, and `hint` is that list (`allowed: a, b`) or else
+the template's text, or `null`; `next_action_reason` names them. `check` then reports an empty required
+field as empty and an empty optional field not at all. If `.urzua/templates/<type>.md` exists, its body (title and sections) is
 appended. A type with `header_shape: none` is refused, since it has nowhere to store a stable id.
 
 Output: `status`, `path`, `display_number`, `stable_id`, `pull_refs` (whether the open pull request

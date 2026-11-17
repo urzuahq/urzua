@@ -12,6 +12,7 @@ Read them in this order the first time:
 | [Adopt an existing corpus](adopt.md) | `init`, the first `check`, and the first week of using urzua |
 | [The record model](record-model.md) | Record types, headers, statuses, relations and evidence |
 | [The config file](config.md) | Every key of `.urzua/config.yaml` |
+| [A checklist whose state is computed](checklist.md) | Declaring a type whose acceptance items name their evidence, with a tested configuration and record |
 | [`check` and its JSON output](check.md) | `check`, `check --base`, exit codes and every output field |
 | [Command reference](commands.md) | Every command and flag |
 | [Waivers and drift](waivers-and-drift.md) | Reviewed exceptions, evidence pins, `fix`, `reverify` |

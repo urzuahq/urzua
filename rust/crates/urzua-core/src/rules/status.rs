@@ -34,6 +34,7 @@ struct Judged<'a> {
     record_type: &'a str,
     status_field: &'a str,
     status: &'a str,
+    config: &'a Config,
 }
 
 fn run_status_rule(
@@ -77,6 +78,7 @@ fn run_status_rule(
                 record_type: &record.record_type,
                 status_field,
                 status,
+                config,
             };
             for (field, message) in judge(&judged) {
                 let declared_severity = field
@@ -88,12 +90,19 @@ fn run_status_rule(
                 let action_field = field
                     .clone()
                     .unwrap_or_else(|| judged.status_field.to_string());
+                let allowed = field
+                    .as_deref()
+                    .filter(|_| variant == "status-required-field-missing")
+                    .and_then(|f| no_value_vocabulary(&judged, f));
+                let source = ActionSource::new(variant)
+                    .field(action_field)
+                    .list_if(allowed.map(|a| a.iter().cloned()));
                 findings.push(
                     Finding::new(
                         rule_id.to_string(),
                         declared_severity.unwrap_or(FindingSeverity::Error),
                         record.path.clone(),
-                        ActionSource::new(variant).field(action_field),
+                        source,
                         message,
                     )
                     .declared_opt(declared_severity),
@@ -751,6 +760,18 @@ pub fn status_unreachable(
     )
 }
 
+/// The values the type declares for `field` when the record holds nothing
+/// there (absent or empty), which is what a repair has to choose from.
+fn no_value_vocabulary<'a>(j: &Judged<'a>, field: &str) -> Option<&'a [String]> {
+    if classify(j.record.header.get(field)) != FieldState::Blank {
+        return None;
+    }
+    j.config
+        .record_types
+        .get(j.record_type)?
+        .field_vocabulary(field)
+}
+
 /// A field the record's status requires, blank, unedited template text or a
 /// value from the type's declared `pending` vocabulary.
 pub fn status_required_field_missing(
@@ -775,19 +796,26 @@ pub fn status_required_field_missing(
                     // `contains("pending")` match never reaches this rule.
                     let field = t.field;
                     let state = classify_with(j.record.header.get(field), Some(j.decl));
-                    let declared_pending =
-                        state == FieldState::Pending && j.decl.pending.is_some();
+                    let declared_pending = state == FieldState::Pending && j.decl.pending.is_some();
                     (matches!(state, FieldState::Blank | FieldState::Placeholder)
                         || declared_pending)
                         .then(|| {
-                        (
-                            Some(field.to_string()),
-                            format!(
-                                "{}, which requires '{field}', but it is {state:?} -- not a real, present value",
-                                because(j, &t)
-                            ),
-                        )
-                    })
+                            let what = if state == FieldState::Blank {
+                                crate::field_values::no_value_text(
+                                    j.record.header.get(field).is_none(),
+                                    no_value_vocabulary(j, field),
+                                )
+                            } else {
+                                format!("{state:?} -- not a real, present value")
+                            };
+                            (
+                                Some(field.to_string()),
+                                format!(
+                                    "{}, which requires '{field}', but it is {what}",
+                                    because(j, &t)
+                                ),
+                            )
+                        })
                 })
                 .collect()
         },

@@ -367,13 +367,32 @@ pub fn field_quality(
             // keeping both here left no setting that was correct (BUG-38).
             if matches!(state, FieldState::Blank | FieldState::Placeholder) {
                 let declared_severity = declared_field_severity(config, RULE_ID, field.as_str());
+                let allowed = (state == FieldState::Blank)
+                    .then(|| {
+                        config.record_types[&record.record_type].field_vocabulary(field.as_str())
+                    })
+                    .flatten();
+                let message = if state == FieldState::Blank {
+                    format!(
+                        "field '{field}' is {}",
+                        crate::field_values::no_value_text(
+                            record.header.get(field.as_str()).is_none(),
+                            allowed
+                        )
+                    )
+                } else {
+                    format!("field '{field}' is {state:?} -- not a real, present value")
+                };
+                let source = ActionSource::new("field-quality")
+                    .field(field.as_str())
+                    .list_if(allowed.map(|a| a.iter().cloned()));
                 findings.push(
                     Finding::new(
                         RULE_ID,
                         declared_severity.unwrap_or(FindingSeverity::Error),
                         record.path.clone(),
-                        ActionSource::new("field-quality").field(field.as_str()),
-                        format!("field '{field}' is {state:?} -- not a real, present value"),
+                        source,
+                        message,
                     )
                     .declared_opt(declared_severity),
                 );

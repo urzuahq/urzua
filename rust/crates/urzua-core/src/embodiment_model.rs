@@ -33,6 +33,8 @@ pub enum Evidence {
     Test,
     Code,
     Spec,
+    /// A tracked record's file, cited by its path.
+    Record,
 }
 
 impl Evidence {
@@ -45,6 +47,7 @@ impl Evidence {
             Evidence::Test => "test",
             Evidence::Code => "code",
             Evidence::Spec => "spec",
+            Evidence::Record => "record",
         }
     }
 }
