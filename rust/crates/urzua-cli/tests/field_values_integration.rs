@@ -345,19 +345,48 @@ fn a_status_and_two_field_conditions_are_all_named_in_field_order() {
 }
 
 #[test]
-fn selecting_the_rule_where_no_vocabulary_is_declared_says_it_does_not_apply() {
-    let config = CONFIG.replace(
-        "    field_values:\n      Kind: [feature, bug, chore]\n      Labels: [ui, api]\n",
-        "",
-    );
+fn selecting_the_rule_where_no_vocabulary_is_declared_runs_the_rest_with_a_notice() {
+    let config = CONFIG
+        .replace(
+            "    field_values:\n      Kind: [feature, bug, chore]\n      Labels: [ui, api]\n",
+            "",
+        )
+        .replacen("rules:\n", "rules:\n  header.required-fields: error\n", 1);
     assert!(!config.contains("field_values"));
-    let dir = repo("selection", &config, &[]);
-    let (code, v) = run(&dir, &["check", "--rules", "field.value-not-declared"]);
-    assert_eq!(code, Some(2), "{v}");
-    let e = v["error"].as_str().unwrap();
+    let dir = repo("selection", &config, &[("WORK-1-x.md", "Status: Open\n")]);
+    let (code, v) = run(
+        &dir,
+        &[
+            "check",
+            "--rules",
+            "field.value-not-declared,header.required-fields",
+        ],
+    );
+    assert_eq!(code, Some(1), "{v}");
+    assert_eq!(
+        files(&v, "header.required-fields"),
+        ["docs/work/WORK-1-x.md"],
+        "{v}"
+    );
+    let exec = v["rules_executed"].as_array().unwrap();
+    let rule = exec
+        .iter()
+        .find(|r| r["rule"] == "field.value-not-declared")
+        .unwrap();
+    assert_eq!(rule["status"], "not-enabled", "{rule}");
+    let notice = v["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["subject"] == "field.value-not-declared")
+        .unwrap_or_else(|| panic!("{v}"));
+    assert_eq!(notice["severity"], "info");
     assert!(
-        e.contains("does not apply to this configuration") && e.contains("field_values"),
-        "{e}"
+        notice["message"]
+            .as_str()
+            .unwrap()
+            .contains("`field_values`"),
+        "{notice}"
     );
 }
 
