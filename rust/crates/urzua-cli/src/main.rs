@@ -242,7 +242,7 @@ enum Command {
         types: bool,
         /// With `--types`: every type's full declaration, and the repository's
         /// own settings.
-        #[arg(long, requires = "types", conflicts_with = "record_type")]
+        #[arg(long, conflicts_with_all = ["path", "rule"])]
         full: bool,
         /// One declared record type.
         #[arg(long = "type", value_name = "TYPE")]
@@ -734,8 +734,15 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
         ),
         Command::Explain {
             record_type: Some(t),
+            full,
             ..
-        } => commands::explain_types::run(config, commands::explain_types::Mode::One(t)),
+        } => {
+            if full {
+                commands::explain_types::refuse_full_with_type(&t)
+            } else {
+                commands::explain_types::run(config, commands::explain_types::Mode::One(t))
+            }
+        }
         Command::Explain { path, rule, .. } => commands::explain::run(config, path, rule),
         Command::Graph => commands::graph::run(config),
         Command::Roadmap => commands::roadmap::run(config),

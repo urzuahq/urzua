@@ -32,7 +32,7 @@ The Done-means item "no built-in default ... with exactly two exceptions" is del
 
 ## Amendment (2026-11-17): which wording the delivered command follows
 
-The delivered command follows the previous amendment's wording, not the Done-means item's "exactly two exceptions": it prints the four marked entries named here, and also marks the engine's built-in pending and placeholder lists where a requirement relies on them.
+The delivered command follows the previous amendment's wording, not the Done-means item's "exactly two exceptions": it prints the four marked entries named here, and also marks the engine's built-in pending and placeholder lists where a requirement relies on them; decided by the builder on 2026-11-17, pending maintainer review.
 
 > **Revision log**
 >
@@ -41,3 +41,4 @@ The delivered command follows the previous amendment's wording, not the Done-mea
 > | 2026-11-17 | Initial record, `Status: Planned`. **Why:** Reported on 2026-11-17 by an agent in an adopting repository at the maintainer's prompting; the maintainer had asked "if another agent comes along, can they figure out what's the workflow quickly through the urzua tool?", expected `urzua explain` to do it, and said a repository should not need its own working document for this. | **structural** |
 > | 2026-11-17 | Amendment: the no-default item is delivered with four marked entries, `--types` prints a summary with `--full` for detail, and the session-start line goes to the agent alone. **Why:** decided by the orchestrator and accepted by the maintainer on 2026-11-17: "The three decisions you made make sense to me. I'm happy with your decisions". | **substantive** |
 > | 2026-11-17 | Amendment: one sentence says the delivered command follows the amendment's four marked entries rather than the Done-means item's "exactly two exceptions", and that it also marks the built-in pending and placeholder lists. **Why:** review of 2026-11-17 noted the item and the amendment disagree; the item is left as written. | **structural** |
+> | 2026-11-17 | The second amendment's sentence on which wording the command follows is marked as decided by the builder, pending maintainer review. **Why:** review of 2026-11-17: the statement is the builder's, not the maintainer's. | **structural** |

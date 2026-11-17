@@ -13,8 +13,8 @@ use serde_json::{json, Map, Value};
 use urzua_core::config::{Config, RecordTypeConfig, RuleLevel};
 use urzua_core::report::{ActionInput, Failure, NextAction, Notice, Report, ReportStatus};
 use urzua_core::rules::{
-    effective_level, Declaration, RuleDef, Scope, DEFAULT_ON_RULES, RULE_EMBODIMENT_CLAIM_EXPIRED,
-    RULE_POINTER_TARGET_TYPE, RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+    default_on, effective_level, Declaration, Judges, RuleDef, Scope, DEFAULT_ON_RULES,
+    RULE_EMBODIMENT_CLAIM_EXPIRED, RULE_POINTER_TARGET_TYPE, RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
     RULE_STATUS_REQUIRED_FIELD_MISSING, RULE_TABLE,
 };
 use urzua_core::status_model::{StatusDecl, StatusFieldRule};
@@ -55,6 +55,11 @@ const STATUS_RENDERED: &[&str] = &[
 
 const REPOSITORY_EXCLUDED: &[&str] = &["record_types", "rules"];
 
+const REPOSITORY_WIDE_NOTE: &str =
+    "Repository-wide rules also apply; `urzua explain --types --full` lists them under repository.rules.";
+
+const NO_TARGET_NOTE: &str = "no type satisfies both declarations";
+
 pub enum Mode {
     Summary,
     Full,
@@ -85,6 +90,15 @@ impl Report for ExplainTypesReport {
 
 pub fn run(config_path: Option<PathBuf>, mode: Mode) -> ExitCode {
     emit_or_not_run(build(config_path, mode).map(|r| emit(&r)))
+}
+
+/// `--full` with `--type`: the one-type report is already the full one.
+pub fn refuse_full_with_type(name: &str) -> ExitCode {
+    let command = urzua_core::report::shell_command(&["urzua", "explain", "--type", name]);
+    emit_or_not_run(Err(Failure::with_next(
+        format!("--full goes with --types; `{command}` already prints the full detail of one type"),
+        NextAction::runs_as_printed(command, "the full detail of one type"),
+    )))
 }
 
 fn detail_action() -> NextAction {
@@ -159,7 +173,7 @@ pub(crate) fn build(
                 "types",
                 selected.map(|(n, t)| ctx.record_type(n, t)).collect(),
             ),
-            ("rules", ctx.rules()),
+            ("rules", ctx.type_rules()),
         ]),
     };
     let mut body = body;
@@ -227,10 +241,45 @@ fn non_empty(v: &yaml_serde::Value) -> bool {
     }
 }
 
+/// Compared with case folded, as a gate matches a path.
 fn paths_overlap(a: &str, b: &str) -> bool {
-    let a = a.trim_end_matches('/');
-    let b = b.trim_end_matches('/');
+    let a = a.trim_end_matches('/').to_lowercase();
+    let b = b.trim_end_matches('/').to_lowercase();
     a == b || a.starts_with(&format!("{b}/")) || b.starts_with(&format!("{a}/"))
+}
+
+/// Calls `found` with the path of each entry under a rule setting that names
+/// type `name`: a mapping key equal to it, or a value of a key that ends in
+/// `type` or `types` (a string equal to it, or a list holding it).
+fn names_type(v: &yaml_serde::Value, name: &str, path: &str, found: &mut dyn FnMut(String)) {
+    match v {
+        yaml_serde::Value::Mapping(m) => {
+            for (k, child) in m {
+                let Some(k) = k.as_str() else { continue };
+                let here = key(path, k);
+                let typed_key =
+                    k == "type" || k == "types" || k.ends_with("_type") || k.ends_with("_types");
+                let holds = match child {
+                    yaml_serde::Value::String(s) => s == name,
+                    yaml_serde::Value::Sequence(items) => {
+                        items.iter().any(|i| i.as_str() == Some(name))
+                    }
+                    _ => false,
+                };
+                if k == name || (typed_key && holds) {
+                    found(here);
+                } else {
+                    names_type(child, name, &here, found);
+                }
+            }
+        }
+        yaml_serde::Value::Sequence(items) => {
+            for (i, child) in items.iter().enumerate() {
+                names_type(child, name, &index(path, i), found);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// `when Status is A or B and Kind is bug, X and Y are required`, from the
@@ -317,7 +366,7 @@ impl Ctx<'_> {
             ("relation_pairs", Value::from(self.pairs(name, t))),
         ];
         if let Some(d) = &decl {
-            out.push(("states", self.states(name, d)));
+            out.push(("states", self.states(name, t, d)));
             out.push(("conditions", Value::from(self.conditions(name, t, d))));
         }
         out.push(("gates", Value::from(self.gates(name, t))));
@@ -406,7 +455,8 @@ impl Ctx<'_> {
     }
 
     fn repository(&self) -> Value {
-        let rest = self.raw_rest(Some(self.raw), "", REPOSITORY_EXCLUDED);
+        let mut rest = self.raw_rest(Some(self.raw), "", REPOSITORY_EXCLUDED);
+        rest.push(("rules", Value::from(self.repository_rules())));
         obj(rest)
     }
 
@@ -510,6 +560,7 @@ impl Ctx<'_> {
             .get(name)
             .and_then(|m| m.get(f))
         {
+            Some(v) if v.is_empty() => json!({"value": "none", "note": NO_TARGET_NOTE}),
             Some(v) => json!(v),
             None => json!("any"),
         }
@@ -561,7 +612,7 @@ impl Ctx<'_> {
     }
 
     /// The declared initial statuses, or, undeclared, that a record may start
-    /// at any status and the status `urzua new` writes.
+    /// at any status.
     fn initial(&self, name: &str, d: &StatusDecl) -> Value {
         if !d.initial.is_empty() {
             return self.declared(
@@ -569,18 +620,22 @@ impl Ctx<'_> {
                 json!(d.initial),
             );
         }
-        match d.values.first() {
-            Some(first) => json!({
-                "required_of_records": false,
-                "new_writes": first,
-                "default": true,
-                "source": "first_status_value"
-            }),
+        if d.values.is_empty() {
+            return Value::Null;
+        }
+        json!({"required_of_records": false, "default": true, "source": "no_initial_declared"})
+    }
+
+    /// The status `urzua new` writes, from the function that writes it; null
+    /// when it writes none.
+    fn new_writes(&self, t: &RecordTypeConfig) -> Value {
+        match urzua_core::new_record::scaffold_status(t) {
+            Some(v) => json!({"value": v, "default": true, "source": "urzua_new_scaffold"}),
             None => Value::Null,
         }
     }
 
-    fn states(&self, name: &str, d: &StatusDecl) -> Value {
+    fn states(&self, name: &str, t: &RecordTypeConfig, d: &StatusDecl) -> Value {
         let s = key(&base(name), "statuses");
         let list = |k: &str, v: &Vec<String>| -> Value {
             if v.is_empty() {
@@ -603,6 +658,7 @@ impl Ctx<'_> {
         let mut out = vec![
             ("values", list("values", &d.values)),
             ("initial", self.initial(name, d)),
+            ("new_writes", self.new_writes(t)),
             ("success", list("success", &d.success)),
             ("failure", list("failure", &d.failure)),
             ("implementable", list("implementable", &d.implementable)),
@@ -802,21 +858,16 @@ impl Ctx<'_> {
         found.into_iter().flatten().collect()
     }
 
-    /// Whether `def` reads something type `name` takes part in, and the `at`
-    /// of each declaration that makes it so (empty for a rule that reads every
-    /// record). Read from what the rule table says the rule needs.
-    fn rule_for_type(
-        &self,
-        name: &str,
-        t: &RecordTypeConfig,
-        def: &RuleDef,
-    ) -> Option<Vec<String>> {
+    /// The `at` of each declaration that ties `def` to type `name`: the
+    /// per-type declaration the rule table says it reads, a relation pair or
+    /// gate it needs, a target list it checks, and any entry of the rule's own
+    /// setting that names the type. Empty when nothing ties it.
+    fn rule_for_type(&self, name: &str, t: &RecordTypeConfig, def: &RuleDef) -> Vec<String> {
         let mut by = Vec::new();
+        let mut needs_met = true;
         if let Some(d) = def.reads_declaration {
             let paths = self.declaration_paths(name, t, d);
-            if paths.is_empty() {
-                return None;
-            }
+            needs_met &= !paths.is_empty();
             by.extend(paths);
         }
         if def.requires_relation_pairs || def.requires_acyclic_pair {
@@ -825,28 +876,37 @@ impl Ctx<'_> {
                 .filter(|(_, p)| !def.requires_acyclic_pair || p.acyclic)
                 .map(|(i, _)| self.lines.at(&index("relation_pairs", i)))
                 .collect();
-            if pairs.is_empty() {
-                return None;
-            }
+            needs_met &= !pairs.is_empty();
             by.extend(pairs);
         }
         if def.requires_authority {
-            let gates = self
+            let gates: Vec<String> = self
                 .type_gates(name, t)
-                .map(|(i, _)| self.lines.at(&index(&key("authority", "gates"), i)));
-            let gates: Vec<String> = gates.collect();
-            if gates.is_empty() {
-                return None;
-            }
+                .map(|(i, _)| self.lines.at(&index(&key("authority", "gates"), i)))
+                .collect();
+            needs_met &= !gates.is_empty();
             by.extend(gates);
         }
         if def.id == RULE_POINTER_TARGET_TYPE {
-            by.extend(self.target_declarations(name, t));
+            let targets = self.target_declarations(name, t);
+            needs_met &= !targets.is_empty();
+            by.extend(targets);
         }
-        let reads_records = def.scope == Scope::Records;
-        (reads_records || !by.is_empty()).then_some(by)
+        if let Some(setting) = raw_get(self.raw, &["rules", def.id]) {
+            names_type(setting, name, &key("rules", def.id), &mut |p| {
+                by.push(self.lines.at(&p))
+            });
+        }
+        if !needs_met {
+            return Vec::new();
+        }
+        by.dedup();
+        by
     }
 
+    /// The `at` of every target list that constrains a reference field of the
+    /// type: its own `targets`, and `target_types` of a pair whose forward
+    /// field it carries (the engine constrains forward carriers only).
     fn target_declarations(&self, name: &str, t: &RecordTypeConfig) -> Vec<String> {
         let b = base(name);
         let own = t
@@ -864,9 +924,21 @@ impl Ctx<'_> {
                 self.lines
                     .at(&key(&index(&key(&b, "pointer_fields"), i), "targets"))
             });
+        let fields = t.declared_fields();
         let pairs = self
-            .carried_pairs(name, t)
+            .config
+            .relation_pairs
+            .iter()
+            .enumerate()
             .filter(|(_, p)| p.target_types.is_some())
+            .filter(|(_, p)| {
+                p.types
+                    .as_ref()
+                    .is_none_or(|ts| ts.iter().any(|x| x == name))
+            })
+            .filter(|(_, p)| {
+                fields.contains(&urzua_core::values::FieldName::new(p.forward.as_str()))
+            })
             .map(|(i, _)| {
                 self.lines
                     .at(&key(&index("relation_pairs", i), "target_types"))
@@ -874,96 +946,87 @@ impl Ctx<'_> {
         own.chain(pairs).collect()
     }
 
-    /// Every rule that reads something a selected type takes part in, with the
-    /// declarations that make it so, merged across the selected types.
+    /// Each rule tied to a selected type, with the declarations that tie it.
     fn rules_by_type(&self) -> Vec<(&'static RuleDef, Vec<String>)> {
         RULE_TABLE
             .iter()
             .filter_map(|def| {
-                let mut any = false;
                 let mut by: Vec<String> = Vec::new();
                 for (name, t) in &self.config.record_types {
-                    if self.only.is_some_and(|o| o != name) {
-                        continue;
-                    }
-                    if let Some(paths) = self.rule_for_type(name, t, def) {
-                        any = true;
-                        by.extend(paths);
+                    if self.only.is_none_or(|o| o == name) {
+                        by.extend(self.rule_for_type(name, t, def));
                     }
                 }
                 by.dedup();
-                any.then_some((def, by))
+                (!by.is_empty()).then_some((def, by))
             })
             .collect()
     }
 
-    /// `(set, on_by_declaration, declared_but_not_enabled)` as
-    /// `(id, level, at or declared_by)` rows. For one type, only the rules
-    /// that read something it takes part in; otherwise every rule the
-    /// configuration sets.
-    fn rule_rows(&self) -> [Vec<(String, &'static str, Value)>; 3] {
-        let typed = self.rules_by_type();
-        let by_of = |id: &str| -> Vec<String> {
-            typed
-                .iter()
-                .find(|(d, _)| d.id == id)
-                .map(|(_, b)| b.clone())
-                .unwrap_or_default()
-        };
-        let set = self
-            .config
-            .rules
-            .iter()
-            .filter(|(id, _)| self.only.is_none() || typed.iter().any(|(d, _)| d.id == id.as_str()))
-            .filter(|(_, s)| self.only.is_none() || s.level != RuleLevel::Off)
-            .map(|(id, s)| {
-                let by = by_of(id);
-                let mut row = json!({"at": self.at(&key("rules", id))});
-                if self.only.is_some() && !by.is_empty() {
-                    row["declared_by"] = json!(by);
-                }
-                (id.clone(), s.level.as_str(), row)
-            })
-            .collect();
-        let on = DEFAULT_ON_RULES
-            .iter()
-            .filter(|d| d.applies.is_some_and(|f| f(self.config)))
-            .filter(|d| !self.config.rules.contains_key(d.id))
-            .filter(|d| {
-                typed
-                    .iter()
-                    .any(|(def, by)| def.id == d.id && !by.is_empty())
-            })
-            .map(|d| (d.id.to_string(), d.level.as_str(), json!(by_of(d.id))))
-            .collect();
-        let off = typed
-            .iter()
-            .filter(|(d, by)| {
-                !by.is_empty() && effective_level(self.config, d.id) == RuleLevel::Off
-            })
-            .map(|(d, by)| (d.id.to_string(), RuleLevel::Off.as_str(), json!(by)))
-            .collect();
-        [set, on, off]
+    /// One rule tied to a type, as the report prints it.
+    fn tied_rule(&self, def: &RuleDef, by: &[String]) -> Value {
+        let mut row = json!({"id": def.id, "level": effective_level(self.config, def.id).as_str()});
+        match self.config.rules.get(def.id) {
+            Some(_) => row["at"] = self.at(&key("rules", def.id)),
+            None => {
+                row["default"] = json!(true);
+                row["source"] = json!("default_on");
+            }
+        }
+        row["declared_by"] = json!(by);
+        if def.scope == Scope::Diff || def.judges == Judges::ChangedSet {
+            row["judges_only_under_base"] = json!(true);
+        }
+        row
     }
 
-    fn rules(&self) -> Value {
-        let [set, on, off] = self.rule_rows();
-        let set: Vec<Value> = set
-            .into_iter()
-            .map(|(id, level, mut row)| {
-                row["id"] = json!(id);
-                row["level"] = json!(level);
-                row
-            })
-            .collect();
+    /// For one type: the rules tied to what it declares, those a declaration
+    /// of it needs but that are off, and a pointer to the repository-wide ones.
+    fn type_rules(&self) -> Value {
+        let typed = self.rules_by_type();
+        let (on, off): (Vec<_>, Vec<_>) = typed
+            .iter()
+            .partition(|(d, _)| effective_level(self.config, d.id) != RuleLevel::Off);
         let on: Vec<Value> = on
             .into_iter()
-            .map(|(id, level, by)| json!({"id": id, "level": level, "default": true, "source": "default_on", "declared_by": by}))
+            .filter(|(d, _)| {
+                self.config.rules.contains_key(d.id)
+                    || default_on(d.id).is_some_and(|x| x.applies.is_none_or(|f| f(self.config)))
+            })
+            .map(|(d, by)| self.tied_rule(d, by))
             .collect();
         let off: Vec<Value> = off
             .into_iter()
-            .map(|(id, _, by)| json!({"id": id, "declared_by": by}))
+            .map(|(d, by)| json!({"id": d.id, "declared_by": by}))
             .collect();
+        obj(vec![
+            ("from_declarations", Value::from(on)),
+            ("declared_but_not_enabled", Value::from(off)),
+            ("repository_wide", Value::from(REPOSITORY_WIDE_NOTE)),
+        ])
+    }
+
+    /// The rules the configuration sets that no type's declaration ties.
+    fn repository_rules(&self) -> Vec<Value> {
+        let typed = self.rules_by_type();
+        self.config
+            .rules
+            .iter()
+            .filter(|(id, _)| !typed.iter().any(|(d, _)| d.id == id.as_str()))
+            .map(|(id, s)| json!({"id": id, "level": s.level.as_str(), "at": self.at(&key("rules", id))}))
+            .collect()
+    }
+
+    /// For every type: the set rules tied to a type (the rest are under
+    /// `repository.rules`), the rules on by declaration, and those off.
+    fn rules(&self) -> Value {
+        let typed = self.rules_by_type();
+        let set: Vec<Value> = typed
+            .iter()
+            .filter(|(d, _)| self.config.rules.contains_key(d.id))
+            .map(|(d, by)| self.tied_rule(d, by))
+            .collect();
+        let [on, off] = self.default_rows(&typed);
         obj(vec![
             ("set", Value::from(set)),
             ("on_by_declaration", Value::from(on)),
@@ -971,20 +1034,45 @@ impl Ctx<'_> {
         ])
     }
 
+    fn default_rows(&self, typed: &[(&'static RuleDef, Vec<String>)]) -> [Vec<Value>; 2] {
+        let on = DEFAULT_ON_RULES
+            .iter()
+            .filter(|d| d.applies.is_some_and(|f| f(self.config)))
+            .filter(|d| !self.config.rules.contains_key(d.id))
+            .filter_map(|d| {
+                let (_, by) = typed.iter().find(|(def, _)| def.id == d.id)?;
+                Some(json!({"id": d.id, "level": d.level.as_str(), "default": true, "source": "default_on", "declared_by": by}))
+            })
+            .collect();
+        let off = typed
+            .iter()
+            .filter(|(d, _)| effective_level(self.config, d.id) == RuleLevel::Off)
+            .map(|(d, by)| json!({"id": d.id, "declared_by": by}))
+            .collect();
+        [on, off]
+    }
+
     /// The rules on because of a declaration and the rules a declaration needs
     /// but that are off, as `id: level`.
     fn rules_summary(&self) -> Value {
-        let [_, on, off] = self.rule_rows();
-        let map = |rows: Vec<(String, &'static str, Value)>| -> Value {
+        let typed = self.rules_by_type();
+        let [on, off] = self.default_rows(&typed);
+        let map = |rows: Vec<Value>, level: Option<&str>| -> Value {
             Value::Object(
                 rows.into_iter()
-                    .map(|(id, l, _)| (id, Value::from(l)))
+                    .map(|r| {
+                        let l = level.map_or(r["level"].clone(), Value::from);
+                        (r["id"].as_str().unwrap_or_default().to_string(), l)
+                    })
                     .collect(),
             )
         };
         obj(vec![
-            ("on_by_declaration", map(on)),
-            ("declared_but_not_enabled", map(off)),
+            ("on_by_declaration", map(on, None)),
+            (
+                "declared_but_not_enabled",
+                map(off, Some(RuleLevel::Off.as_str())),
+            ),
         ])
     }
 }

@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4CFP9CSWVTMWMZ9460
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:66507f5cff22ea184774d2ab6f9453b3b6f1d792aa5c9928d2ce02ee8b3976ea, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b129cc4d4755c2258133fe8106821c145cd7a4680eee048df51122526ef74ba7
+Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:325a998d7503e5599f3a6fbed59ea468805ce60183f41266a32d9a479a6ab34a, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b129cc4d4755c2258133fe8106821c145cd7a4680eee048df51122526ef74ba7
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -116,3 +116,4 @@ which motivates deciding this now rather than after v1.0.0.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` c8e0ab203582 -> b84ddbb0f34e. Reason: main.rs: the explain command gains --types and --type <name>, dispatched to the new explain_types command; the path and --rule forms and every other command are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` b84ddbb0f34e -> f6144a8ae951. Reason: main.rs: the explain command gains --types [--full] and --type <name>, dispatched to the explain_types command with a summary, full or one-type mode; the path and --rule forms and every other command are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` f6144a8ae951 -> 66507f5cff22. Reason: main.rs: explain's --full is refused with --type (it already required --types); no other argument or command changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` 66507f5cff22 -> 325a998d7503. Reason: main.rs: explain accepts --full with --type only to refuse it with the command to run instead, and --full conflicts with a path or --rule; no other argument or command changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
