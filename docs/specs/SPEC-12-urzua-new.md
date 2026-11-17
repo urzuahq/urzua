@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.39'
+Version: '0.40'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -28,7 +28,10 @@ author fields (`relation_fields.date`/`author`, default `Date`/`Author`; the aut
 explicit `--by`, which wins over `git config user.name` -- SPEC-8's identity tiering, reused rather
 than redesigned), and the type's status field, which starts at the first of the type's
 declared `statuses.initial`, or at the first of `statuses.values` when the type declares no `initial`
-(`MILE-151`). That is the vocabulary's entry state rather than a
+(`MILE-151`, `BUG-199`). The report's `status_from` says which: `{field, value, source, other_initial}`,
+`source` being `statuses.initial[0]` or `statuses.values[0]` and `other_initial` the remaining declared
+initial states, so a caller sees when the choice among several was made for it; `null` when the type
+declares no `statuses`. That is the vocabulary's entry state rather than a
 decision, so moving a record on from it stays a human's; a type that declares no `statuses` leaves
 the field blank. A type may also name the field that takes the record's title
 (`relation_fields.title`, a spec's `Subject`) and the version a record starts at
@@ -297,3 +300,4 @@ steps and in seconds, for each record type.
 > | 2026-11-17 | Bumped to `0.38`. States that a present but empty `Expires` on a suppression record leaves it without effect and is reported, as on release 0.4.7, and that an empty optional field is silent only where silence cannot widen what is allowed. **Why:** review of `MILE-322`'s pull request found that reading an empty `Expires` as absent made a waiver permanent. | **substantive** |
 > | 2026-11-17 | Bumped to `0.39`. `to_fill` entries carry `allowed`, the type's declared `field_values` for the field, and `hint` gives that list in `field.quality`'s `allowed:` form when it exists; a `—` template value is no hint; the status field starts at `statuses.initial` when declared, not the first of `statuses.values`; the empty required field's finding is quoted in the wording main adopted ("is empty"). **Why:** merging main, whose `field.quality` names declared values (`MILE-327`), into `MILE-322`'s pull request, so the hint and the finding agree. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 79c4d91d065f -> 5909f7fd05b3. Reason: new_record.rs starts a record at statuses.initial when declared (BUG-199), adds `allowed` (the type's field_values) to each to_fill entry and words the hint as that list when declared, offers no em-dash template value as a hint, with unit tests for each. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.40`. The report gains `status_from`, naming where the starting status came from and the other declared initial states. **Why:** `BUG-199` -- the maintainer asked for the initial-state defect to be fixed in this pull request (2026-11-17), and an agent should see when the choice among several initial states was made for it. | **substantive** |

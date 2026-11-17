@@ -357,6 +357,40 @@ pub struct FieldToFill {
     pub allowed: Option<Vec<String>>,
 }
 
+/// Where `new` took a record's starting status from (`BUG-199`): the first of
+/// `statuses.initial` when the type declares it, else the first of
+/// `statuses.values`. `other_initial` lists the remaining declared initial
+/// states, so a caller sees that the choice among them was made for it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct StatusFrom {
+    pub field: String,
+    pub value: String,
+    pub source: &'static str,
+    pub other_initial: Vec<String>,
+}
+
+/// The starting status `new` writes for `type_config`, and where it came from.
+pub fn status_from(type_config: &crate::config::RecordTypeConfig) -> Option<StatusFrom> {
+    let decl = type_config.status_decl()?;
+    let field = type_config
+        .relation_field(crate::config::RelationRole::Status)
+        .to_string();
+    if let Some((first, rest)) = decl.initial.split_first() {
+        return Some(StatusFrom {
+            field,
+            value: first.clone(),
+            source: "statuses.initial[0]",
+            other_initial: rest.to_vec(),
+        });
+    }
+    decl.values.first().map(|v| StatusFrom {
+        field,
+        value: v.clone(),
+        source: "statuses.values[0]",
+        other_initial: Vec::new(),
+    })
+}
+
 /// The template's header text per field, read for `to_fill` hints only.
 #[derive(Default)]
 struct UnsetFields<'a> {
@@ -595,7 +629,7 @@ pub fn scaffold_record_reporting(
     let type_config = spec.type_config;
     // The entry state of the type's own vocabulary, not a choice: moving a
     // record on from it stays a human decision.
-    let status_decl = type_config.status_decl();
+    let starting_status = status_from(type_config);
     let params = NewRecordParams {
         display_number: spec.display_number,
         // The H1 id is padded exactly as the file name is: the width of the
@@ -605,12 +639,7 @@ pub fn scaffold_record_reporting(
             .and_then(|c| c.identify(spec.filename).number)
             .map_or(0, |n| n.len()),
         h1_prefix: spec.compiled.map(|_| spec.type_prefix),
-        // The declared entry state when the type names one; the first value
-        // otherwise, since a type without `initial` declares no lifecycle.
-        initial_status: status_decl
-            .as_ref()
-            .and_then(|d| d.initial.first().or_else(|| d.values.first()))
-            .map(String::as_str),
+        initial_status: starting_status.as_ref().map(|s| s.value.as_str()),
         status_field: type_config.relation_field(crate::config::RelationRole::Status),
         date_field: type_config.date_field(),
         author_field: type_config.author_field(),

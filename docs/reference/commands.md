@@ -133,7 +133,7 @@ field as empty and an empty optional field not at all. If `.urzua/templates/<typ
 appended. A type with `header_shape: none` is refused, since it has nowhere to store a stable id.
 
 Output: `status`, `path`, `display_number`, `stable_id`, `pull_refs` (whether the open pull request
-fetch ran, and which numbers it skipped and who held them), `skipped`, `to_fill` and `notices` (when present: the identity used in place of `--by`, a failed fetch, a type directory that does not exist yet; whatever `new` prints to stderr is also a notice). `skipped` is always present and empty
+fetch ran, and which numbers it skipped and who held them), `skipped`, `to_fill`, `status_from` (where the starting status came from: `statuses.initial[0]` or `statuses.values[0]`, with the other declared initial states) and `notices` (when present: the identity used in place of `--by`, a failed fetch, a type directory that does not exist yet; whatever `new` prints to stderr is also a notice). `skipped` is always present and empty
 when nothing was skipped: one `{number, reason}` per number, with `reason` `local`, `worktree <path>`
 or `open-pr <ref>`. When the type's directory does not exist yet, `new` numbers from 1 and creates it,
 saying so on stderr and in a `notices` entry. It resolves an identity with `gh api user` first (see [What uses the

@@ -31,6 +31,7 @@
     "skipped": [],
     "stable_id": "<STABLE-ID>",
     "status": "ok",
+    "status_from": null,
     "to_fill": [
       {
         "allowed": null,

@@ -1620,6 +1620,9 @@ pub struct NewReport {
     /// author still has to fill (`MILE-322`). Always present; empty when `new`
     /// filled every field it wrote.
     pub to_fill: Vec<crate::new_record::FieldToFill>,
+    /// Where the status `new` wrote came from (`BUG-199`); `null` when the type
+    /// declares no `statuses`.
+    pub status_from: Option<crate::new_record::StatusFrom>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }

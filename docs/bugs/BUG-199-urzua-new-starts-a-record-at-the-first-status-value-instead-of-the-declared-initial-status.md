@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M7MC01FXP1FHDRNK89RMP6PC
 Status: Fixed
-Found-in: "review of the pull request for MILE-322 on 2026-11-17: a type declaring statuses.values [Done, Todo] with initial [Todo] got Status: Done from urzua new"
+Found-in: "An independent review of the explain-types pull request on 2026-11-17, comparing the reported initial state with what `urzua new` wrote"
 Realized-by: test:rust/crates/urzua-core/src/new_record.rs#the_status_starts_at_the_declared_initial_state@sha256:10e3b0f359d6565d8bce8c6293c0f989f333e119b767b7ee6e020ddf3eb400ee
 ---
 # 199 — urzua new starts a record at the first status value instead of the declared initial status
@@ -18,6 +18,8 @@ Realized-by: test:rust/crates/urzua-core/src/new_record.rs#the_status_starts_at_
 
 - Regression test: `the_status_starts_at_the_declared_initial_state` in `rust/crates/urzua-core/src/new_record.rs`, with one type whose first value is not its initial state and one declaring no `initial`.
 - Fixed on the branch of `MILE-322`'s pull request: `scaffold_record_reporting` takes `statuses.initial` first and falls back to the first value only when no `initial` is declared.
+- `new`'s report carries `status_from`: the field, the value written, its source (`statuses.initial[0]` or `statuses.values[0]`) and the other declared initial states, so a caller sees when the choice among several was made for it. Integration tests in `rust/crates/urzua-cli/tests/new_unset_fields_integration.rs`: `new_starts_at_the_declared_initial_status_and_says_where_it_came_from`, `new_with_several_initial_states_writes_the_first_and_lists_the_rest`, `new_without_initial_starts_at_the_first_value`.
+- A configuration whose `initial` names a value not in `values` already fails to load (`status_model.rs`: "`initial` names '...', which is not in `values`").
 
 > **Revision log**
 >
@@ -26,3 +28,4 @@ Realized-by: test:rust/crates/urzua-core/src/new_record.rs#the_status_starts_at_
 > | 2026-11-17 | Initial record, `Status: Open`. **Why:** found in review of `MILE-322`'s pull request and fixed on its branch; the status is left for `/done`. | **structural** |
 > | 2026-11-17 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: rust/crates/urzua-core/src/new_record.rs#the_status_starts_at_the_declared_initial_state@sha256:10e3b0f359d6 Reason: the regression test asserts new starts at statuses.initial and falls back to the first value only without initial **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |
 > | 2026-11-17 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `Realized-by computes to Verified` -- stated `Open` disagreed with the computed value `Fixed`. | **structural** |
+> | 2026-11-17 | `Found-in` states how the defect was found, by an independent review of the explain-types pull request; References add `status_from` and its integration tests. **Why:** the first wording named the pull request that fixed the defect, not the review that found it; the maintainer asked for the engine bug to be fixed in that pull request. | **substantive** |

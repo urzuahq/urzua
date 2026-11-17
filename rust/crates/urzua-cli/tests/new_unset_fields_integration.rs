@@ -390,3 +390,94 @@ fn doctor_names_a_field_values_entry_in_a_default_vocabulary() {
         "{message}"
     );
 }
+
+fn status_repo(label: &str, statuses: &str) -> common::TempDir {
+    let dir = repo(label);
+    write(
+        dir.path(),
+        ".urzua/config.yaml",
+        &format!(
+            "schema_version: 2\nrecord_types:\n  item:\n    dir: docs/items\n    prefix: ITEM\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    statuses:\n{statuses}rules:\n  status.transition-allowed: error\n  status.undeclared-value: error\n"
+        ),
+    );
+    std::fs::create_dir_all(dir.join("docs/items")).unwrap();
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "-m", "config"]);
+    dir
+}
+
+/// `BUG-199`: `new` starts at the first of `statuses.initial`, says so in
+/// `status_from`, and `check --base` finds the new record's status allowed.
+#[test]
+fn new_starts_at_the_declared_initial_status_and_says_where_it_came_from() {
+    let dir = status_repo(
+        "initial",
+        "      values: [Open, Done]\n      initial: [Done]\n      transitions:\n        Done: [Open]\n",
+    );
+    let (report, text) = new_staged(dir.path(), "item");
+    assert!(header(&text).contains("Status: Done"), "{text}");
+    assert_eq!(
+        report["status_from"]["source"], "statuses.initial[0]",
+        "{report}"
+    );
+    assert_eq!(report["status_from"]["value"], "Done", "{report}");
+    assert_eq!(
+        report["status_from"]["other_initial"],
+        serde_json::json!([]),
+        "{report}"
+    );
+    let check = run(dir.path(), &["check", "--base", "HEAD"]);
+    let on_status: Vec<_> = check["findings"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{check}"))
+        .iter()
+        .filter(|f| {
+            f["rule"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("status.")
+        })
+        .collect();
+    assert!(on_status.is_empty(), "{on_status:?}");
+    // The rule does examine the new record: the first value, not initial, is reported.
+    let path = report["path"].as_str().unwrap();
+    std::fs::write(dir.join(path), text.replace("Status: Done", "Status: Open")).unwrap();
+    common::git(&dir, &["add", "--", path]);
+    let check = run(dir.path(), &["check", "--base", "HEAD"]);
+    assert!(
+        check["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["rule"] == "status.transition-allowed"),
+        "{check}"
+    );
+}
+
+/// Several initial states: the first is written and the others are listed.
+#[test]
+fn new_with_several_initial_states_writes_the_first_and_lists_the_rest() {
+    let dir = status_repo(
+        "several",
+        "      values: [Open, Draft, Done]\n      initial: [Draft, Open]\n      transitions:\n        Draft: [Done]\n        Open: [Done]\n",
+    );
+    let (report, text) = new_staged(dir.path(), "item");
+    assert!(header(&text).contains("Status: Draft"), "{text}");
+    assert_eq!(
+        report["status_from"]["other_initial"],
+        serde_json::json!(["Open"]),
+        "{report}"
+    );
+}
+
+/// A type declaring no `initial` keeps the first of `values`.
+#[test]
+fn new_without_initial_starts_at_the_first_value() {
+    let dir = status_repo("no-initial", "      values: [Open, Done]\n");
+    let (report, text) = new_staged(dir.path(), "item");
+    assert!(header(&text).contains("Status: Open"), "{text}");
+    assert_eq!(
+        report["status_from"]["source"], "statuses.values[0]",
+        "{report}"
+    );
+}

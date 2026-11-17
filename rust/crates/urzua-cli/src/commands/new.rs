@@ -119,6 +119,7 @@ pub fn run(
         pull_refs: pull,
         skipped,
         to_fill,
+        status_from: urzua_core::new_record::status_from(type_config),
         notices,
     })
 }
