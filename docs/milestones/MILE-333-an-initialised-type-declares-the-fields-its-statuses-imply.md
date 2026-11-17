@@ -17,9 +17,9 @@ On release 0.4.7 `urzua init --types adr,...` wrote a type whose statuses includ
 
 ## Done means
 
-- Each profile that declares a replaced state declares the field naming the replaced record and the field naming the replacement, as references to the same type with the relation between them required to be echoed, shown by a test that a first replacement in a freshly initialised repository checks clean.
+- Each profile that declares a replaced state declares the field naming the replaced record and the field naming the replacement, as references to the same type, declared as a relation pair that must be echoed, shown by a test that a first replacement in a freshly initialised repository checks clean.
 - Each profile declares both reference lists, so adding a reference field produces no companion-declaration finding, shown by a test.
-- A load-time notice names a status whose meaning a profile declares but whose fields it does not, for a hand-written configuration with the same gap.
+- A load-time notice names a type that declares a relation pair whose fields the type does not list among its known fields or references, for a hand-written configuration with the same gap.
 
 > **Revision log**
 >

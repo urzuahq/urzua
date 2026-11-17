@@ -13,11 +13,11 @@ Let a configuration declare, for a reference field, the statuses the named recor
 
 ## Why
 
-On release 0.4.7 an agent replaced one decision record with another: the new record names the old one in a field declared for that, and the old one was moved to its replaced status, both by hand. `urzua check` would have passed with the old record still at its accepted status. `pointer.target-status` can say which statuses a target must NOT be at; nothing can say which it must be at, or tie that to the referring record's own status. `relation.supersession-reciprocity` checks that the old record points back, not what status it holds. The half-done case, a replacement accepted while the record it replaces still reads as current, is a structural mistake no model is needed to see.
+On release 0.4.7 an agent replaced one decision record with another: the new record names the old one in a field declared for that, and the old one was moved to its replaced status, both by hand. `urzua check` would have passed with the old record still at its accepted status. `pointer.target-status` can say which statuses a target must NOT be at; nothing can say which it must be at, or tie that to the referring record's own status. The reciprocity check on a declared relation verifies that the old record points back, not what status it holds. The half-done case, a replacement accepted while the record it replaces still reads as current, is a structural mistake no model is needed to see.
 
 ## Done means
 
-- `pointer.target-status` accepts, per field, the statuses the target must be at, alongside the existing statuses it must not be at, and an optional condition on the referring record's own status, shown by a test in which a record at an accepted status names a target that is not at the declared status.
+- `pointer.target-status` accepts, per field, the statuses the target must be at, alongside the existing statuses it must not be at, and an optional condition on the referring record's own status, both declared under the rule's options, shown by a test in which a record at an accepted status names a target that is not at the declared status.
 - The finding names both records, the field, the target's status and the statuses declared, and its suggested action is the status change on the target.
 - A configuration that declares only the existing option reports exactly as before.
 - The configuration reference shows the replaced-record case as its example, using words from a fixture configuration.
