@@ -57,41 +57,25 @@ run twice produces identical bytes. Commit all of it. With no `harness` key and 
 instructions block with no `instructions_file`) and the key that turns it on.
 
 The hooks need `urzua` on the `PATH` the agent runs its hooks with. When it is not there, or is a release
-without `urzua harness hook`, the hook command says so and names the fix. One rule decides an edit nobody judged, whether the engine could not give a verdict or the binary could
-not run: if no `.urzua/config.yaml` governs any targeted path (none at or above it, links resolved) nor the
-session's directory, nothing is governed and the hook says nothing; if one is found and is not read with
-certainty as letting an unjudged edit through, the edit is refused. Read with certainty as open means: neither
-`acceptance` nor `protected-paths` enabled without `on_unjudged: allow`, and `editor-hook` not enabled with
-`on_unjudged: deny`. The binary parses the YAML; the shell fallback accepts only the block form
-(`enabled: true|false`, `on_unjudged: allow|deny`) and the one-line `{...}` form, with comments stripped and no
-anchor, alias or tag anywhere. A missing binary closes the gate rather than opening it.
+without `urzua harness hook`, the hook command says so and names the fix. When the binary runs but its engine
+gives no verdict, the binary decides from the inputs the engine reads: if no `.urzua/config.yaml` governs any
+targeted path (none at or above it, links resolved) nor the session's directory, nothing is governed and the hook
+says nothing; if one is found and is not read with certainty as letting an unjudged edit through, the edit is
+refused. Read with certainty as open means: neither `acceptance` nor `protected-paths` enabled without
+`on_unjudged: allow`, and `editor-hook` not enabled with `on_unjudged: deny`.
 
-With `urzua` missing (or a release without `urzua harness hook`), the hook command's shell fallback has no JSON
-parser. What it does, and its accepted limits (pending maintainer review):
+When the binary cannot run at all, the hook command reads no path from the payload and decides from the session's
+directory alone: with no `.urzua/config.yaml` at or above it, it says nothing; with one it reads with certainty as
+open (only the block form `enabled: true|false`, `on_unjudged: allow|deny` and the one-line `{...}` form, comments
+stripped, no anchor, alias or tag), it lets the call through with a notice; with any other, it refuses every edit
+and MCP call until urzua is installed or upgraded, because without the binary it cannot tell a protected file from
+another. A missing binary closes the gate rather than opening it.
 
-- It reads only the values under `file_path`, `notebook_path` and `path`. A value that is a plain path as written
-  (a string with no escape, starting with `/` or a name character, no `name:` scheme, no padding, no control
-  character, no trailing slash) is placed: configurations are looked for at and above its nearest existing
-  directory, as written and as that directory's physical path (`cd -P`, which follows symlinked directories).
-  The edit is refused when that path has a `.` or `..` component, when its last component is a symlink, or when a
-  missing directory on it is a symlink (a dangling link).
-- Any other value under those keys (a `file:` URL, `~` or `$HOME`, padding, a trailing slash, a line break, a list,
-  an object, a number) is refused when the session's directory has a configuration. Without one, every string in
-  the payload holding a `/` is placed the way the engine reads it (`file:` dropped, `~`, `$HOME` and `${HOME}`
-  expanded, padding split off, a trailing slash dropped), and the edit is refused when any finds a configuration
-  or has a `.`, `..` or symlink component; otherwise it goes through quietly.
-- A file named under any other key is not seen, so the edit is placed only by the session's directory: for example
-  `{"paths": ["<file>"]}`, `{"destination": "<file>"}`, `{"uri": "<file>"}`, a key that is itself a path, or
-  `{"path": 5, "file": "<file>"}`. From a session in an ungoverned directory, or in a governed repository whose
-  configuration lets an unjudged edit through, such an edit of a file in a repository whose configuration refuses
-  one is **allowed**.
-- A key written with a unicode escape (`\u0066ile_path`), or a line break between a key and its value, is not seen
-  either (the host's serialiser writes neither).
-- A relative path is placed against the hook's working directory.
-- In a repository that does not use urzua, an edit whose path has a `.` or `..` component is refused, because the
-  fallback cannot place it. Install urzua (the binary places it exactly), or name the file without dot components.
-
-With the binary present none of this applies.
+With urzua missing or too old, the hook decides from the session's directory only. A session rooted in a
+directory with no configuration, or in a repository whose configuration is open, is not stopped from editing a
+file in a different, governed repository. Install urzua to close it: with the binary present every edited path is
+placed and judged. (Accepted by the maintainer on 2026-11-17 that a file the fallback cannot see is not checked;
+deciding from the session alone is the orchestrator's decision of 2026-11-17, pending maintainer review.)
 
  A panic inside the binary, or an engine that does
 not answer before the hook's own deadline (15 seconds short of `hook_timeout_seconds`), also ends in a
@@ -100,9 +84,9 @@ refusal, as one JSON document.
 To install it once per machine instead, or as well, see
 [install once per machine, or commit to the repository](adopt.md#10-optional-agent-hooks).
 
-### Upgrading from 0.4.7 or earlier
+### Upgrading from 0.4.8 or earlier
 
-Releases up to 0.4.7 installed a script and pinned its sha256 in each hook command. Nothing removes them
+Releases up to 0.4.8 installed a script and pinned its sha256 in each hook command. Nothing removes them
 for you; `urzua harness status`, `urzua doctor` and the session-start check name what is left. By hand:
 
 ```sh

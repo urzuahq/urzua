@@ -1167,16 +1167,19 @@ fn without_the_engine_or_the_interpreter_the_command_states_that_the_edit_was_no
         text.contains("could NOT run") && text.contains("urzua is not on PATH"),
         "{text}"
     );
-    // An unreadable payload names no file: it is refused, not swallowed.
+    // An unreadable payload is decided from the session and stated, not
+    // swallowed: this configuration lets an unjudged edit through.
     let mut c = Command::new("sh");
     c.args(["-c", &cmd])
         .current_dir(&dir)
         .env("PATH", common::path_with_urzua());
     let out = run_with_stdin(&mut c, "{ garbage");
     assert_eq!(out.status.code(), Some(0));
-    assert_eq!(
-        json(&out)["hookSpecificOutput"]["permissionDecision"],
-        "deny",
+    assert!(
+        json(&out)["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("NOT judged"),
         "{out:?}"
     );
 }

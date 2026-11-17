@@ -250,32 +250,11 @@ in another directory that edits this repository's files is judged too: the binar
 from the file's path, links resolved, not from the session's directory (tested with the session's directory
 and the hook's working directory outside the repository, the engine running and the engine crashing).
 
-With `urzua` missing (or a release without `urzua harness hook`), the hook command's shell fallback has no JSON
-parser. What it does, and its accepted limits (pending maintainer review):
-
-- It reads only the values under `file_path`, `notebook_path` and `path`. A value that is a plain path as written
-  (a string with no escape, starting with `/` or a name character, no `name:` scheme, no padding, no control
-  character, no trailing slash) is placed: configurations are looked for at and above its nearest existing
-  directory, as written and as that directory's physical path (`cd -P`, which follows symlinked directories).
-  The edit is refused when that path has a `.` or `..` component, when its last component is a symlink, or when a
-  missing directory on it is a symlink (a dangling link).
-- Any other value under those keys (a `file:` URL, `~` or `$HOME`, padding, a trailing slash, a line break, a list,
-  an object, a number) is refused when the session's directory has a configuration. Without one, every string in
-  the payload holding a `/` is placed the way the engine reads it (`file:` dropped, `~`, `$HOME` and `${HOME}`
-  expanded, padding split off, a trailing slash dropped), and the edit is refused when any finds a configuration
-  or has a `.`, `..` or symlink component; otherwise it goes through quietly.
-- A file named under any other key is not seen, so the edit is placed only by the session's directory: for example
-  `{"paths": ["<file>"]}`, `{"destination": "<file>"}`, `{"uri": "<file>"}`, a key that is itself a path, or
-  `{"path": 5, "file": "<file>"}`. From a session in an ungoverned directory, or in a governed repository whose
-  configuration lets an unjudged edit through, such an edit of a file in a repository whose configuration refuses
-  one is **allowed**.
-- A key written with a unicode escape (`\u0066ile_path`), or a line break between a key and its value, is not seen
-  either (the host's serialiser writes neither).
-- A relative path is placed against the hook's working directory.
-- In a repository that does not use urzua, an edit whose path has a `.` or `..` component is refused, because the
-  fallback cannot place it. Install urzua (the binary places it exactly), or name the file without dot components.
-
-With the binary present none of this applies.
+With urzua missing or too old, the hook decides from the session's directory only. A session rooted in a
+directory with no configuration, or in a repository whose configuration is open, is not stopped from editing a
+file in a different, governed repository. Install urzua to close it: with the binary present every edited path is
+placed and judged. (Accepted by the maintainer on 2026-11-17 that a file the fallback cannot see is not checked;
+deciding from the session alone is the orchestrator's decision of 2026-11-17, pending maintainer review.)
 
  Not verified without a live agent: that Claude Code fires a
 user-level plugin's hooks for every session as documented, and how an organization's managed settings can

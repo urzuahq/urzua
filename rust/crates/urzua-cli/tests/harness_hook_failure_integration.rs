@@ -216,7 +216,7 @@ fn without_a_working_binary_every_shape_the_awk_cannot_read_with_certainty_is_re
             let v = run(&cmd, &dir, &path, &[]);
             assert!(denied(&v), "{label} / {name}: {v:?}");
             assert!(
-                v.unwrap().to_string().contains("Install or upgrade urzua"),
+                v.unwrap().to_string().contains("installed or upgraded"),
                 "{label} / {name}"
             );
         }

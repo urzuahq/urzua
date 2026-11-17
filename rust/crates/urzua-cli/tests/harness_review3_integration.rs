@@ -247,7 +247,7 @@ fn the_settings_command_refuses_when_it_cannot_run_and_the_configuration_says_de
         .as_str()
         .unwrap();
     assert!(
-        reason.contains("with certainty") && reason.contains("urzua is not on PATH"),
+        reason.contains("every edit is refused") && reason.contains("urzua is not on PATH"),
         "{reason}"
     );
     assert!(reason.contains("install.md"), "names the fix: {reason}");
