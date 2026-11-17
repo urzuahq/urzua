@@ -70,9 +70,13 @@ for you; `urzua harness status`, `urzua doctor` and the session-start check name
 git rm .claude/hooks/urzua-claude-code.py .claude/hooks/urzua-record.sh
 # In .claude/settings.json, delete the three hook entries whose command mentions
 # .claude/hooks/urzua-claude-code.py (PreToolUse on Write|Edit|..., PostToolUse on Bash, SessionStart).
-urzua harness install   # writes the entries that call the binary, the commands and the lock
+urzua harness update    # writes the entries that call the binary, the commands and the lock
 urzua harness status    # "status": "ok"
 ```
+
+Where the installed files and entries still match the lock, `urzua harness update` alone does all of
+this: it replaces the entries it owns and deletes the files the bundle no longer ships. The steps above are
+for a repository where a person changed them.
 
 ## Keep it in sync
 

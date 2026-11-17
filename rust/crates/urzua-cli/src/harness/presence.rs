@@ -32,7 +32,7 @@ pub fn leftovers(root: &Path, adapters: &[String]) -> Vec<String> {
             .unwrap_or_default()
         {
             out.push(format!(
-                "{file} still holds the hook entry {entry} that an older bundle wrote: it runs a script from the repository against a pinned sha256, and the script is no longer installed. Remove that entry from {file} by hand, then run `urzua harness install` to write the entry that calls the binary"
+                "{file} still holds the hook entry {entry} that an older bundle wrote: it runs a script from the repository against a pinned sha256, and the script is no longer installed. Remove that entry from {file} by hand, then run `urzua harness update` (`urzua harness install` where there is no lock) to write the entry that calls the binary"
             ));
         }
         for f in &manifest.retired_files {

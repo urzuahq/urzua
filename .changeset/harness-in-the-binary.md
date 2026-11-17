@@ -10,4 +10,4 @@ There is no migration command. In a repository installed by 0.4.7 or earlier, re
 - `.claude/hooks/urzua-claude-code.py` and `.claude/hooks/urzua-record.sh` (`git rm` both);
 - the three hook entries in `.claude/settings.json` whose command mentions `.claude/hooks/urzua-claude-code.py` (PreToolUse on `Write|Edit|MultiEdit|NotebookEdit|mcp__.*`, PostToolUse on `Bash`, SessionStart);
 
-then run `urzua harness install` and check that `urzua harness status` prints `"status": "ok"`. `urzua harness status`, `urzua doctor` and the session-start check name each of these while it is still there.
+then run `urzua harness update` (`urzua harness install` where there is no `.urzua/harness.lock`) and check that `urzua harness status` prints `"status": "ok"`. `urzua harness status`, `urzua doctor` and the session-start check name each of these while it is still there. Where the script, the helper and the entries still match the lock, `urzua harness update` alone makes the same change.
