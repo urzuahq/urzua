@@ -1701,3 +1701,65 @@ fn a_hand_edited_shallow_file_in_a_shallow_clone_does_not_make_a_change_match() 
     upstream_change(&up);
     assert_truncated(&dir);
 }
+
+/// Zeroes the changed-path (Bloom) filter data of the commit-graph, so a
+/// path-limited walk that trusts it skips every commit.
+const ZERO_BLOOM: &str = r#"chmod u+w "$(git rev-parse --git-path objects/info/commit-graph)" && python3 -I -c '
+import sys
+p = sys.argv[1]
+b = bytearray(open(p, "rb").read())
+n = b[6]
+table = [(bytes(b[8 + 12 * i:12 + 12 * i]), int.from_bytes(b[12 + 12 * i:20 + 12 * i], "big")) for i in range(n + 1)]
+for k, (cid, off) in enumerate(table[:-1]):
+    if cid == b"BDAT":
+        end = table[k + 1][1]
+        b[off + 12:end] = bytes(end - off - 12)
+        open(p, "wb").write(bytes(b))
+        sys.exit(0)
+sys.exit(1)
+' "$(git rev-parse --git-path objects/info/commit-graph)""#;
+
+#[test]
+fn a_forged_changed_path_filter_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("bloom");
+    upstream_change(&up);
+    bash(&dir, &format!("git pull -q --ff-only && {EVIL_THEN_BASE} && git commit-graph write --reachable --changed-paths && {ZERO_BLOOM}"));
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn an_orphan_root_commit_of_the_command_does_not_match() {
+    let (up, dir, _h) = cloned_fixture("orphan-root");
+    upstream_change(&up);
+    assert_full_weight(
+        &dir,
+        "git config log.showRoot false && git pull -q --ff-only && git checkout -q --orphan o && git commit -qm root",
+    );
+}
+
+#[test]
+fn a_shallow_line_with_a_non_utf8_byte_still_counts() {
+    let (up, dir, _h) = cloned_fixture("shallow-bytes");
+    upstream_change(&up);
+    bash(&dir, &format!("git pull -q --ff-only && {EVIL_THEN_BASE} && printf '%s\\377\\n' \"$(git rev-parse HEAD)\" >> \"$(git rev-parse --git-path shallow)\""));
+    let v = post(&dir);
+    assert!(v["base_match"].is_null(), "{v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("the command truncated the history"),
+        "{v}"
+    );
+}
