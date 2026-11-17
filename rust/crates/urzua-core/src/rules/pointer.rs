@@ -669,7 +669,14 @@ mod tests {
             "adr",
             type_config_pointer(&[], None, Some(&["Parent"]), None),
         )]);
-        for empty in ["Parent:", "Parent: null", "Parent: ''"] {
+        for empty in [
+            "Parent:",
+            "Parent: null",
+            "Parent: ''",
+            "Parent: \"\"",
+            "Parent: ~",
+            "Parent:    ",
+        ] {
             let r = record(
                 "docs/adr/ADR-12-x.md",
                 "adr",
