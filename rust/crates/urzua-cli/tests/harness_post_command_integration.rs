@@ -1593,3 +1593,73 @@ fn an_evil_merge_resolution_does_not_match() {
         "{v}"
     );
 }
+
+fn assert_rewritten(dir: &Path, cmd: &str) {
+    bash(dir, cmd);
+    let v = post(dir);
+    assert!(v["base_match"].is_null(), "{cmd}: {v}");
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error")
+            && person.contains(
+                "replace refs or grafts are present, so nothing was compared with the base"
+            ),
+        "{cmd}: {v}"
+    );
+}
+
+const EVIL_THEN_BASE: &str = "echo evil >> .github/workflows/ci.yml && git commit -qam E && git checkout -q origin/main -- .github/workflows/ci.yml && git commit -qam F";
+
+#[test]
+fn a_replace_graft_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("replace-graft");
+    upstream_change(&up);
+    assert_rewritten(
+        &dir,
+        &format!(
+            "git pull -q --ff-only && {EVIL_THEN_BASE} && git replace --graft HEAD origin/main"
+        ),
+    );
+}
+
+#[test]
+fn a_grafts_file_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("grafts-file");
+    upstream_change(&up);
+    assert_rewritten(&dir, &format!("git pull -q --ff-only && {EVIL_THEN_BASE} && echo \"$(git rev-parse HEAD) $(git rev-parse origin/main)\" > \"$(git rev-parse --git-path info/grafts)\""));
+}
+
+#[test]
+fn replacing_the_base_after_a_pull_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("replace-after-pull");
+    upstream_change(&up);
+    assert_rewritten(&dir, "git pull -q --ff-only && echo evil >> .github/workflows/ci.yml && git commit -qam E && git replace origin/main HEAD");
+}
+
+#[test]
+fn replacing_the_base_does_not_make_a_change_match() {
+    let (_up, dir, _h) = cloned_fixture("replace-base");
+    assert_rewritten(
+        &dir,
+        &format!("{W} && git commit -qam E && git replace origin/main HEAD"),
+    );
+}
+
+#[test]
+fn a_shallow_clones_pull_still_matches() {
+    let up = launder_fixture("shallow-up");
+    let holder = common::TempDir::new("urzua-postcmd-shallow-clone");
+    let dir = holder.join("work");
+    let url = format!("file://{}", up.display());
+    git(
+        &holder,
+        &["clone", "-q", "--depth", "1", &url, dir.to_str().unwrap()],
+    );
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(base_paths(&v).len(), 3, "{v}");
+}

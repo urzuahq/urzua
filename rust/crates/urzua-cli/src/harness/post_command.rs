@@ -56,6 +56,41 @@ use crate::emit;
 use crate::session::Workspace;
 
 const GUARDRAIL: &str = "post-command";
+
+/// Every git call of this module runs with replace refs off: a local
+/// `refs/replace` entry would otherwise change the trees and history the base
+/// comparison reads.
+fn git_run() -> GitRun {
+    GitRun::new().env("GIT_NO_REPLACE_OBJECTS", "1")
+}
+
+/// Whether replace refs or a grafts file exist. Git still honours grafts with
+/// replace refs off, so either means nothing is compared with the base. A
+/// shallow clone's `shallow` file is ordinary and not counted.
+fn history_rewritten(repo_root: &Path) -> bool {
+    let out = |args: &[&str]| {
+        git_run()
+            .cwd(repo_root)
+            .args(args)
+            .discard_stderr()
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+    let Some(replace) = out(&["--no-optional-locks", "for-each-ref", "refs/replace"]) else {
+        return true;
+    };
+    let Some(grafts) = out(&[
+        "--no-optional-locks",
+        "rev-parse",
+        "--git-path",
+        "info/grafts",
+    ]) else {
+        return true;
+    };
+    !replace.is_empty() || repo_root.join(grafts).exists()
+}
 const P: &str = "urzua harness (post-command)";
 const CACHE: &str = ".urzua/cache/post-command.json";
 const HEAD_FILE: &str = ".urzua/cache/post-command-head";
@@ -214,7 +249,7 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
 /// git cannot say: every commit then counts as the session's own.
 fn own_files(top: &Path, last: &str, head: &str) -> Option<HashSet<String>> {
     let git = |args: &[&str]| {
-        GitRun::new()
+        git_run()
             .cwd(top)
             .arg("--no-optional-locks")
             .args(args)
@@ -294,7 +329,7 @@ fn base_entries(
     .map(|a| a.to_string())
     .collect();
     args.extend(paths.iter().map(|p| p.to_string()));
-    let out = GitRun::new()
+    let out = git_run()
         .cwd(top)
         .args(&args)
         .discard_stderr()
@@ -361,7 +396,7 @@ fn same_as(top: &Path, rev: &str, paths: &[&String], deleted: &HashSet<String>) 
         .map(|(p, _)| p.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    let oids: Vec<String> = GitRun::new()
+    let oids: Vec<String> = git_run()
         .cwd(top)
         .args([
             "--no-optional-locks",
@@ -408,7 +443,7 @@ fn file_mode(meta: &std::fs::Metadata) -> &'static str {
 fn link_blob(top: &Path, rel: &str) -> Option<String> {
     let target = std::fs::read_link(top.join(rel)).ok()?;
     let text = target.to_string_lossy().to_string();
-    GitRun::new()
+    git_run()
         .cwd(top)
         .args(["--no-optional-locks", "hash-object", "--stdin"])
         .stdin(text.as_bytes())
@@ -631,7 +666,8 @@ fn base_gates(
     if config_changed {
         event_paths.push(&config_rel);
     }
-    let matched = if base_ref.is_empty() {
+    let rewritten = history_rewritten(repo_root);
+    let matched = if base_ref.is_empty() || rewritten {
         None
     } else {
         let deleted: HashSet<String> = paths
@@ -659,7 +695,9 @@ fn base_gates(
         rule_changed,
         level: if remote { level } else { FindingSeverity::Error },
         unresolved: (!compared).then(|| {
-            if base_ref.is_empty() {
+            if rewritten {
+                "replace refs or grafts are present, so nothing was compared with the base".to_string()
+            } else if base_ref.is_empty() {
                 "no base ref to compare with: the command changed the configuration and the comparison rule it had before is not known".to_string()
             } else {
                 format!("no base ref to compare with: '{base_ref}' does not resolve")
@@ -926,7 +964,7 @@ fn matching_base(
         return Some(HashSet::new());
     }
     let tree = format!("{base}^{{tree}}");
-    let resolves = GitRun::new()
+    let resolves = git_run()
         .cwd(repo_root)
         .args(["--no-optional-locks", "rev-parse", "-q", "--verify", &tree])
         .discard_stderr()
@@ -965,7 +1003,7 @@ fn committed_state(
     let base_e = base_entries(repo_root, base, paths)?;
     let head_e = base_entries(repo_root, "HEAD", paths)?;
     let git = |args: Vec<String>| {
-        GitRun::new()
+        git_run()
             .cwd(repo_root)
             .args(&args)
             .discard_stderr()
@@ -1034,7 +1072,7 @@ fn committed_state(
 /// nothing about the default branch.
 fn describe_base(repo_root: &Path, base: &str) -> (String, bool) {
     let git = |args: &[&str]| {
-        GitRun::new()
+        git_run()
             .cwd(repo_root)
             .args(args)
             .discard_stderr()
@@ -1460,7 +1498,7 @@ fn findings_message(summary: &FindingsSummary) -> String {
 /// is `None` when git cannot say (no repository, no commit yet); the working
 /// tree is still examined then.
 fn top_and_head() -> (Option<PathBuf>, Option<String>) {
-    let Ok(out) = GitRun::new()
+    let Ok(out) = git_run()
         .args([
             "--no-optional-locks",
             "rev-parse",
@@ -1485,7 +1523,7 @@ fn top_and_head() -> (Option<PathBuf>, Option<String>) {
 /// or `None` when git cannot compare them (a commit that is gone after a
 /// rewrite): the working tree is judged against `HEAD` then.
 fn committed_since(last: &str, head: &str) -> Option<Vec<String>> {
-    let out = GitRun::new()
+    let out = git_run()
         .args([
             "--no-optional-locks",
             "diff",
@@ -1856,7 +1894,7 @@ pub(super) fn seed_head(repo_root: &Path) {
 /// deleted, staged or not. An error is a stated reason the changed set could
 /// not be read.
 fn changed_paths() -> Result<Vec<(String, bool)>, String> {
-    let out = GitRun::new()
+    let out = git_run()
         .args([
             "--no-optional-locks",
             "status",
@@ -1883,7 +1921,7 @@ fn changed_paths() -> Result<Vec<(String, bool)>, String> {
 /// change (a sparse checkout leaves such files out). Empty when git cannot say.
 fn hidden_changes(top: &Path) -> Vec<(String, bool)> {
     let git = |args: &[&str]| {
-        GitRun::new()
+        git_run()
             .cwd(top)
             .arg("--no-optional-locks")
             .args(args)
@@ -1944,7 +1982,7 @@ fn hidden_changes(top: &Path) -> Vec<(String, bool)> {
         .join("\n");
     // If git cannot be run, or fails, no hash is known and each file counts as
     // changed, the safe direction.
-    let hashed = GitRun::new()
+    let hashed = git_run()
         .cwd(top)
         .args(["--no-optional-locks", "hash-object", "--stdin-paths"])
         .stdin(paths.as_bytes())
@@ -2021,7 +2059,7 @@ fn partition_by_head<'a>(
 }
 
 fn head_text(rel: &Path, base: &str) -> Option<String> {
-    let out = GitRun::new()
+    let out = git_run()
         .args(["--no-optional-locks", "show"])
         .arg(format!("{base}:{}", rel.to_string_lossy()))
         .output()
