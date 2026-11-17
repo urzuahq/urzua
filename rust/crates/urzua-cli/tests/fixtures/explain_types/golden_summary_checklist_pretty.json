@@ -1,6 +1,7 @@
 {
   "status": "ok",
   "config": ".urzua/config.yaml",
+  "note": "These are declarations: whether a gate or a condition is acted on depends on what the configuration enables, which `urzua explain --types --full` and `urzua check` show, and `urzua explain --type <name>` says what counts as a missing value for a condition.",
   "types": [
     {
       "at": "record_types.note:34",
@@ -51,13 +52,21 @@
           "fix"
         ]
       },
-      "gated": {
-        "Done": [
-          "owners",
-          "leads"
-        ],
-        "WontDo": "leads"
-      },
+      "gates": [
+        {
+          "by": "owners",
+          "to": [
+            "Done"
+          ]
+        },
+        {
+          "by": "leads",
+          "to": [
+            "Done",
+            "WontDo"
+          ]
+        }
+      ],
       "name": "task",
       "prefix": "TASK",
       "required": [

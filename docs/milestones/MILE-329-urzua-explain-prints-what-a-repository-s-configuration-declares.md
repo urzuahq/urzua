@@ -46,6 +46,10 @@ The delivered command no longer makes these statements of the earlier amendments
 
 The fourth marked entry of the first amendment, "the conventional template path when that file exists", is printed whether or not the file exists, with `exists_when_run`, a file-system fact at the time of the run: an agent that reads a template path it cannot tell is there cannot tell a missing template from one the command does not know. The summary also carries, for a type that declares each, `gated`, `field_values`, the condition sentences in place of their count, `revision_log_classes` and a `checklist` marker, each copied from the same declaration `--type` shows (`MILE-340`). Decided by the builder on 2026-11-17, pending maintainer review.
 
+## Amendment (2026-11-17): the template key is `readable_when_run`
+
+The key the previous amendment names `exists_when_run` is `readable_when_run`: it reports whether `urzua new`'s own read of the conventional template file returned text when the command ran, so a file that exists but cannot be read as text, which `urzua new` ignores, reads false. The summary's `gated` entry is `gates`, one entry per gate naming the type, and the summary carries one note that these are declarations (`MILE-340`). Decided by the builder on 2026-11-17, pending maintainer review.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -57,3 +61,4 @@ The fourth marked entry of the first amendment, "the conventional template path 
 > | 2026-11-17 | Amendment: the delivered command does not list rules on by declaration or say which rules apply to a type; the Done-means items are left as written and the Status is unchanged. **Why:** decided by the orchestrator on 2026-11-17 after review found per-type rule ties false three times, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Amendment: lists the statements of earlier amendments the delivered command no longer makes (a rule on by declaration as a marked entry, rule ids in the summary, rule applicability, path gates per type). **Why:** decided by the orchestrator on 2026-11-17, pending maintainer review. | **structural** |
 > | 2026-11-17 | Amendment: the conventional template path is printed with `exists_when_run` whether or not the file exists, and the summary carries gates by type, field values, condition sentences, revision-log classes and a checklist marker. **Why:** an adopting repository reported on 2026-11-17 that the summary omitted what `--type` shows and that `template` did not say whether its file exists; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Amendment: the template key is `readable_when_run` (from `urzua new`'s own template read), the summary's gates are `gates`, one entry per gate, and the summary carries a note that these are declarations. **Why:** review of 2026-11-17 of the pull request that adds them; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |

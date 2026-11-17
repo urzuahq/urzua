@@ -12,13 +12,13 @@ const FIXTURE: &str = include_str!("fixtures/explain_types/config.yaml");
 const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 
 /// The summary of the three-type fixture, as printed, stays under this many bytes.
-const MAX_SUMMARY_BYTES: usize = 1_700;
+const MAX_SUMMARY_BYTES: usize = 1_950;
 /// The summary of the fixture declaring every added key stays under this many bytes.
-const MAX_CHECKLIST_SUMMARY_BYTES: usize = 1_400;
+const MAX_CHECKLIST_SUMMARY_BYTES: usize = 1_700;
 /// The full report of the three-type fixture stays under this many bytes.
 const MAX_FULL_BYTES: usize = 10_800;
 /// The summary of this repository's own configuration stays under this many bytes.
-const MAX_OWN_SUMMARY_BYTES: usize = 5_600;
+const MAX_OWN_SUMMARY_BYTES: usize = 5_850;
 
 fn repo(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-explain-types-{name}"));
@@ -111,11 +111,11 @@ fn every_declaration_is_reported_with_its_position() {
     assert_eq!(issue["header_shape"]["value"], "yaml-frontmatter");
     assert_eq!(
         issue["template"],
-        json!({"value": ".urzua/templates/issue.md", "default": true, "source": "conventional_template_path", "exists_when_run": true})
+        json!({"value": ".urzua/templates/issue.md", "default": true, "source": "conventional_template_path", "readable_when_run": true})
     );
     assert_eq!(
         of(&r, "task")["template"],
-        json!({"value": ".urzua/templates/task.md", "default": true, "source": "conventional_template_path", "exists_when_run": false}),
+        json!({"value": ".urzua/templates/task.md", "default": true, "source": "conventional_template_path", "readable_when_run": false}),
         "the path is printed with the fact that no file is there"
     );
     assert_eq!(field(issue, "Kind")["required"], true);
@@ -931,9 +931,12 @@ fn the_summary_carries_what_a_type_declares_to_gate_constrain_and_log() {
     let dir = repo("summary-additions", CHECKLIST);
     let task = of(&summary_of(&dir), "task").clone();
     assert_eq!(
-        task["gated"],
-        json!({"Done": ["owners", "leads"], "WontDo": "leads"}),
-        "a status two gates name lists both groups, in declaration order; no logins"
+        task["gates"],
+        json!([
+            {"to": ["Done"], "by": "owners"},
+            {"to": ["Done", "WontDo"], "by": "leads"}
+        ]),
+        "one entry per gate naming the type, in declaration order, as declared; no logins, no merged statuses"
     );
     assert_eq!(task["field_values"], json!({"Kind": ["feature", "fix"]}));
     assert_eq!(
@@ -958,7 +961,7 @@ fn a_type_that_declares_none_of_it_has_none_of_the_keys() {
     let note = of(&summary_of(&dir), "note").clone();
     let keys: Vec<&String> = note.as_object().unwrap().keys().collect();
     for absent in [
-        "gated",
+        "gates",
         "field_values",
         "conditions",
         "revision_log_classes",
@@ -975,8 +978,28 @@ fn a_type_that_declares_none_of_it_has_none_of_the_keys() {
     );
     assert!(issue.get("checklist").is_none(), "{issue}");
     let task = of(&s, "task");
-    assert!(task.get("gated").is_none() && task.get("field_values").is_none());
+    assert!(task.get("gates").is_none() && task.get("field_values").is_none());
     assert!(task.get("conditions").is_none(), "no count either: {task}");
+}
+
+#[test]
+fn the_summary_carries_one_fixed_note_that_these_are_declarations() {
+    let dir = repo("summary-note", FIXTURE);
+    let s = summary_of(&dir);
+    let note = s["note"].as_str().unwrap();
+    assert!(
+        note.starts_with("These are declarations:")
+            && note.contains("urzua explain --types --full")
+            && note.contains("urzua check")
+            && note.contains("what counts as a missing value"),
+        "{note}"
+    );
+    assert_eq!(note.matches(". ").count(), 0, "one sentence");
+    let empty = repo(
+        "summary-note-empty",
+        "schema_version: 2\nrecord_types: {}\n",
+    );
+    assert!(summary_of(&empty).get("note").is_none());
 }
 
 #[test]
@@ -1007,16 +1030,17 @@ fn the_summary_values_are_the_detail_values() {
             .collect::<Vec<_>>(),
         sentences
     );
-    for g in detail["gates"].as_array().unwrap() {
-        for status in g["to"].as_array().unwrap() {
-            let shown = &summary["gated"][status.as_str().unwrap()];
-            let by = &g["by"];
-            assert!(
-                shown == by || shown.as_array().is_some_and(|a| a.contains(by)),
-                "{status}: {shown} vs {by}"
-            );
-        }
-    }
+    let detail_gates: Vec<Value> = detail["gates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| json!({"to": g["to"], "by": g["by"]}))
+        .collect();
+    assert_eq!(
+        summary["gates"].as_array().unwrap(),
+        &detail_gates,
+        "the summary's gates are the detail's, without logins and lines"
+    );
     assert_eq!(
         summary["revision_log_classes"],
         detail["revision_log"]["value"]["classes"]
@@ -1064,15 +1088,17 @@ fn a_checklist_names_its_categories_tiers_and_where_each_is_declared() {
         &json!({
             "category": "code",
             "tier": "Implemented",
-            "in_resolving_tiers": true,
             "at": format!("embodiment.tiers[1]:{}", line_of(CHECKLIST, "evidence: code"))
         })
     );
     assert_eq!(row("record")["tier"], "Decided");
+    assert!(
+        rows.iter().all(|r| r.get("in_resolving_tiers").is_none()),
+        "no join of tiers and resolving tiers is printed"
+    );
     assert_eq!(
-        row("spec")["in_resolving_tiers"],
-        false,
-        "a tier the type does not list as resolving"
+        c["note"],
+        "These are declarations; `urzua check` says which items of a record resolve."
     );
     assert_eq!(
         c["resolving_tiers"]["at"],
@@ -1213,7 +1239,9 @@ fn the_summary_prints_flat_objects_and_scalar_arrays_on_one_line() {
     for line in [
         "\"dirs\": [\"docs/tasks\"],",
         "\"field_values\": {\"Kind\": [\"feature\", \"fix\"]},",
-        "\"gated\": {\"Done\": [\"owners\", \"leads\"], \"WontDo\": \"leads\"},",
+        "\"gates\": [",
+        "{\"by\": \"owners\", \"to\": [\"Done\"]},",
+        "{\"by\": \"leads\", \"to\": [\"Done\", \"WontDo\"]}",
         "\"prefix\": \"TASK\",",
     ] {
         assert!(summary.contains(line), "{line} in {summary}");
@@ -1226,47 +1254,53 @@ fn the_summary_prints_flat_objects_and_scalar_arrays_on_one_line() {
 }
 
 #[test]
-fn full_type_and_another_command_print_as_they_did() {
+fn full_type_and_another_command_keep_their_committed_output() {
     let dir = repo("unchanged", FIXTURE);
     for t in ["issue", "task", "note"] {
         std::fs::write(dir.join(format!(".urzua/templates/{t}.md")), "# {title}\n").unwrap();
     }
     let without_exists = |text: String| {
         text.lines()
-            .filter(|l| l.trim() != "\"exists_when_run\": true,")
+            .filter(|l| l.trim() != "\"readable_when_run\": true,")
             .map(|l| format!("{l}\n"))
             .collect::<String>()
     };
     assert_eq!(
         without_exists(stdout_of(&dir, &["explain", "--types", "--full"])),
         include_str!("fixtures/explain_types/golden_full.json"),
-        "--full is the output before this change, but for the one added key"
+        "--full equals the committed golden, ignoring the `readable_when_run` line"
     );
     assert_eq!(
         without_exists(stdout_of(&dir, &["explain", "--type", "issue"])),
         include_str!("fixtures/explain_types/golden_type_issue.json"),
-        "--type is the output before this change, but for the one added key"
+        "--type equals the committed golden, ignoring the `readable_when_run` line"
     );
     assert_eq!(
         stdout_of(&dir, &["graph"]),
         include_str!("fixtures/explain_types/golden_graph.json"),
-        "another command is byte-identical to before"
+        "graph equals the committed golden byte for byte"
     );
 }
 
 #[test]
-fn the_template_says_whether_its_file_exists() {
+fn the_template_says_whether_urzua_new_reads_its_file() {
     let dir = repo("template-exists", FIXTURE);
     std::fs::write(dir.join(".urzua/templates/issue.md"), "# {title}\n").unwrap();
     for (name, exists) in [("issue", true), ("task", false)] {
         let t = detail_of(&dir, name)["template"].clone();
-        assert_eq!(t["exists_when_run"], exists, "{t}");
+        assert_eq!(t["readable_when_run"], exists, "{t}");
         assert_eq!(t["value"], format!(".urzua/templates/{name}.md"));
         assert_eq!(t["default"], true);
     }
+    std::fs::write(dir.join(".urzua/templates/issue.md"), [0xff, 0xfe, 0x00]).unwrap();
+    assert_eq!(
+        detail_of(&dir, "issue")["template"]["readable_when_run"],
+        false,
+        "a file `urzua new` cannot read as text is not one it uses"
+    );
     std::fs::remove_file(dir.join(".urzua/templates/issue.md")).unwrap();
     assert_eq!(
-        detail_of(&dir, "issue")["template"]["exists_when_run"],
+        detail_of(&dir, "issue")["template"]["readable_when_run"],
         false
     );
 }

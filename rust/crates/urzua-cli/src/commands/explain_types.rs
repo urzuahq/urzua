@@ -55,6 +55,11 @@ const REPOSITORY_EXCLUDED: &[&str] = &["record_types", "rules"];
 
 const ENFORCEMENT_NOTE: &str = "Whether a declared condition or field rule is enforced is answered by the rules set in the configuration (`urzua explain --types --full`) and by `urzua check`.";
 
+const SUMMARY_NOTE: &str = "These are declarations: whether a gate or a condition is acted on depends on what the configuration enables, which `urzua explain --types --full` and `urzua check` show, and `urzua explain --type <name>` says what counts as a missing value for a condition.";
+
+const CHECKLIST_NOTE: &str =
+    "These are declarations; `urzua check` says which items of a record resolve.";
+
 const RULES_SET_NOTE: &str = "Rules set in the configuration, as written under `rules:`. Rules on by default or by a declaration do not appear here; `urzua check` reports every rule that ran and how many records each examined. Whether a declared condition or field rule is enforced is answered by this section and by `urzua check`.";
 
 const PATH_GATE_NOTE: &str = "A path gate declares who may change paths matching these patterns, whatever the type; `urzua new`, the edit hook and the pull request check act on it where they are enabled.";
@@ -177,6 +182,14 @@ pub(crate) fn build(
         Mode::Summary => obj(vec![
             ("types", selected.map(|(n, t)| ctx.summary(n, t)).collect()),
             ("path_gates", ctx.path_gates()["gates"].clone()),
+            (
+                "note",
+                if names.is_empty() {
+                    Value::Null
+                } else {
+                    Value::from(SUMMARY_NOTE)
+                },
+            ),
         ]),
         Mode::Full => obj(vec![
             (
@@ -412,7 +425,7 @@ impl Ctx<'_> {
             ("states", states.unwrap_or(Value::Null)),
             ("references", Value::Object(references)),
             ("conditions", Value::from(conditions)),
-            ("gated", self.gated(name)),
+            ("gates", Value::from(self.summary_gates(name))),
             ("field_values", json!(t.field_values)),
             ("revision_log_classes", revision_log_classes),
             ("checklist", checklist),
@@ -456,8 +469,8 @@ impl Ctx<'_> {
         let rel = crate::commands::new::template_path(name)
             .to_string_lossy()
             .replace('\\', "/");
-        let exists = self.repo_root.join(&rel).is_file();
-        json!({"value": rel, "default": true, "source": "conventional_template_path", "exists_when_run": exists})
+        let readable = crate::commands::new::read_template(self.repo_root, name).is_some();
+        json!({"value": rel, "default": true, "source": "conventional_template_path", "readable_when_run": readable})
     }
 
     /// Every field the type names: required, then known, then any other a
@@ -766,36 +779,27 @@ impl Ctx<'_> {
         .collect()
     }
 
-    /// For each status a gate naming this type lists under `to`, the group
-    /// that gate names under `by`, as declared; a list when several gates name
-    /// the same status.
-    fn gated(&self, name: &str) -> Value {
+    /// Each `authority.gates` entry naming this type, in declaration order,
+    /// with its position in `gates`; the one source of the summary's and the
+    /// detail's gates.
+    fn type_gates(&self, name: &str) -> Vec<(usize, &urzua_core::authority::Gate)> {
         let Some(auth) = &self.config.authority else {
-            return Value::Null;
+            return Vec::new();
         };
-        let mut by_status: Map<String, Value> = Map::new();
-        for g in auth
-            .gates
+        auth.gates
             .iter()
-            .filter(|g| g.record_type.as_deref() == Some(name))
-        {
-            for status in &g.to {
-                let slot = by_status.entry(status.clone()).or_insert(Value::Null);
-                *slot = match std::mem::take(slot) {
-                    Value::Null => Value::from(g.by.clone()),
-                    Value::String(first) if first == g.by => Value::String(first),
-                    Value::String(first) => json!([first, g.by]),
-                    Value::Array(mut groups) => {
-                        if !groups.iter().any(|x| x == &Value::from(g.by.clone())) {
-                            groups.push(Value::from(g.by.clone()));
-                        }
-                        Value::Array(groups)
-                    }
-                    other => other,
-                };
-            }
-        }
-        Value::Object(by_status)
+            .enumerate()
+            .filter(|(_, g)| g.record_type.as_deref() == Some(name))
+            .collect()
+    }
+
+    /// Each gate naming the type as its own entry: its `to` and `by` as
+    /// declared, no logins, no combination rule.
+    fn summary_gates(&self, name: &str) -> Vec<Value> {
+        self.type_gates(name)
+            .into_iter()
+            .map(|(_, g)| obj(vec![("to", json!(g.to)), ("by", Value::from(g.by.clone()))]))
+            .collect()
     }
 
     /// The `statuses.delivery.items` declaration of the type, with the
@@ -858,11 +862,6 @@ impl Ctx<'_> {
         };
         let (rows, declared) = self.evidence_tiers();
         let resolving = self.resolving_tiers(delivery, &path);
-        let counted: Vec<&str> = delivery
-            .resolving_tiers()
-            .iter()
-            .map(String::as_str)
-            .collect();
         let rows: Vec<Value> = rows
             .into_iter()
             .map(|(category, tier)| match tier {
@@ -875,7 +874,6 @@ impl Ctx<'_> {
                     let mut row = json!({
                         "category": category,
                         "tier": state,
-                        "in_resolving_tiers": counted.contains(&state),
                     });
                     if declared {
                         row["at"] = self.at(&index("embodiment.tiers", i));
@@ -902,6 +900,7 @@ impl Ctx<'_> {
             ),
             ("evidence_tiers", Value::from(rows)),
             ("resolving_tiers", resolving),
+            ("note", Value::from(CHECKLIST_NOTE)),
         ])
     }
 
@@ -935,15 +934,13 @@ impl Ctx<'_> {
 
     /// The gates declared for this type by name, as declared.
     fn gates(&self, name: &str) -> Vec<Value> {
-        let Some(auth) = &self.config.authority else {
-            return Vec::new();
-        };
-        auth.gates
-            .iter()
-            .enumerate()
-            .filter(|(_, g)| g.record_type.as_deref() == Some(name))
+        let deciders = self.config.authority.as_ref().map(|a| &a.deciders);
+        self.type_gates(name)
+            .into_iter()
             .map(|(i, g)| {
-                let logins = auth.deciders.get(&g.by).map(|d| d.logins.clone());
+                let logins = deciders
+                    .and_then(|d| d.get(&g.by))
+                    .map(|d| d.logins.clone());
                 obj(vec![
                     ("to", json!(g.to)),
                     ("by", Value::from(g.by.clone())),
