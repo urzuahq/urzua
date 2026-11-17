@@ -1,18 +1,18 @@
-//! JSON written as Python's `json.dumps` writes it: the agent reads the hook
-//! output as JSON, and keeping the spelling the script printed lets the tests
-//! compare the two outputs byte for byte.
+//! The hook's JSON spelling: `", "` and `": "` separators, every non-ASCII
+//! character escaped (`dumps`); and the notebook form, indented one space with
+//! non-ASCII kept (`dumps_indent1`). The agent parses either; a fixed spelling
+//! keeps the output comparable byte for byte in tests.
 
 use super::super::json::J;
 
-/// `json.dumps(v)`: `", "` and `": "` separators, every non-ASCII character
-/// escaped.
+/// One line, `", "` and `": "` separators, every non-ASCII character escaped.
 pub fn dumps(v: &J) -> String {
     let mut out = String::new();
     write(v, &mut out, None, true);
     out
 }
 
-/// `json.dumps(v, indent=1, ensure_ascii=False)`.
+/// Indented by one space per level, non-ASCII kept.
 pub fn dumps_indent1(v: &J) -> String {
     let mut out = String::new();
     write(v, &mut out, Some(0), false);
@@ -109,7 +109,7 @@ mod tests {
     use crate::harness::json::parse;
 
     #[test]
-    fn spelled_as_python_spells_it() {
+    fn the_spelling_is_fixed() {
         let v = parse(r#"{"a":"é😀\u0001","b":[1,{}],"c":[]}"#).unwrap();
         assert_eq!(
             dumps(&v),

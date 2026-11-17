@@ -1,4 +1,4 @@
-//! `MILE-280` and the amendment of `ADR-89` of 2026-11-17: the harness runs from the binary. An install writes
+//! The harness runs from the binary. An install writes
 //! no executable file and no hash; reformatting what it writes is not drift; a
 //! script or pinned entry an older bundle left is named with the steps that
 //! remove it; `status` says which registration is in effect; a hook registered
@@ -138,7 +138,19 @@ fn reformat_everything(dir: &Path) {
     for f in md {
         let text = std::fs::read_to_string(&f).unwrap();
         let mut out = String::new();
+        let mut fence = false;
         for line in text.lines() {
+            // A formatter leaves the inside of a code fence alone.
+            if line.trim_start().starts_with("```") {
+                fence = !fence;
+                out.push_str(line);
+                out.push('\n');
+                continue;
+            }
+            if fence {
+                out.push_str(&format!("  {line}\n"));
+                continue;
+            }
             let lead = &line[..line.len() - line.trim_start().len()];
             let body = line.trim_start();
             let body = if let Some(rest) = body.strip_prefix("- ") {

@@ -5,7 +5,8 @@
 //!
 //! Nothing is installed in the repository to do this, so nothing there can be
 //! edited to weaken it, and nothing needs a hash pinned (`ADR-89`, amendment of
-//! 2026-11-17). Only the adapter modules name an agent.
+//! 2026-11-17). The registration table below and the adapter modules it lists
+//! are the only code that names an agent.
 
 mod claude_code;
 mod once;
@@ -16,48 +17,111 @@ mod pyjson;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
-/// (adapter, events it handles, translator, hook command of an event).
-type Translator = fn(&str, &[u8], Option<&Path>) -> String;
-type HookCommand = fn(&str) -> Option<String>;
-const HOOKS: &[(&str, &[&str], Translator, HookCommand)] = &[(
-    claude_code::NAME,
-    claude_code::EVENTS,
-    claude_code::translate,
-    claude_code::hook_command,
-)];
+/// What an adapter provides: the events it handles, the translator, the hook
+/// command of an event, and the output that refuses an edit (or, for an event
+/// that cannot refuse, says it was not judged) when the translator could not
+/// finish.
+struct Adapter {
+    name: &'static str,
+    events: &'static [&'static str],
+    translate: fn(&str, &[u8], Option<&Path>) -> String,
+    command: fn(&str) -> Option<String>,
+    fail_closed: fn(&str, &str) -> String,
+}
+
+const HOOKS: &[Adapter] = &[Adapter {
+    name: claude_code::NAME,
+    events: claude_code::EVENTS,
+    translate: claude_code::translate,
+    command: claude_code::hook_command,
+    fail_closed: claude_code::fail_closed,
+}];
 
 /// The command an agent's settings run for `event` of `adapter`.
 pub(crate) fn command(adapter: &str, event: &str) -> Option<String> {
     HOOKS
         .iter()
-        .find(|(a, ..)| *a == adapter)
-        .and_then(|(_, _, _, command)| command(event))
+        .find(|a| a.name == adapter)
+        .and_then(|a| (a.command)(event))
 }
 
 pub fn run_hook(adapter: &str, event: &str) -> ExitCode {
-    let Some((_, _, translate, _)) = HOOKS
+    let Some(a) = HOOKS
         .iter()
-        .find(|(a, events, ..)| *a == adapter && events.contains(&event))
+        .find(|a| a.name == adapter && a.events.contains(&event))
     else {
         eprintln!(
             "urzua harness hook: this build has no translator for the adapter '{adapter}' and event '{event}' (it has: {})",
             HOOKS
                 .iter()
-                .map(|(a, e, ..)| format!("{a} {}", e.join("|")))
+                .map(|a| format!("{} {}", a.name, a.events.join("|")))
                 .collect::<Vec<_>>()
                 .join(", ")
         );
         return ExitCode::from(2);
     };
+    // The global hook prints a not-run document and exits 2; here a panic must
+    // end in the adapter's refusal instead, as one document on stdout.
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("urzua harness hook: {info}");
+    }));
+    let caught = std::panic::catch_unwind(|| judge_once(a, event));
+    let out = caught.unwrap_or_else(|e| {
+        (a.fail_closed)(
+            event,
+            &format!("the hook failed ({})", panic_text(e.as_ref())),
+        )
+    });
+    use std::io::Write;
+    let mut stdout = std::io::stdout();
+    let _ = stdout.write_all(out.as_bytes());
+    let _ = stdout.flush();
+    ExitCode::SUCCESS
+}
+
+fn panic_text(e: &(dyn std::any::Any + Send)) -> String {
+    e.downcast_ref::<String>()
+        .cloned()
+        .or_else(|| e.downcast_ref::<&str>().map(|t| t.to_string()))
+        .unwrap_or_default()
+}
+
+fn judge_once(a: &Adapter, event: &str) -> String {
     let mut payload = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut payload);
     let project = project_dir();
-    let out = once::run(project.as_deref(), adapter, event, &payload, || {
-        translate(event, &payload, project.as_deref())
-    });
-    print!("{out}");
-    ExitCode::SUCCESS
+    start_deadline(project.as_deref());
+    test_panic("outer");
+    once::run(project.as_deref(), a.name, event, &payload, || {
+        let out = (a.translate)(event, &payload, project.as_deref());
+        if TIMED_OUT.load(Ordering::SeqCst) {
+            return (a.fail_closed)(event, "the engine did not answer before the hook's deadline");
+        }
+        out
+    })
+}
+
+/// When the hook gives up on the engine: before the agent's own timeout, which
+/// lets the call through, so the hook still answers (with a refusal).
+static DEADLINE: OnceLock<Instant> = OnceLock::new();
+static TIMED_OUT: AtomicBool = AtomicBool::new(false);
+
+/// The margin left before `harness.limits.hook_timeout_seconds` for the hook to
+/// print its refusal after it stops waiting.
+const DEADLINE_MARGIN: Duration = Duration::from_secs(15);
+
+fn start_deadline(project: Option<&Path>) {
+    let timeout = super::limits::of(None, project)
+        .get(urzua_core::harness::limits::HOOK_TIMEOUT_SECONDS);
+    let budget = test_seam("URZUA_HOOK_DEADLINE_FOR_TESTS")
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(timeout).saturating_sub(DEADLINE_MARGIN));
+    let _ = DEADLINE.set(Instant::now() + budget);
 }
 
 /// The project a hook judges first: the directory the agent names for the
@@ -106,7 +170,7 @@ fn git_toplevel(dir: &Path) -> Option<PathBuf> {
     (!top.is_empty()).then(|| PathBuf::from(top))
 }
 
-/// `os.path.abspath`: absolute against the current directory, normalised
+/// Absolute against the current directory, normalised
 /// lexically, links not followed.
 fn lexical_absolute(p: &Path) -> PathBuf {
     let joined = if p.is_absolute() {
@@ -117,7 +181,9 @@ fn lexical_absolute(p: &Path) -> PathBuf {
     PathBuf::from(normpath(&joined.to_string_lossy()))
 }
 
-/// `posixpath.normpath`.
+/// A path normalised lexically: `.` and repeated slashes dropped, `..` taken
+/// back where it can be (never above an absolute root), exactly two leading
+/// slashes kept.
 pub(super) fn normpath(path: &str) -> String {
     if path.is_empty() {
         return ".".to_string();
@@ -150,17 +216,26 @@ pub(super) fn normpath(path: &str) -> String {
     }
 }
 
-/// The variable a debug build's tests name a stand-in engine with (a JSON list
-/// of argv): an engine that fails, or one that logs the requests it is sent. A
-/// release build never reads it, so nothing outside the binary can choose what
-/// judges an edit.
-const TEST_ENGINE: &str = "URZUA_HOOK_ENGINE_FOR_TESTS";
-
-fn test_engine() -> Option<Vec<String>> {
-    if !cfg!(debug_assertions) {
+/// A variable the tests use to steer the hook (a stand-in engine, a shorter
+/// deadline, a forced panic). Read only in a build with the `test-seams`
+/// feature, which only `cargo test` turns on: an installed binary ignores them,
+/// so nothing outside the binary can choose what judges an edit.
+fn test_seam(name: &str) -> Option<String> {
+    if !cfg!(feature = "test-seams") {
         return None;
     }
-    serde_json::from_str(&std::env::var(TEST_ENGINE).ok()?).ok()
+    std::env::var(name).ok()
+}
+
+fn test_engine() -> Option<Vec<String>> {
+    serde_json::from_str(&test_seam("URZUA_HOOK_ENGINE_FOR_TESTS")?).ok()
+}
+
+/// Panics where the tests ask, so the panic path is tested with a real panic.
+pub(super) fn test_panic(at: &str) {
+    if test_seam("URZUA_HOOK_PANIC_FOR_TESTS").as_deref() == Some(at) {
+        panic!("a panic the tests asked for at {at}");
+    }
 }
 
 /// The engine command as messages name it.
@@ -170,8 +245,8 @@ pub(super) fn engine_display(event: &str) -> String {
 
 /// Runs `urzua harness run <event>` (this binary) with `request` on stdin, in
 /// `cwd`; the verdict object, or why there is none. The core runs as its own
-/// process, as it did under the script: it changes directory and keeps
-/// per-process state while judging.
+/// process because it changes directory and keeps per-process state while
+/// judging. It is stopped at the hook's deadline.
 pub(super) fn engine(
     event: &str,
     request: &serde_json::Value,
@@ -191,7 +266,7 @@ pub(super) fn engine(
     };
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::null());
     if let Some(d) = cwd.filter(|d| !d.is_empty()) {
         cmd.current_dir(d);
     }
@@ -200,9 +275,26 @@ pub(super) fn engine(
         use std::io::Write;
         let _ = stdin.write_all(request.to_string().as_bytes());
     }
-    let out = child.wait_with_output().map_err(|e| e.to_string())?;
-    let verdict: serde_json::Value =
-        serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
+    let mut stdout = child.stdout.take().ok_or("no stdout")?;
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout.read_to_end(&mut buf);
+        buf
+    });
+    loop {
+        if child.try_wait().map_err(|e| e.to_string())?.is_some() {
+            break;
+        }
+        if DEADLINE.get().is_some_and(|d| Instant::now() >= *d) {
+            TIMED_OUT.store(true, Ordering::SeqCst);
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("the engine did not answer before the hook's deadline".into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let out = reader.join().map_err(|_| "the engine's output could not be read")?;
+    let verdict: serde_json::Value = serde_json::from_slice(&out).map_err(|e| e.to_string())?;
     if !verdict
         .as_object()
         .is_some_and(|o| o.contains_key("verdict"))
@@ -212,7 +304,7 @@ pub(super) fn engine(
     Ok(verdict)
 }
 
-/// Python's truthiness of a JSON value.
+/// The truthiness the adapter gives a JSON value: empty and zero are false.
 pub(super) fn truthy(v: Option<&serde_json::Value>) -> bool {
     use serde_json::Value as V;
     match v {
@@ -235,7 +327,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normpath_matches_posixpath() {
+    fn a_path_is_normalised_lexically() {
         for (i, o) in [
             ("", "."),
             ("/", "/"),

@@ -1,9 +1,10 @@
-//! Text helpers of the adapter, each matching the Python it replaced, so a
-//! payload is read the same way it was before.
+//! Text helpers of the adapter: how it reads whitespace, lines, words, URLs
+//! and paths in a payload and in the configuration.
 
 use std::path::Path;
 
-/// Python's `str.isspace` for one character.
+/// Whitespace as the adapter reads it: Unicode whitespace and the four
+/// separator controls (U+001C to U+001F).
 pub fn py_space(c: char) -> bool {
     c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
 }
@@ -12,7 +13,8 @@ fn py_word(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-/// Python's `str.splitlines()`.
+/// Lines split at every line break: `\n`, `\r\n`, `\r`, vertical tab, form
+/// feed, the separator controls, NEL, and U+2028 and U+2029.
 fn splitlines(text: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut start = 0;
@@ -197,7 +199,8 @@ fn home_expanded(value: &str) -> Option<String> {
     Some(format!("{home}{}", &value[head.len()..]))
 }
 
-/// `urllib.parse.unquote`.
+/// Percent-decoding: `%XX` becomes the byte, an invalid sequence is kept, and
+/// the result is read as UTF-8 with replacement.
 fn unquote(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -217,7 +220,8 @@ fn unquote(s: &str) -> String {
     String::from_utf8_lossy(&out).to_string()
 }
 
-/// The path `urllib.parse.urlparse` finds in a `file:` URL.
+/// The path of a `file:` URL: after the host, before `?` and `#`, without the
+/// `;parameters` of its last segment.
 fn url_path(value: &str) -> String {
     let mut rest: String = value[5..]
         .chars()
@@ -298,7 +302,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn words_split_as_the_regex_did() {
+    fn words_split_at_case_changes_and_digits() {
         assert_eq!(words_of("filePath"), ["file", "path"]);
         assert_eq!(words_of("ABCdef_x2"), ["ab", "cdef", "x", "2"]);
         assert_eq!(words_of("write_FILE"), ["write", "file"]);

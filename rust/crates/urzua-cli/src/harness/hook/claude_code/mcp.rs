@@ -110,6 +110,11 @@ const DEST_WORDS: [&str; 11] = [
     "sink",
 ];
 
+/// A verdict word this build knows.
+fn known(kind: &str) -> bool {
+    kind == "allow" || kind == "block" || ALLOWED_NOTES.contains(&kind)
+}
+
 fn has(list: &[&str], w: &str) -> bool {
     !w.is_empty() && list.contains(&w)
 }
@@ -409,6 +414,12 @@ fn gates(
     if vtext(&verdict, "verdict") == "block" {
         return Err(vtext(&verdict, "message").to_string());
     }
+    if !known(vtext(&verdict, "verdict")) {
+        let message = super::unknown_verdict(vtext(&verdict, "verdict"));
+        let paths = items.iter().map(|(p, _)| p.clone()).collect();
+        results.push(run.unjudged_result(&message, cwd, paths, true, true));
+        return Ok(records);
+    }
     if let Some(flags) = verdict.get("records").and_then(|f| f.as_array()) {
         if flags.len() == items.len() {
             for (item, flag) in items.iter().zip(flags) {
@@ -524,6 +535,9 @@ pub fn judge(run: &mut Run, tool: &str, target: Target, cwd: Option<&str>, caps:
         }
         if ALLOWED_NOTES.contains(&kind) {
             results.push((Kind::Note, message.to_string()));
+        } else if !known(kind) {
+            let message = super::unknown_verdict(kind);
+            results.push(run.unjudged_result(&message, cwd, vec![path.clone()], true, true));
         }
     }
     run.decide(&results);

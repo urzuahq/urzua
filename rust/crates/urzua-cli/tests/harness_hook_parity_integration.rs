@@ -1,9 +1,9 @@
-//! `urzua harness hook claude-code <event>` does what the Python translator it
-//! replaced did (`ADR-89`, amendment of 2026-11-17): every event shape the translator's tests fed is fed
-//! to both, each in its own copy of the same repository, and their outputs are
-//! compared byte for byte (the repository's path written as `<DIR>`). The
-//! script is kept here, under `tests/fixtures/harness/`, for this comparison
-//! only; nothing installs it. Needs `git`, `python3` and `sh`.
+//! `urzua harness hook claude-code <event>` gives the output of the reference
+//! translator in `tests/fixtures/harness/` for every event shape: each case runs
+//! in two copies of the same repository and the outputs are compared byte for
+//! byte (the repository's path written as `<DIR>`). Where the two differ on
+//! purpose, the case asserts the binary is at least as strict and its name says
+//! why. Nothing installs the reference. Needs `git`, `python3` and `sh`.
 
 mod common;
 

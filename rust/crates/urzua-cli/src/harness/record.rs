@@ -23,7 +23,7 @@ fn fail(code: u8, message: &str) -> ExitCode {
 }
 
 /// A run of urzua: (exit code, stdout). `URZUA_BIN` (or `URZUA`) names another
-/// build, as the drafting helper script honoured; otherwise this binary.
+/// build (a development build, a wrapper that pins `check`); otherwise this binary.
 fn urzua(args: &[&str]) -> Result<(i32, String), String> {
     let named = ["URZUA_BIN", "URZUA"]
         .iter()

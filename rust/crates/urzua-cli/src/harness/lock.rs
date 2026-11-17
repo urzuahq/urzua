@@ -99,27 +99,57 @@ pub fn hash(text: &str) -> String {
 
 const WORDS: &str = "words-sha256:";
 
-/// The words of a generated instruction or command file, in order: what a
-/// formatter does not change (indentation, line breaks, list markers, emphasis
-/// marks, trailing spaces) is not compared, so reformatting the file is not
-/// drift and changing its words is.
+/// What a generated instruction or command file says, in order, with what a
+/// formatter changes left out. Prose is compared by its words (indentation,
+/// line breaks, list markers and their numbers, emphasis marks and trailing
+/// spaces do not count). Code is compared exactly: every line inside a code
+/// fence, apart from its indentation and trailing spaces, and every inline code
+/// span, apart from runs of whitespace inside it. A changed command (`&&` for
+/// `||`, a `#` that comments a step out, `--json` for `json`) is therefore a
+/// change, and reflowed prose is not.
 fn words(text: &str) -> String {
-    let mut out: Vec<&str> = Vec::new();
+    let mut out: Vec<String> = Vec::new();
+    let mut prose = String::new();
+    let mut fence = false;
     for line in text.lines() {
-        let line = line.trim_start();
+        let t = line.trim();
+        if t.starts_with("```") || t.starts_with("~~~") {
+            prose_words(&std::mem::take(&mut prose), &mut out);
+            fence = !fence;
+            out.push(format!("\n{t}"));
+            continue;
+        }
+        if fence {
+            out.push(format!("\n{t}"));
+            continue;
+        }
         // A list marker a formatter may change or renumber: `-`, `*`, `+`, `1.`, `1)`.
-        let digits = line.chars().take_while(char::is_ascii_digit).count();
-        let line = match line[digits..].chars().next() {
-            Some('.' | ')') if digits > 0 => &line[digits + 1..],
-            Some('-' | '*' | '+') if digits == 0 => &line[1..],
-            _ => line,
+        let digits = t.chars().take_while(char::is_ascii_digit).count();
+        let body = match t[digits..].chars().next() {
+            Some('.' | ')') if digits > 0 => &t[digits + 1..],
+            Some('-' | '*' | '+') if digits == 0 => &t[1..],
+            _ => t,
         };
-        out.extend(
-            line.split(|c: char| !c.is_alphanumeric())
-                .filter(|w| !w.is_empty()),
-        );
+        prose.push(' ');
+        prose.push_str(body);
     }
+    prose_words(&prose, &mut out);
     out.join(" ")
+}
+
+/// The words of prose, and its inline code spans exactly.
+fn prose_words(prose: &str, out: &mut Vec<String>) {
+    for (i, part) in prose.split('`').enumerate() {
+        if i % 2 == 1 {
+            out.push(format!("`{}`", part.split_whitespace().collect::<Vec<_>>().join(" ")));
+        } else {
+            out.extend(
+                part.split(|c: char| !c.is_alphanumeric())
+                    .filter(|w| !w.is_empty())
+                    .map(str::to_string),
+            );
+        }
+    }
 }
 
 /// The hash a lock keeps for a generated text file: of its words only.
@@ -180,6 +210,23 @@ mod tests {
         ));
         assert!(text_matches(&hash(text), text));
         assert!(!text_matches(&hash(text), reflowed));
+    }
+
+    const STEP: &str = "# /done\n\nRun:\n\n   ```bash step\n   urzua harness record done \"$RECORD\" && echo ok\n   ```\n\nThen use `urzua check --json` on it.\n";
+
+    #[test]
+    fn a_step_commented_out_inside_a_code_fence_is_drift() {
+        let commented = STEP.replace("   urzua harness record", "   # urzua harness record");
+        assert!(!same_text(STEP, &commented));
+        assert!(!text_matches(&text_hash(STEP), &commented));
+    }
+
+    #[test]
+    fn changed_punctuation_in_a_command_is_drift_and_reindenting_it_is_not() {
+        assert!(!same_text(STEP, &STEP.replace("&&", "||")));
+        assert!(!same_text(STEP, &STEP.replace("--json", "json")));
+        assert!(same_text(STEP, &STEP.replace("   urzua harness", "      urzua harness")));
+        assert!(same_text(STEP, &STEP.replace("Then use", "Then\nuse")));
     }
 
     #[test]

@@ -257,7 +257,7 @@ pub(super) fn to_value(j: &J) -> serde_json::Value {
     serde_json::from_str(&j.compact()).unwrap_or(serde_json::Value::Null)
 }
 
-/// Python's `str()` of a JSON value, for a message.
+/// A JSON value as a message shows it: a string bare, `None`, `True` and `False` for null and booleans.
 fn py_str(j: Option<&J>) -> String {
     match j {
         None | Some(J::Null) => "None".into(),
@@ -269,7 +269,7 @@ fn py_str(j: Option<&J>) -> String {
     }
 }
 
-/// Python's truthiness of a payload value.
+/// The truthiness the adapter gives a payload value: empty and zero are false.
 fn j_truthy(j: Option<&J>) -> bool {
     match j {
         None | Some(J::Null) | Some(J::Bool(false)) => false,
@@ -287,8 +287,7 @@ fn read_text(path: &str) -> Result<String, String> {
     String::from_utf8(bytes).map_err(|e| format!("cannot read {path}: {e}"))
 }
 
-/// The text of an `OSError` as Python prints it: `[Errno 2] No such file or
-/// directory: 'path'`.
+/// An I/O error as messages show it: `[Errno 2] No such file or directory: 'path'`.
 fn py_os_error(e: &std::io::Error, path: &str) -> String {
     let text = e.to_string();
     let base = text.split(" (os error").next().unwrap_or(&text).to_string();
@@ -414,37 +413,30 @@ pub fn translate(event: &str, payload: &[u8], project: Option<&Path>) -> String 
         project: project.map(|p| p.to_string_lossy().to_string()),
         out: String::new(),
     };
-    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let mut inner = Run {
-            event: run.event.clone(),
-            project: run.project.clone(),
-            out: String::new(),
-        };
-        main(&mut inner, payload);
-        inner.out
-    }));
-    match caught {
-        Ok(out) => out,
-        Err(e) => {
-            let why = e
-                .downcast_ref::<String>()
-                .cloned()
-                .or_else(|| e.downcast_ref::<&str>().map(|t| t.to_string()))
-                .unwrap_or_default();
-            let message = format!(
-                "urzua harness: the translator failed ({why}), so this call was NOT judged"
-            );
-            if event == "edit" {
-                run.unjudged_edit(&message, None, Vec::new(), true);
-            } else {
-                run.stated(&message, event);
-            }
-            run.out
-        }
+    main(&mut run, payload);
+    run.out
+}
+
+/// The output when the hook could not finish (a panic, the deadline): an edit
+/// is refused, whatever the configuration, because nothing judged it and the
+/// configuration was not read; the other events only say so.
+pub fn fail_closed(event: &str, why: &str) -> String {
+    let mut run = Run {
+        event: event.to_string(),
+        project: None,
+        out: String::new(),
+    };
+    let message = format!("urzua harness: {why}, so this call was NOT judged. Run: urzua harness status");
+    if event == "edit" {
+        run.deny(&format!("{message}. The edit is refused because nothing judged it."));
+    } else {
+        run.stated(&message, event);
     }
+    run.out
 }
 
 fn main(run: &mut Run, payload: &[u8]) {
+    super::test_panic("translate");
     let event = run.event.clone();
     let parsed = std::str::from_utf8(payload)
         .map_err(|e| e.to_string())
@@ -540,7 +532,16 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
         run.deny(message);
     } else if ALLOWED_NOTES.contains(&kind) {
         run.note(message);
+    } else if kind != "allow" {
+        let message = unknown_verdict(kind);
+        run.unjudged_edit(&message, cwd, vec![path], true);
     }
+}
+
+/// An answer whose verdict word this build does not know is not an allow: it
+/// is an edit nobody judged.
+pub(super) fn unknown_verdict(kind: &str) -> String {
+    format!("urzua harness: urzua did NOT judge this edit (the engine answered with the verdict '{kind}', which this build does not know). It is allowed unless the configuration refuses an edit that was not judged; run `urzua harness status`.")
 }
 
 /// session-start and post-command: one request, one report, never a decision.

@@ -91,7 +91,12 @@ pub fn run(
     let mut keyed = format!("{adapter}\n{event}\n").into_bytes();
     keyed.extend_from_slice(payload);
     let key = urzua_io::sha256_hex_of_str(&String::from_utf8_lossy(&keyed));
-    let claim = dir.join(&key);
+    claimed(&dir, &key, judge)
+}
+
+/// Judges the call keyed `key` once among the processes that claim it in `dir`.
+fn claimed(dir: &Path, key: &str, judge: impl FnOnce() -> String) -> String {
+    let claim = dir.join(key);
     let done = dir.join(format!("{key}.done"));
     match std::fs::OpenOptions::new()
         .write(true)
@@ -99,7 +104,7 @@ pub fn run(
         .open(&claim)
     {
         Ok(_) => {
-            prune(&dir);
+            prune(dir);
             let out = judge();
             let partial = dir.join(format!("{key}.part"));
             if std::fs::write(&partial, &out).is_ok() {
@@ -107,6 +112,10 @@ pub fn run(
             }
             out
         }
+        // Only a claim that exists means another process has the call; any
+        // other failure to claim (a read-only directory, a full disk) is judged
+        // here at once.
+        Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => judge(),
         Err(_) if age(&claim).is_some_and(|a| a > STALE) => judge(),
         Err(_) => {
             let start = std::time::Instant::now();
@@ -124,6 +133,24 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_claim_that_cannot_be_written_is_judged_at_once_not_after_the_wait() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("urzua-once-ro-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        // A process that may write anyway (root) cannot see the case.
+        let writable = std::fs::write(dir.join("probe"), "x").is_ok();
+        if !writable {
+            let start = std::time::Instant::now();
+            assert_eq!(claimed(&dir, "k", || "judged".to_string()), "judged");
+            assert!(start.elapsed() < Duration::from_secs(2), "{:?}", start.elapsed());
+        }
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn a_payload_without_a_call_id_is_not_claimed() {
