@@ -19,7 +19,7 @@ In release 0.4.7 `field.value-not-declared` and `pointer.target-type` switch on 
 
 - `status.required-field-missing` is on by default at error where any type declares a `require` entry, and `status.forbidden-field-present` where any type declares a `forbid` entry, shown by a test with neither rule named under `rules:`.
 - A configuration that declares neither entry reports exactly as before, and a configuration that names either rule keeps the level it gives.
-- `urzua doctor` reports, at warn, a declared entry whose rule the configuration turns off.
+- `urzua doctor` reports, at warn, a declared entry whose rule the configuration turns off, shown by a test.
 - The release notes state the change of default, since a configuration with entries and without the rules will start to report.
 
 > **Revision log**

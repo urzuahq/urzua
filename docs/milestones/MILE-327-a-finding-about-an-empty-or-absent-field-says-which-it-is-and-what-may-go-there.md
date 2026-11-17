@@ -18,8 +18,8 @@ On release 0.4.7, straight after `urzua new`, the finding on a required field wi
 ## Done means
 
 - A finding that a field is empty names the declared values for that field when the type declares them, in the same form `field.value-not-declared` uses, shown by a test.
-- A finding about a required field that is absent from the header says it is missing, and one about a field present with no value says it is empty, in `field.quality`, `header.required-fields` and the status requirement rules alike, shown by a test of each.
-- The suggested action for such a finding carries the declared values as its inputs where a value list exists.
+- A finding about a required field that is absent from the header says it is missing, and one about a field present with no value says it is empty, in `field.quality` and the status requirement rules, as `header.required-fields` already does, shown by a test of each.
+- The suggested action for such a finding carries the declared values as its inputs where a value list exists, shown by a test.
 
 > **Revision log**
 >
