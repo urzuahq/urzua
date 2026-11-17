@@ -51,16 +51,16 @@ finish)
   [ -f "$path" ] || { echo "urzua-record: $path does not exist" >&2; exit 2; }
   [ -f "$scaffold" ] || { echo "urzua-record: $path was not scaffolded by 'urzua-record.sh new'" >&2; exit 2; }
 
-  # Never decide: only a field the scaffold left null may change, and no field may be
-  # added, removed or reordered. A scaffolded state, date or id is a decision or an
-  # identity, not content.
+  # Never decide: only a field the scaffold left empty (`Field:`, or `null` from an
+  # older urzua) may change, and no field may be added, removed or reordered. A
+  # scaffolded state, date or id is a decision or an identity, not content.
   if ! paste -d'\n' <(header "$scaffold") <(header "$path") | awk '
-      NR % 2 == 1 { split($0, a, ": "); key = a[1]; sub(/^[^:]*: */, "", $0); old = $0; okey = key; next }
-      { split($0, b, ": "); nkey = b[1]; val = $0; sub(/^[^:]*: */, "", val)
+      NR % 2 == 1 { key = $0; sub(/:.*$/, "", key); sub(/^[^:]*: */, "", $0); old = $0; okey = key; next }
+      { nkey = $0; sub(/:.*$/, "", nkey); val = $0; sub(/^[^:]*: */, "", val)
         if (nkey != okey) { printf "header field %s became %s\n", okey, nkey > "/dev/stderr"; bad = 1 }
-        else if (val != old && old != "null") { printf "scaffolded value of %s was changed (%s -> %s)\n", okey, old, val > "/dev/stderr"; bad = 1 } }
+        else if (val != old && old != "null" && old != "") { printf "scaffolded value of %s was changed (%s -> %s)\n", okey, old, val > "/dev/stderr"; bad = 1 } }
       END { exit bad }'; then
-    echo "urzua-record: refusing; a drafting command fills null fields and the body only" >&2
+    echo "urzua-record: refusing; a drafting command fills empty fields and the body only" >&2
     exit 1
   fi
   [ "$(header "$scaffold" | wc -l)" -eq "$(header "$path" | wc -l)" ] || {
