@@ -9,8 +9,9 @@ Two defaults change (`MILE-326`, `MILE-335`). The rules that judge a checklist a
 
 - A repository that declares `items` and named only `status.delivery-agreement` now also gets `status.done-items-shape` at `error` and `status.waived-item-stale` at `warn`.
 - A repository that declared `require` or `forbid` entries without naming `status.required-field-missing` or `status.forbidden-field-present` now reports at `error`.
-- A configuration that names a rule keeps the level it gives, and one that declares none of these entries reports exactly as before. `urzua init` proposes none of the five rules in either mode (it infers no `statuses`, and did not before), so an entry added later reports without a `rules:` entry.
-- A run whose only rules are these counts as governing the corpus once one of them has examined a record: clean, it is `ok`. A run in which none of them examined a record stays `not-run`.
+- A configuration that names a rule keeps the level it gives, and one that declares none of these entries reports exactly as before.
+- `urzua init` proposes none of the five rules in either mode, as before: `init --types` writes `statuses:` blocks but none with `require`, `forbid` or `items`, and adopt mode writes no `statuses`. An entry added later reports without a `rules:` entry.
+- A clean run whose only rules apply by declaration is `ok`, and such a rule counts toward `ok` only once it has examined a record; a run in which none did stays `not-run`. A rule named explicitly under `rules:` still counts toward `ok` when it read no record, as on 0.4.7.
 
 `urzua doctor` warns of a `require` or `forbid` entry whose rule the configuration turns off (MILE-326).
 

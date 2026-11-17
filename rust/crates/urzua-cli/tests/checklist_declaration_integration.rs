@@ -1,10 +1,10 @@
-//! `MILE-326`, `MILE-327` and the checklist declaration: a checklist (`statuses.delivery.items`)
+//! `MILE-335`, `MILE-326` and `MILE-327`: a checklist (`statuses.delivery.items`)
 //! and the status requirements (`statuses.require`, `statuses.forbid`) are
 //! declared once and report without a second switch, a checklist needs no
 //! evidence field it does not read, its errors say what to write, and a finding
 //! about a field with no value says which it is and what may go there.
 //!
-//! Verifies: MILE-326, MILE-327
+//! Verifies: MILE-335, MILE-326, MILE-327
 
 mod common;
 
@@ -932,4 +932,36 @@ fn init_proposes_none_of_the_rules_that_apply_by_declaration() {
             assert!(!rules.contains(rule), "{rule} is not proposed:\n{rules}");
         }
     }
+}
+
+#[test]
+fn a_category_no_tier_declares_is_named_once_each_in_first_seen_order() {
+    let message = done_cause(
+        "- Built. — evidence: code:src/a.rs, spec:docs/adr/ADR-1-use-x.md, code:src/a.rs\n",
+        &SMALL_CHECKLIST.replace("[Implemented, Verified]", "[Verified]"),
+        "embodiment:
+  drift: Drift detected
+  tiers:
+    - {state: Verified, evidence: test, claims_built: true}
+  none: Not started
+",
+    );
+    assert!(
+        message.contains("declares `evidence: code`, `evidence: spec`:"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_rule_named_under_rules_counts_toward_ok_even_when_it_read_no_record() {
+    let dir = note_repo("named-reads-nothing", None);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{REQUIRE_ONLY}rules:\n  status.required-field-missing: error\n"),
+    )
+    .unwrap();
+    let (code, report) = run(&dir, &["check"]);
+    assert_eq!(report["status"], "ok", "{report}");
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(report["records_read_by_any_rule"], 0, "{report}");
 }

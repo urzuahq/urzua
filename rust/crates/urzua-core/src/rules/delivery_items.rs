@@ -432,7 +432,8 @@ fn not_counted_cause(
                     .any(|t| t.evidence.as_str() == *c)
             })
             .collect();
-        categories.dedup();
+        let mut seen = HashSet::new();
+        categories.retain(|c| seen.insert(*c));
         return format!(
             "locator {} computes to {tier}, because no tier in `embodiment.tiers` declares `evidence: {}`: declare one and add its state to `record_types.{record_type}.statuses.delivery.items.resolving_tiers` to make the category count",
             paths.join(", "),
