@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.34'
+Version: '0.35'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -199,11 +199,9 @@ and this section claims only what each place does.
   wired into an agent session here.
 - **Or the person is asked, where the configuration says so.** With `acceptance.in_session: ask` (`SPEC-3`,
   `ADR-102` amendment of 2026-11-17) an agent's Write, Edit or MultiEdit that moves one record into a gated status
-  is put to the person through the agent host's permission prompt, with a reason the hook writes and the receipt
-  added to the edit, instead of being refused; it stays refused where the person cannot be asked (a subagent, a
-  permission mode that does not prompt). A confirmed approval, kept under `.git/urzua` where the edit tools cannot
-  write, lets the local commit check accept the move with no actors file; CI never reads it. It is a local record a
-  shell command can forge, which the post-command check reports; the pull request check is the control to rely on.
+  is put to the person through the agent host's permission prompt, with a reason the hook writes and a receipt row
+  added to the edit, instead of being refused; it stays refused where the person cannot be asked. Nothing is stored.
+  The row is unverified text in the record; the pull request check is the control.
 - **In CI, the evidence is authorship.** `diff.decider-required` (`SPEC-2`), fed an `--actors` file the gate
   action (`.github/actions/urzua-gate`, input `actors: "true"`) writes from the GitHub API, requires the pull
   request's author, the default `pr-author` evidence, to be in the `maintainers` group for every gated move
@@ -310,3 +308,4 @@ and this section claims only what each place does.
 > | 2026-11-17 | Bumped to `0.32`. (7) The text fallback fails closed: anything it cannot read with certainty is a refusal. **Why:** decided by the orchestrator on 2026-11-17, pending maintainer review, after a review found shapes the binary refuses that the scan allowed. | **substantive** |
 > | 2026-11-17 | Bumped to `0.33`. The acceptance guardrail's claim names `in_session: ask`: a gated move put to the person through the agent host, refused where the person cannot be asked, and honoured at commit by a confirmed local approval that CI does not read. The key's name, its values, `approval_minutes` and the permission modes the Claude Code adapter asks in were decided by the builder on 2026-11-17, pending maintainer review. **Why:** `ADR-102`, as amended on 2026-11-17 with the maintainer's acceptance. | **substantive** |
 > | 2026-11-17 | Bumped to `0.34`. The claim for `in_session: ask` states that an approval is a local record a shell can forge, reported by the post-command check, and that the pull request check is the control to rely on. Decided by the builder on 2026-11-17, pending maintainer review. **Why:** a security review of the pull request that builds it. | **substantive** |
+> | 2026-11-17 | Bumped to `0.35`. The claim for `in_session: ask` describes the mode with nothing stored. **Why:** Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept." | **substantive** |

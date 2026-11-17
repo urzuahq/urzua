@@ -201,9 +201,9 @@ pub(super) fn engine_owned(override_log: Option<&str>) -> Vec<String> {
     let mut owned: Vec<String> = [
         ".urzua/cache",
         super::lock::LOCK_PATH,
-        // The whole git directory: its hooks, its config, the hook's claims and
-        // the approvals under `urzua`, and the `commondir` files that say where
-        // all of those are. The walk for hard links never enters `.git`
+        // The whole git directory: its hooks, its config, the hook's claims
+        // under `urzua`, and the `commondir` files that say where all of those
+        // are. The walk for hard links never enters `.git`
         // itself, so the parts a link could reach are named as well.
         ".git",
         ".git/hooks",
@@ -232,6 +232,52 @@ fn owned_entry(config: &Config, rel: &Path) -> Option<String> {
     engine_owned(config.override_log.as_deref())
         .into_iter()
         .find(|e| rules::path_matches_entry(Path::new(&folded), &fold_path(e)))
+}
+
+/// The refusal of an edit-tool write inside the git directory or the common
+/// directory of the repository that holds `path`, wherever those are: a
+/// separate git directory, a symlinked `.git`, a submodule's or a bare
+/// repository's. Its hooks and config are there, and a `commondir` file there
+/// says where they are. Only while `protected-paths` is on.
+pub(super) fn git_dir_denial(config: &Config, path: &Path) -> Option<Denial> {
+    if !config.harness.as_ref()?.enabled("protected-paths") {
+        return None;
+    }
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().ok()?.join(path)
+    };
+    // The nearest directory that exists, and the rest of the path below it.
+    let mut dir = abs.parent()?.to_path_buf();
+    while !dir.is_dir() {
+        dir = dir.parent()?.to_path_buf();
+    }
+    let rest = abs.strip_prefix(&dir).ok()?.to_path_buf();
+    let real = dir.canonicalize().ok()?.join(rest);
+    let out = urzua_io::git::GitRun::new()
+        .dash_c(&dir)
+        .args(["rev-parse", "--absolute-git-dir", "--git-common-dir"])
+        .discard_stderr()
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let text = String::from_utf8(out.stdout).ok()?;
+    let inside = text.lines().find_map(|line| {
+        let p = PathBuf::from(line);
+        let p = if p.is_absolute() { p } else { dir.join(p) };
+        let p = p.canonicalize().ok()?;
+        (real.starts_with(&p)).then_some(p)
+    })?;
+    Some(Denial {
+        gated_move: None,
+        guardrail: "protected-paths",
+        reason: format!(
+            "{} is inside the git directory {} (its hooks, config and the files that say where they are); an agent's edit through the edit tools is refused. A person edits it outside the agent harness",
+            path.display(),
+            inside.display()
+        ),
+    })
 }
 
 /// The path-gate entries of the table (every protected path).

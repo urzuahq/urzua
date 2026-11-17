@@ -2449,7 +2449,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 },
                 DeciderEvidence {
                     actors: c.actors,
-                    approvals: c.session_approvals,
+                    receipts: c.session_receipts,
                 },
                 c.base_authority,
                 &opts,

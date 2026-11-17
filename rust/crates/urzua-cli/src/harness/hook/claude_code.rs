@@ -30,7 +30,7 @@ use super::hook_json::{dumps, dumps_indent1, obj, s};
 use super::{engine, text as vtext, truthy};
 
 pub const NAME: &str = "claude-code";
-pub const EVENTS: &[&str] = &["edit", "post-edit", "post-command", "session-start"];
+pub const EVENTS: &[&str] = &["edit", "post-command", "session-start"];
 /// The variable Claude Code sets to the session's project for hook commands.
 pub const PROJECT_ENV: &str = "CLAUDE_PROJECT_DIR";
 
@@ -96,7 +96,7 @@ impl Run {
     /// The engine could not give a verdict: say so, loudly, and let the call proceed.
     fn stated(&mut self, message: &str, event: &str) {
         eprintln!("{message}");
-        if event == "post-command" || event == "post-edit" {
+        if event == "post-command" {
             return self.relay_post_command(message, POST_NOT_JUDGED);
         }
         let hook = if event == "session-start" {
@@ -525,10 +525,9 @@ fn main(run: &mut Run, payload: &[u8]) {
     };
     let cwd = cwd.as_deref();
     match event.as_str() {
-        "post-edit" => post_edit(run, &payload, cwd),
         "session-start" => {
             let request = run.request("session-start", None, cwd);
-            judge_simple(run, request, cwd, &[])
+            judge_simple(run, request, cwd)
         }
         "post-command" => {
             // Any Bash command: the engine reads git, never the command.
@@ -536,8 +535,7 @@ fn main(run: &mut Run, payload: &[u8]) {
                 return;
             }
             let request = run.request("post-command", Some("Bash"), cwd);
-            let forged = forged_approvals(&payload, cwd);
-            judge_simple(run, request, cwd, &forged)
+            judge_simple(run, request, cwd)
         }
         _ => edit(run, &payload, cwd),
     }
@@ -635,10 +633,9 @@ pub(super) fn unknown_verdict(kind: &str) -> String {
 }
 
 /// session-start and post-command: one request, one report, never a decision.
-fn judge_simple(run: &mut Run, request: serde_json::Value, cwd: Option<&str>, forged: &[String]) {
+fn judge_simple(run: &mut Run, request: serde_json::Value, cwd: Option<&str>) {
     let event = run.event.clone();
     let verdict = match engine(&event, &request, cwd) {
-        Ok(v) if !forged.is_empty() => with_forged(v, forged),
         Ok(v) => v,
         Err(_) => {
             if run.policy(cwd, &[]) == Unjudged::NotGoverned {
@@ -701,12 +698,9 @@ fn ask_of(payload: &J, tool: &str) -> serde_json::Value {
             None => Some("The host did not report the session's permission mode, so whether the person would see a prompt is not known. Ask the person to switch to the Manual (default) permission mode and retry this edit, or a person in the gate's group makes the move outside the agent harness.".to_string()),
         }
     };
-    let id = |k: &str| payload.get(k).and_then(J::as_str).unwrap_or("").to_string();
     serde_json::json!({
         "available": why_not.is_none(),
         "why_not": why_not.unwrap_or_default(),
-        "session": id("session_id"),
-        "call": id("tool_use_id"),
     })
 }
 
@@ -747,79 +741,4 @@ fn ask_input(tool: &str, inp: &J, path: &str, content: Option<&str>) -> Result<J
         other => return Err(format!("{other} cannot carry the receipt")),
     }
     Ok(updated)
-}
-
-/// After an edit tool ran: confirm the person's approval of that very call, so
-/// the local commit check honours its receipt. Claude Code runs it only once
-/// the tool succeeded, and so only once the person approved the prompt.
-fn post_edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
-    let Some(call) = payload
-        .get("tool_use_id")
-        .and_then(J::as_str)
-        .filter(|c| !c.is_empty())
-    else {
-        return;
-    };
-    let file = payload
-        .get("tool_input")
-        .and_then(|i| i.get("file_path"))
-        .and_then(J::as_str)
-        .map(PathBuf::from);
-    let dir = file
-        .as_deref()
-        .and_then(Path::parent)
-        .filter(|d| d.is_dir())
-        .map(Path::to_path_buf)
-        .or_else(|| cwd.map(PathBuf::from));
-    let Some(root) = dir.as_deref().and_then(super::git_toplevel) else {
-        return;
-    };
-    let transcript = payload
-        .get("transcript_path")
-        .and_then(J::as_str)
-        .map(PathBuf::from);
-    let message = match super::super::approval::confirm(&root, call, transcript.as_deref()) {
-        None => return,
-        Some(Ok(a)) => format!("urzua harness (acceptance): the person approved {} moving to '{}' in this session, and the receipt is in {}. Commit it unchanged: the local commit check honours the receipt until the approval expires in {} minute(s), and CI still requires the pull request's actors file to name a decider.", a.record_id, a.status, a.path, (a.expires_unix - a.created_unix) / 60),
-        Some(Err(e)) => format!("urzua harness (acceptance): {e}. The local commit check will refuse the move; approve it again in the agent session."),
-    };
-    run.print(&obj(vec![(
-        "hookSpecificOutput",
-        obj(vec![
-            ("hookEventName", s("PostToolUse")),
-            ("additionalContext", s(&message)),
-        ]),
-    )]));
-}
-
-/// The approvals a shell command wrote, as post-command report lines.
-fn forged_approvals(payload: &J, cwd: Option<&str>) -> Vec<String> {
-    let Some(root) = cwd.map(Path::new).and_then(super::git_toplevel) else {
-        return Vec::new();
-    };
-    let transcript = payload
-        .get("transcript_path")
-        .and_then(J::as_str)
-        .map(PathBuf::from);
-    super::super::approval::shell_changes(&root, transcript.as_deref())
-}
-
-/// `verdict` with the forged approvals added for the person and the agent.
-fn with_forged(mut verdict: serde_json::Value, forged: &[String]) -> serde_json::Value {
-    let text = format!(
-        "urzua harness (post-command): a shell command wrote under the approvals directory, which only the agent harness's hooks write during an edit call:\n{}",
-        forged.join("\n")
-    );
-    for key in ["person", "agent"] {
-        let old = vtext(&verdict, key).to_string();
-        verdict[key] = serde_json::json!(if old.is_empty() {
-            text.clone()
-        } else {
-            format!("{old}\n{text}")
-        });
-    }
-    if vtext(&verdict, "verdict") == "allow" {
-        verdict["verdict"] = serde_json::json!("allow-with-warnings");
-    }
-    verdict
 }

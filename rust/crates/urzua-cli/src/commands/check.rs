@@ -106,9 +106,9 @@ struct Context<'a> {
     deleted_records: Vec<rules::DeletedRecord>,
     /// The identities from `--actors` (`MILE-200`).
     actors: Option<urzua_core::authority::Actors>,
-    /// The harness's local approvals of the changed records' gated moves, read
-    /// only on a run with no actors file (`ADR-102`).
-    session_approvals: Option<HashMap<PathBuf, rules::SessionApproval>>,
+    /// The changed records carrying a receipt row, read only on a run with no
+    /// actors file (`ADR-102`).
+    session_receipts: Option<HashSet<PathBuf>>,
     /// The base revision's `authority` table (`authority.decider_table`).
     base_authority: urzua_core::authority::BaseAuthority,
     /// The checkout's config with the base revision's stricter decider-gate
@@ -381,7 +381,7 @@ impl<'a> Context<'a> {
             committed_statuses: self.committed_statuses.as_ref(),
             deleted_records: &self.deleted_records,
             actors: self.actors.as_ref(),
-            session_approvals: self.session_approvals.as_ref(),
+            session_receipts: self.session_receipts.as_ref(),
             base_authority: &self.base_authority,
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
@@ -396,15 +396,15 @@ impl<'a> Context<'a> {
     }
 }
 
-/// The actors file's identities, else the harness's local approvals of the
-/// changed records, which a run with an actors file never reads (`ADR-102`).
+/// The actors file's identities, else the changed records carrying a receipt
+/// row, which a run with an actors file never reads (`ADR-102`).
 fn attach_actors(
     session: &crate::session::Session,
     context: &mut Context<'_>,
     actors: Option<urzua_core::authority::Actors>,
 ) {
     if actors.is_none() {
-        context.session_approvals = crate::harness::approval::for_check(
+        context.session_receipts = crate::harness::receipt::for_check(
             &session.repo_root,
             &session.config,
             &session.records,
@@ -2563,7 +2563,7 @@ fn load_context<'a>(
             committed_statuses: diff.committed_statuses,
             deleted_records: diff.deleted_records,
             actors: None,
-            session_approvals: None,
+            session_receipts: None,
             base_authority: diff.base_authority,
             gate_config: diff.gate_config,
             fail_on: diff.fail_on,

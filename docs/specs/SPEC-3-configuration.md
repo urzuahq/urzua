@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.166'
+Version: '0.167'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:e2981c06fd2407d7fe81d1c1d5a796caf66cfa47d57f6e188a22412d3d1a545d, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -989,7 +989,7 @@ harness:
     editor-hook:    {enabled: true, on_unjudged: allow, pending_pair: allow}   # allow | deny; allow | refuse
     session-start:  {enabled: true}
     post-command:   {enabled: false, base: origin/HEAD, base_match: info}   # a ref; info | warning | error
-    acceptance:     {enabled: false, on_unjudged: deny, in_session: refuse, approval_minutes: 60}   # refuse | ask; 1 to 1440
+    acceptance:     {enabled: false, on_unjudged: deny, in_session: refuse}   # refuse | ask
     protected-paths: {enabled: false, on_unjudged: deny}
   limits:                            # optional; each key undeclared is its built-in value
     hook_timeout_seconds: 120
@@ -1031,19 +1031,14 @@ harness:
   paths too, including this file; a person repairs it by editing outside the agent harness (a plain editor
   or a terminal), where no hook runs. `urzua doctor` and the verdict's message say so.
 - **`acceptance.in_session`** is `refuse` or `ask` (anything else is a load error; `ADR-102`, amendment of
-  2026-11-17). `refuse`, and the key undeclared, refuse an agent's move to a gated status as before, and the local check
-  reports exactly what it did before. `ask` needs `post-command` enabled (a load error otherwise). It puts an agent's
-  edit that moves one record into a gated status to the person through the agent host's permission prompt, with a
-  reason built from values checked against the configuration and the record's sanitised title, and with the receipt
-  added to the edit; where the adapter cannot show the person that prompt, or the session's name is not a login in the
-  gate's group, the edit stays refused and the message says what to do. With `ask` and no `--actors` file, `urzua check`
-  reports an uncommitted gated move as `info` with a confirmed, unused approval for that record, status, base blob and
-  exact bytes inside its time window (even under `require_evidence`), as an error when an approval names it and is
-  pending or does not hold, and as without the mode when none does (`require_evidence` decides); CI, given the
-  actors file, never reads approvals. **`acceptance.approval_minutes`** (a whole number from 1 to 1440, default 60;
-  anything else is a load error) is how long an approval stays good. An approval is a local record a shell command can
-  forge; the pull request check is the control to rely on (`docs/reference/agent-harness.md`). The key's name, its
-  values, `approval_minutes`, the permission modes the Claude Code adapter asks in and the local check's treatment of approvals were decided by the builder on 2026-11-17, pending maintainer review.
+  2026-11-17). `refuse`, and the key undeclared, refuse an agent's move to a gated status as before. `ask` puts an
+  agent's edit that moves one record into a gated status to the person through the agent host's permission prompt, with
+  a reason built from values checked against the configuration and the record's cleaned title, and with a receipt row
+  added to the edit; nothing is stored. Where the adapter cannot show the person that prompt, or the session's name is
+  not a login in the gate's group, the edit stays refused and the message says what to do. With `ask`, under
+  `require_evidence` and with no `--actors` file, `urzua check` reports a gated move whose record carries the receipt
+  row for that move at `info`, as unverified; nothing else in the check changes, and CI never reads the row.
+  Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept." The reason's wording and its 80-character title cap, the receipt row's exact text, the sanitising list and refusing the git directory to edit tools were decided by the builder and the orchestrator on 2026-11-17, pending maintainer review.
 - **`editor-hook.pending_pair`** is `allow` or `refuse` (anything else is a load error; `ADR-69` amendment of
   2026-11-16, `MILE-287`). It decides an edit whose only new error findings are `relation.pair-reciprocity` or
   `relation.supersession-reciprocity` findings that one edit of another record would satisfy (the other half of a
@@ -3016,3 +3011,4 @@ proves this configuration produces the three findings.
 > | 2026-11-17 | Bumped to `0.164`. Adds `harness.guardrails.acceptance.in_session` (`refuse`, the default, or `ask`) and `acceptance.approval_minutes` (1 to 1440, default 60): with `ask` an agent's gated move is put to the person through the agent host with its receipt, and a confirmed approval lets the local commit check accept the move with no actors file; CI is unchanged. A configuration that does not declare the key behaves as before (`ADR-101`). The key's name, its values, `approval_minutes` and the permission modes the Claude Code adapter asks in were decided by the builder on 2026-11-17, pending maintainer review. **Why:** `ADR-102`, as amended on 2026-11-17 with the maintainer's acceptance ("I'm happy for you to amend ADR 102. I'll give you my acceptance."): the host asks the person about the edit; an adopting repository reported that its maintainer's approval in chat was refused at the edit and at commit. | **substantive** |
 > | 2026-11-17 | Bumped to `0.165`. `acceptance.in_session: ask` needs the `post-command` guardrail; with it, an uncommitted gated move without a confirmed, unused approval is an error at the local check whatever `require_evidence` says; the receipt is a local record. Decided by the builder on 2026-11-17, pending maintainer review. **Why:** a security review of the pull request that builds it found that never asking was rewarded and that a shell can forge an approval. | **substantive** |
 > | 2026-11-17 | Bumped to `0.166`. With `in_session: ask` a gated move with no approval is judged as without the mode (`require_evidence` decides); only a pending or invalid approval is an error, and a confirmed one satisfies the check. **Why:** the orchestrator withdrew the instruction that made a move with no approval an error, because it blocked a maintainer committing an acceptance he made himself. | **substantive** |
+> | 2026-11-17 | Bumped to `0.167`. `acceptance.in_session: ask` stores nothing: `approval_minutes` and the requirement of `post-command` are removed, and under `require_evidence` a record's receipt row lowers the local finding to info as unverified. **Why:** Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept." | **substantive** |

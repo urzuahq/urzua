@@ -1130,34 +1130,26 @@ decided from the session (silent where nothing governs, refused where the config
 
 ## Amendment (2026-11-17): an approval given at the agent host's prompt is a person's act, and what it proves
 
-`ADR-102`, amended on 2026-11-17 with the maintainer's acceptance ("I'm happy for you to amend ADR 102. I'll give you
-my acceptance."), lets the `acceptance` guardrail put an agent's gated move to the person through the agent host's
-permission prompt instead of refusing it, when the configuration sets `in_session: ask`. Section 4 holds that moving a
-record to a reserved status is a person's act; this amendment states how such an approval stands under it. Everything
-below is decided by the builder on 2026-11-17, pending maintainer review.
+`ADR-102`, amended on 2026-11-17 with the maintainer's acceptance, lets the `acceptance` guardrail put an agent's gated
+move to the person through the agent host's permission prompt instead of refusing it, when the configuration sets
+`in_session: ask`. Approving the prompt writes the edit, with a receipt row in the record's revision log; declining
+writes nothing. Nothing is stored. Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept."
 
-1. **A person's act, recorded as local.** Approving the host's prompt for a gated edit is the person's decision to make
-   that move, as editing the file outside the agent is. The receipt says the move was approved in an agent session, names
-   the person as the host session reported them and where the name was read (`gh` or `git config`), and says it is a
-   local record CI does not rely on. It never says the person edited the file, and never calls the name verified.
-2. **What it shows locally, when nothing forged it.** A confirmed approval under `.git/urzua/approvals` shows that the
-   host's post-edit hook ran for an edit call of that record into that status, from that status and that `HEAD` blob,
-   that the transcript records the call, and that the file holds exactly the approved bytes. The pre-commit check
-   accepts an uncommitted gated move on that basis, once, even under `require_evidence`, and refuses one whose approval
-   is pending or does not hold. A gated move with no approval is judged as without the mode: `require_evidence`
-   decides. The mode therefore adds no local enforcement; it lets the agent's edit tool make the move with the
-   person's answer and a local record.
-3. **What it does not prove.** Which person clicked: the name is whatever `gh` or `git config` reports, held only to
-   being a login in the gate's group. That a person answered: a headless permission-prompt tool, a `PermissionRequest`
-   hook, an SDK permission callback or a `permissions.allow` rule can answer instead, and the payload does not show it.
-   That the approval is genuine at all: the hooks run as the agent's own user, so a shell command can forge one by piping
-   made-up payloads to the hook commands or by writing the files, and with a decider's name in `git config` or a `gh`
-   shim the receipt names that decider. The post-command check reports any approval a shell command created or changed,
-   and the shell's status move, at error level; a shell that also rewrites the transcript or that check's record hides
-   it. The edit tools cannot write a git directory or a `.git` pointer file.
-4. **The control to rely on is unchanged.** The approval lives in the git directory, which no commit carries, so CI never
-   reads it. `diff.decider-required` on the pull request, with the gate action's actors file naming a login in the decider
-   group, is the only control a repository should rely on; a receipt in the record is not evidence there.
+1. **A person's act, recorded as unverified.** Approving the prompt is the person's decision to make that move. The
+   receipt row begins "Recorded as approved in an agent session", names the person as the host session reported them
+   and where the name was read (`gh` or `git config`), and ends "not verified; the pull request check does not rely on
+   it". It never says the person edited the file.
+2. **What it does not prove.** Which person answered, or that a person did: a headless permission-prompt tool, a
+   `PermissionRequest` hook, an SDK permission callback or a `permissions.allow` rule can answer instead, and the name is
+   whatever `gh` or `git config` reports. The row is text in the record, which anything able to edit the record can
+   write.
+3. **The local check.** Unchanged, except that under a local `require_evidence`, with no actors file, a gated move whose
+   record carries the row for that move is reported at `info` as unverified instead of as an error. A repository that
+   relies on local `require_evidence` should not turn the mode on.
+4. **The control is unchanged.** `diff.decider-required` on the pull request, with the gate action's actors file naming a
+   login in the decider group, is the control; CI never reads the row.
+
+The reason's wording and its 80-character title cap, the receipt row's exact text, the sanitising list and refusing the git directory to edit tools were decided by the builder and the orchestrator on 2026-11-17, pending maintainer review.
 
 ## References
 
@@ -1222,3 +1214,4 @@ below is decided by the builder on 2026-11-17, pending maintainer review.
 > | 2026-11-17 | Added an `## Amendment (2026-11-17): an approval given at the agent host's prompt is a person's act, and what it proves`. **Why:** `ADR-102` Consequences require it, and the maintainer accepted the amendment of `ADR-102` on 2026-11-17 ("I'm happy for you to amend ADR 102. I'll give you my acceptance.") that makes the host's prompt the first mechanism; the amendment's content was decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Rewrote the amendment of the same day on approvals given at the agent host's prompt after a security review: the receipt is a local record and names the person as the session reported them, not as verified; the limits of a forgery by shell, what reports it and the one control to rely on are stated in full. **Why:** a security review of the pull request that builds it showed a shell can forge an approval naming a decider; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | In the amendment on approvals given at the agent host's prompt: a gated move with no approval is judged as without the mode, so a person's own edit is not blocked at commit; a pending or invalid approval stays an error. **Why:** the orchestrator withdrew the instruction that made a move with no approval an error, because it blocked a maintainer committing an acceptance he made himself, the pain this work exists to remove. | **substantive** |
+> | 2026-11-17 | Rewrote the amendment on approvals given at the agent host's prompt for the mode with nothing stored. **Why:** Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept." | **substantive** |

@@ -676,12 +676,6 @@ pub fn set_as_of(value: &str) -> Result<(), String> {
         .map_err(|_| "the evaluation date was already fixed for this run".to_string())
 }
 
-/// The real time now, whatever `--as-of` says: for a lifetime measured in
-/// minutes, such as an approval's.
-pub fn wall_clock_unix() -> i64 {
-    Date::unix_now()
-}
-
 fn clock() -> &'static EvaluationClock {
     CLOCK.get_or_init(system_clock)
 }

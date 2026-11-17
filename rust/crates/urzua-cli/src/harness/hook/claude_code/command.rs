@@ -71,9 +71,6 @@ pub fn hook_command(event: &str) -> Option<String> {
         "post-command" => format!(
             r#"{find}[ -n "$found" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the post-command check could NOT run ('"$w"'). {FIX}"}}'; exit 0"#
         ),
-        "post-edit" => format!(
-            r#"{find}[ -n "$found" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the post-edit hook could NOT run ('"$w"'), so an approval given in this session for a gated move was not confirmed and the commit check will refuse it. {FIX}"}}'; exit 0"#
-        ),
         "session-start" => format!(
             r#"{find}[ -n "$found" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the session-start check could NOT run ('"$w"'), so no guardrail can judge an edit in this session. {FIX}","hookSpecificOutput":{{"hookEventName":"SessionStart","additionalContext":"urzua harness: urzua could not run ('"$w"'); no edit is judged in this session. {FIX}"}}}}'; exit 0"#
         ),
