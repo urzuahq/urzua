@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.31'
+Version: '0.32'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c, code:rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:f74589ee7177ccb59ea4bd06f5d0bbff5486d46c857ac018c075158e4f0f6cf4, code:rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e5886132ed49cda81d59ff563f254557b246a58e7b7933ee35b93817ed64eb0b, test:rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:0da9da3db5c789d61e7e7b05a17746bd43239e9faa11f68ea76a67256679ae53
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c, code:rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:d2662dabb8c41ba51b5973d53e2478adcf26765c8a4ec8b13c6d63265108a719, code:rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e5886132ed49cda81d59ff563f254557b246a58e7b7933ee35b93817ed64eb0b, test:rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:4995c87b85e85558e7cd9b402b564343140b84461940534149fd5ac793718e29
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -102,12 +102,14 @@ then, only for a type that declares each, `conditions` (the `declared: when ...`
 status an `authority.gates` entry naming the type lists under `to`, the group that entry names under
 `by`, a list when several entries name the status, and no logins), `field_values` (each field that
 declares values, with them), `revision_log_classes` (`revision_log.classes`) and `checklist` (the
-`statuses.delivery.items` section; `evidence`, each evidence category a tier under `embodiment.tiers`
-declares with that tier's state; `no_tier_declares`, the categories no tier declares; and
+`statuses.delivery.items` section; `categories`, the evidence categories the engine accepts before a
+locator's path; `tiers`, for each category a tier under `embodiment.tiers` declares, that tier's state,
+a category absent from it having no tier declared and nothing said of whether it may be cited; and
 `resolving_tiers`); then `path_gates`, the path gates as declared, without the note. A declared value
 is printed bare; a default keeps its marker object. Each value is the one `--type` prints for the same
-declaration, not a second reading of the configuration. The summary prints each array of scalars on
-one line; `--full` and `--type` print one element per line. Its `next_action` is
+declaration, not a second reading of the configuration. The summary prints each array of scalars and
+each object whose values are all scalars or arrays of scalars on one line, a layout of the same JSON;
+`--full`, `--type` and every other command print one element per line. Its `next_action` is
 `urzua explain --type <name>`.
 
 `urzua explain --types --full` prints every declaration of every type, `rules_set_in_configuration`
@@ -147,12 +149,13 @@ that declares `statuses.delivery.items`: the items `section` and `evidence_marke
 (`locator::CATEGORIES`); `evidence_tiers`, for each category the first `embodiment.tiers` entry whose
 `evidence` names it, with its state, its line and `in_resolving_tiers`, whether that state is listed in
 `resolving_tiers` (a configuration that declares no `embodiment` shows the engine's built-in tiers marked
-as a default, and a category no tier declares carries `no_tier_declares_it`); `resolving_tiers`, as
+as a default, and a category no tier declares carries `tier: null` and a `note` saying that no entry of
+`embodiment.tiers` declares it); `resolving_tiers`, as
 declared under `items`, else the type's `delivered_tiers` marked as a default, the value the engine's
-own `DeliveryDecl::resolving_tiers` returns; and `locator_form`, one fixed sentence built from the
-engine's locator grammar (`locator::GRAMMAR`). It states what is declared and describes no resolution
-rule: which files an item's locators must name, and when a tier counts, are decided by the rule that
-reads the clause. `aliases` lists each YAML alias
+own `DeliveryDecl::resolving_tiers` returns. It states what is declared and describes no resolution
+rule and no form of a locator: which files an item's locators must name, and when a tier counts, are
+decided by the rule that reads the clause, and the engine states the `<category>:` form in no single
+place a report could copy it from. `aliases` lists each YAML alias
 under the type with the line of its anchor (`defined_at`), once per alias. Every other declared key
 of the type is printed raw under its own name as `{value, at}`; relation pairs appear as declared
 under `repository`.
@@ -303,3 +306,5 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` f2c2e4ac96a5 -> 8d269478bbb2, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 6fc69e681902 -> 22004fd62300. Reason: explain_types.rs: create_command is shell-quoted, an undeclared initial is not printed, each header field lists the relation pairs declaring it, pair_target_types names its pair, the summary's path_gates drops the note, the note reads as a declaration; explain_types_integration.rs: tests follow, including six identity-pattern rows run through urzua new **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.31`. The `urzua explain --types` summary carries, for a type that declares each, `gated` (group per status, from the gates naming the type), `field_values`, `conditions` as the declared sentences in place of a count, `revision_log_classes` and a `checklist` marker; `--type` carries `checklist` with each evidence category, the tier a configuration declares for it, and whether that tier is listed in `resolving_tiers`, from the engine's category list and locator grammar; the summary prints scalar arrays on one line; `template` carries `exists_when_run` and is printed whether or not the file exists. **Why:** `MILE-340`; an adopting repository reported that the summary omitted the declarations it had got wrong; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` 8d269478bbb2 -> f74589ee7177, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 22004fd62300 -> 0da9da3db5c7. Reason: explain_types.rs: the summary gains gated, field_values, revision_log_classes and a checklist marker and prints condition sentences in place of their count, each from a helper shared with the --type detail (condition_rules, gated, checklist, evidence_tiers, resolving_tiers); --type gains checklist with the engine's evidence categories and locator grammar; template is printed with exists_when_run whether or not the file exists; run() prints the summary through emit_compact. explain_types_integration.rs: updated for the condition sentences and the template entry, and new tests for each addition present and absent, summary equal to detail, line numbers, defaults, formatting and sizes (plus the checklist.yaml fixture). The claims this spec states about explain --types and --type still hold and the spec text is updated in this change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.32`. The summary prints each object whose values are all scalars or arrays of scalars on one line, beside the arrays of scalars, and its `checklist` carries `categories` and `tiers` in place of `evidence` and `no_tier_declares`; `--type` prints a category no tier declares as `tier: null` with a `note`, and no longer prints a sentence on how a locator is written, because the engine's grammar does not contain the `<category>:` form. **Why:** `MILE-340`; the maintainer chose the layout of the summary and asked that nothing retype engine behaviour, 2026-11-17; the choice of key names is decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` f74589ee7177 -> d2662dabb8c4, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 0da9da3db5c7 -> 4995c87b85e8. Reason: explain_types.rs: the summary's checklist carries categories and tiers (no evidence or no_tier_declares), --type prints a category no tier declares as tier null with a note and no locator_form sentence; the compact summary printing and its tests are in compact_json.rs and main.rs. explain_types_integration.rs: tests for the summary equal to its pretty form, flat objects on one line, --full, --type and graph as before but for exists_when_run, the checklist keys; new golden fixtures. The claims this spec states about explain --types and --type still hold; the spec text is updated in this change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

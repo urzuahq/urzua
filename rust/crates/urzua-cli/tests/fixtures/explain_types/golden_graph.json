@@ -1,0 +1,14 @@
+{
+  "status": "ok",
+  "edges": [],
+  "population": {
+    "unit": "record",
+    "eligible": 0,
+    "examined": 0,
+    "out_of_scope": 0,
+    "unreadable": 0
+  },
+  "next_action": null,
+  "next_action_reason": null,
+  "next_action_inputs": []
+}

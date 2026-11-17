@@ -309,11 +309,13 @@ for a type only when the type declares it, copied from the same declaration `--t
   that entry names under `by` (a list when several entries name the status); no logins.
 - `field_values`: each field that declares `field_values`, with its values.
 - `revision_log_classes`: the classes the type declares under `revision_log.classes`.
-- `checklist`: the type declares `statuses.delivery.items`: its `section`; `evidence`, each evidence
-  category that a tier under `embodiment.tiers` declares (`evidence:`) with that tier's state;
-  `no_tier_declares`, the categories no tier declares; and `resolving_tiers`.
+- `checklist`: the type declares `statuses.delivery.items`: its `section`; `categories`, the evidence
+  categories the engine accepts before a locator's path; `tiers`, for each category that a tier under
+  `embodiment.tiers` declares (`evidence:`), that tier's state (a category absent from `tiers` has no
+  tier declared for it; that says nothing about whether it may be cited); and `resolving_tiers`.
 
-The summary prints each array of scalars on one line; `--full` and `--type` print one element per line.
+The summary prints each array of scalars and each object whose values are all scalars or arrays of
+scalars on one line; `--full`, `--type` and every other command print one element per line.
 
 With `--types --full`, or `--type <name>` for one type (always full; `--type <name> --full` and
 `--full` alone exit 2 and name the command to run): every declaration, each with `at`
@@ -326,8 +328,8 @@ setting's level as written), `conditions` (keys, a `declared: ...` sentence, `co
 requirement), `checklist` (when the type declares `statuses.delivery.items`: the `section` and
 `evidence_marker`, the engine's `evidence_categories`, for each category the tier an
 `embodiment.tiers` entry declares for it with its line and whether the tier is listed in
-`resolving_tiers`, or `no_tier_declares_it`, the `resolving_tiers` declared or, marked as a default,
-the type's `delivered_tiers`, and one sentence from the engine's grammar on how a locator is written;
+`resolving_tiers`, or `tier: null` with a `note` that no `embodiment.tiers` entry declares that
+category, and the `resolving_tiers` declared or, marked as a default, the type's `delivered_tiers`;
 no resolution rule is described), `gates` (only gates declared for the type by name), `aliases` (each alias with its
 anchor's line, once per alias), and every other declared key raw under its own name.
 `create_command` can still be refused for the given title (the identity pattern is fitted to the real

@@ -12,13 +12,13 @@ const FIXTURE: &str = include_str!("fixtures/explain_types/config.yaml");
 const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 
 /// The summary of the three-type fixture, as printed, stays under this many bytes.
-const MAX_SUMMARY_BYTES: usize = 1_900;
+const MAX_SUMMARY_BYTES: usize = 1_700;
 /// The summary of the fixture declaring every added key stays under this many bytes.
-const MAX_CHECKLIST_SUMMARY_BYTES: usize = 1_500;
+const MAX_CHECKLIST_SUMMARY_BYTES: usize = 1_400;
 /// The full report of the three-type fixture stays under this many bytes.
 const MAX_FULL_BYTES: usize = 10_800;
 /// The summary of this repository's own configuration stays under this many bytes.
-const MAX_OWN_SUMMARY_BYTES: usize = 6_200;
+const MAX_OWN_SUMMARY_BYTES: usize = 5_600;
 
 fn repo(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-explain-types-{name}"));
@@ -901,10 +901,10 @@ fn the_summary_carries_what_a_type_declares_to_gate_constrain_and_log() {
         task["checklist"],
         json!({
             "section": "Acceptance",
-            "evidence": {"code": "Implemented", "record": "Decided", "spec": "Specified", "test": "Verified"},
+            "categories": ["spec", "code", "test", "record"],
+            "tiers": {"code": "Implemented", "record": "Decided", "spec": "Specified", "test": "Verified"},
             "resolving_tiers": ["Implemented", "Verified", "Decided"]
-        }),
-        "every category has a declared tier, so none is listed as without one"
+        })
     );
 }
 
@@ -988,13 +988,11 @@ fn the_summary_values_are_the_detail_values() {
     );
     for row in checklist["evidence_tiers"].as_array().unwrap() {
         let category = row["category"].as_str().unwrap();
-        match row.get("tier") {
-            Some(tier) => assert_eq!(summary["checklist"]["evidence"][category], *tier),
-            None => assert!(summary["checklist"]["no_tier_declares"]
-                .as_array()
-                .unwrap()
-                .contains(&row["category"])),
-        }
+        assert_eq!(summary["checklist"]["tiers"][category], row["tier"]);
+        assert!(summary["checklist"]["categories"]
+            .as_array()
+            .unwrap()
+            .contains(&row["category"]));
     }
 }
 
@@ -1043,9 +1041,10 @@ fn a_checklist_names_its_categories_tiers_and_where_each_is_declared() {
         c["resolving_tiers"]["value"],
         json!(["Implemented", "Verified", "Decided"])
     );
-    let form = c["locator_form"]["value"].as_str().unwrap();
-    assert!(form.contains("`<category>:<locator>`") && form.contains("path[#scope][@anchor]"));
-    assert_eq!(c["locator_form"]["source"], "engine_locator_grammar");
+    assert!(
+        c.get("locator_form").is_none(),
+        "the engine states no `<category>:` form in one place, so none is printed"
+    );
 }
 
 #[test]
@@ -1073,48 +1072,142 @@ fn without_declared_tiers_or_resolving_tiers_the_engines_are_shown_as_defaults()
     assert_eq!(code["source"], "built_in_embodiment_tiers");
     assert!(code.get("at").is_none());
     let record = rows.iter().find(|r| r["category"] == "record").unwrap();
-    assert_eq!(record["no_tier_declares_it"], true);
+    assert_eq!(record["tier"], Value::Null);
+    assert_eq!(
+        record["note"],
+        "no entry of `embodiment.tiers` declares `evidence: record`"
+    );
     let s = summary_of(&dir);
     let marker = &of(&s, "task")["checklist"];
     assert_eq!(
         marker["resolving_tiers"],
         json!({"value": ["Implemented", "Verified"], "default": true, "source": "delivered_tiers"})
     );
-    assert_eq!(marker["evidence"]["default"], true);
-    assert_eq!(marker["no_tier_declares"], json!(["record"]));
+    assert_eq!(marker["tiers"]["default"], true);
+    assert_eq!(marker["tiers"]["source"], "built_in_embodiment_tiers");
+    assert_eq!(
+        marker["categories"],
+        json!(["spec", "code", "test", "record"])
+    );
+    assert!(marker.get("no_tier_declares").is_none());
+}
+
+fn stdout_of(dir: &Path, args: &[&str]) -> String {
+    String::from_utf8(
+        common::urzua()
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+}
+
+/// No block that opens a container is left in several lines when it holds
+/// only scalars or arrays of scalars: such a block's member lines open
+/// nothing of their own.
+fn assert_flat_blocks_are_inline(text: &str) {
+    let lines: Vec<&str> = text.lines().collect();
+    for (i, open) in lines.iter().enumerate() {
+        if !open.ends_with('{') && !open.ends_with('[') {
+            continue;
+        }
+        let indent = open.len() - open.trim_start().len();
+        let inner = lines[i + 1..]
+            .iter()
+            .take_while(|l| l.len() - l.trim_start().len() > indent)
+            .collect::<Vec<_>>();
+        let nests = inner.iter().any(|l| {
+            l.ends_with('{')
+                || l.ends_with('[')
+                || l.trim_start().starts_with(['{', '['])
+                || l.contains("\": {")
+        });
+        assert!(nests || indent == 0, "a flat block stays open: {open}");
+    }
 }
 
 #[test]
-fn the_summary_puts_scalar_arrays_on_one_line_and_the_other_outputs_do_not() {
-    let dir = repo("format", FIXTURE);
-    let text = |args: &[&str]| {
-        String::from_utf8(
-            common::urzua()
-                .args(args)
-                .current_dir(&dir)
-                .output()
-                .unwrap()
-                .stdout,
-        )
-        .unwrap()
-    };
-    let summary = text(&["explain", "--types"]);
-    assert!(
-        summary.contains("\"dirs\": [\"docs/issues\", \"docs/issues-archive\"],"),
-        "{summary}"
-    );
-    serde_json::from_str::<Value>(&summary).unwrap();
-    assert_eq!(summary, text(&["explain", "--types"]), "deterministic");
-    for args in [
-        &["explain", "--types", "--full"][..],
-        &["explain", "--type", "issue"][..],
+fn the_summary_is_the_same_data_as_its_pretty_form_on_fewer_lines() {
+    for (name, config, golden) in [
+        (
+            "format-fixture",
+            FIXTURE,
+            include_str!("fixtures/explain_types/golden_summary_pretty.json"),
+        ),
+        (
+            "format-declared",
+            CHECKLIST,
+            include_str!("fixtures/explain_types/golden_summary_checklist_pretty.json"),
+        ),
     ] {
-        let t = text(args);
-        assert!(
-            t.contains("\"value\": [\n"),
-            "{args:?} keeps one element per line"
+        let dir = repo(name, config);
+        let compact = stdout_of(&dir, &["explain", "--types"]);
+        assert_eq!(
+            serde_json::from_str::<Value>(&compact).unwrap(),
+            serde_json::from_str::<Value>(golden).unwrap(),
+            "{name}: the compact summary and the pretty form are one value"
         );
+        assert!(
+            compact.lines().count() * 2 < golden.lines().count(),
+            "{name}"
+        );
+        assert_eq!(
+            compact,
+            stdout_of(&dir, &["explain", "--types"]),
+            "deterministic"
+        );
+        assert_flat_blocks_are_inline(&compact);
     }
+}
+
+#[test]
+fn the_summary_prints_flat_objects_and_scalar_arrays_on_one_line() {
+    let dir = repo("format-lines", CHECKLIST);
+    let summary = stdout_of(&dir, &["explain", "--types"]);
+    for line in [
+        "\"dirs\": [\"docs/tasks\"],",
+        "\"field_values\": {\"Kind\": [\"feature\", \"fix\"]},",
+        "\"gated\": {\"Done\": [\"owners\", \"leads\"], \"WontDo\": \"leads\"},",
+        "\"prefix\": \"TASK\",",
+    ] {
+        assert!(summary.contains(line), "{line} in {summary}");
+    }
+    let note = stdout_of(&repo("format-default", FIXTURE), &["explain", "--types"]);
+    assert!(
+        note.contains("\"prefix\": {\"default\": true, \"source\": \"type_name_uppercased\", \"value\": \"TASK\"},"),
+        "{note}"
+    );
+}
+
+#[test]
+fn full_type_and_another_command_print_as_they_did() {
+    let dir = repo("unchanged", FIXTURE);
+    for t in ["issue", "task", "note"] {
+        std::fs::write(dir.join(format!(".urzua/templates/{t}.md")), "# {title}\n").unwrap();
+    }
+    let without_exists = |text: String| {
+        text.lines()
+            .filter(|l| l.trim() != "\"exists_when_run\": true,")
+            .map(|l| format!("{l}\n"))
+            .collect::<String>()
+    };
+    assert_eq!(
+        without_exists(stdout_of(&dir, &["explain", "--types", "--full"])),
+        include_str!("fixtures/explain_types/golden_full.json"),
+        "--full is the output before this change, but for the one added key"
+    );
+    assert_eq!(
+        without_exists(stdout_of(&dir, &["explain", "--type", "issue"])),
+        include_str!("fixtures/explain_types/golden_type_issue.json"),
+        "--type is the output before this change, but for the one added key"
+    );
+    assert_eq!(
+        stdout_of(&dir, &["graph"]),
+        include_str!("fixtures/explain_types/golden_graph.json"),
+        "another command is byte-identical to before"
+    );
 }
 
 #[test]

@@ -1,0 +1,124 @@
+{
+  "status": "ok",
+  "config": ".urzua/config.yaml",
+  "path_gates": [
+    {
+      "at": "authority.gates[1]:54",
+      "by": "owners",
+      "paths": [
+        "docs/notes"
+      ]
+    }
+  ],
+  "types": [
+    {
+      "at": "record_types.issue:3",
+      "conditions": [
+        "declared: when State is Closed and Kind is bug, Severity is required",
+        "declared: when State is Open, Fixes is forbidden"
+      ],
+      "dirs": [
+        "docs/issues",
+        "docs/issues-archive"
+      ],
+      "field_values": {
+        "Kind": [
+          "bug",
+          "chore"
+        ],
+        "Severity": [
+          "low",
+          "high"
+        ]
+      },
+      "gated": {
+        "Dropped": "owners"
+      },
+      "name": "issue",
+      "optional": [
+        "Severity",
+        "Fixes",
+        "See-also",
+        "Opened"
+      ],
+      "prefix": "ISS",
+      "references": {
+        "Fixes": [
+          "task"
+        ]
+      },
+      "required": [
+        "State",
+        "Kind",
+        "Stable-Id"
+      ],
+      "states": {
+        "initial": [
+          "Open"
+        ],
+        "values": [
+          "Open",
+          "Closed",
+          "Dropped"
+        ]
+      }
+    },
+    {
+      "at": "record_types.note:40",
+      "dirs": [
+        "docs/notes"
+      ],
+      "name": "note",
+      "prefix": {
+        "default": true,
+        "source": "type_name_uppercased",
+        "value": "NOTE"
+      },
+      "required": [
+        "Stable-Id"
+      ]
+    },
+    {
+      "at": "record_types.task:31",
+      "dirs": [
+        "docs/tasks"
+      ],
+      "name": "task",
+      "optional": [
+        "Depends-on",
+        "Blocks"
+      ],
+      "prefix": {
+        "default": true,
+        "source": "type_name_uppercased",
+        "value": "TASK"
+      },
+      "references": {
+        "Blocks": "any",
+        "Depends-on": [
+          "task"
+        ]
+      },
+      "required": [
+        "Status",
+        "Stable-Id"
+      ],
+      "states": {
+        "values": [
+          "Todo",
+          "Doing",
+          "Done"
+        ]
+      }
+    }
+  ],
+  "next_action": "urzua explain --type <name>",
+  "next_action_reason": "one type's full declaration",
+  "next_action_inputs": [
+    {
+      "placeholder": "<name>",
+      "flag": "--type",
+      "means": "a `name` from `types`"
+    }
+  ]
+}

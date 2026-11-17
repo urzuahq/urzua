@@ -1,0 +1,96 @@
+{
+  "status": "ok",
+  "config": ".urzua/config.yaml",
+  "types": [
+    {
+      "at": "record_types.note:34",
+      "dirs": [
+        "docs/notes"
+      ],
+      "name": "note",
+      "prefix": {
+        "default": true,
+        "source": "type_name_uppercased",
+        "value": "NOTE"
+      },
+      "required": [
+        "Stable-Id"
+      ]
+    },
+    {
+      "at": "record_types.task:3",
+      "checklist": {
+        "categories": [
+          "spec",
+          "code",
+          "test",
+          "record"
+        ],
+        "resolving_tiers": [
+          "Implemented",
+          "Verified",
+          "Decided"
+        ],
+        "section": "Acceptance",
+        "tiers": {
+          "code": "Implemented",
+          "record": "Decided",
+          "spec": "Specified",
+          "test": "Verified"
+        }
+      },
+      "conditions": [
+        "declared: when Status is Done and Kind is fix, Author is required"
+      ],
+      "dirs": [
+        "docs/tasks"
+      ],
+      "field_values": {
+        "Kind": [
+          "feature",
+          "fix"
+        ]
+      },
+      "gated": {
+        "Done": [
+          "owners",
+          "leads"
+        ],
+        "WontDo": "leads"
+      },
+      "name": "task",
+      "prefix": "TASK",
+      "required": [
+        "Status",
+        "Kind",
+        "Date",
+        "Author",
+        "Stable-Id"
+      ],
+      "revision_log_classes": [
+        "major",
+        "minor"
+      ],
+      "states": {
+        "initial": [
+          "Open"
+        ],
+        "values": [
+          "Open",
+          "InProgress",
+          "Done",
+          "WontDo"
+        ]
+      }
+    }
+  ],
+  "next_action": "urzua explain --type <name>",
+  "next_action_reason": "one type's full declaration",
+  "next_action_inputs": [
+    {
+      "placeholder": "<name>",
+      "flag": "--type",
+      "means": "a `name` from `types`"
+    }
+  ]
+}

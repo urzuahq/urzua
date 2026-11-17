@@ -12,7 +12,7 @@ use std::process::ExitCode;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use urzua_core::config::{Config, RecordTypeConfig};
-use urzua_core::locator::{CATEGORIES, GRAMMAR};
+use urzua_core::locator::CATEGORIES;
 use urzua_core::report::{ActionInput, Failure, NextAction, Notice, Report, ReportStatus};
 use urzua_core::rules::RULE_EMBODIMENT_CLAIM_EXPIRED;
 use urzua_core::status_model::{DeliveryDecl, StatusDecl, StatusFieldRule};
@@ -242,12 +242,6 @@ fn obj(pairs: Vec<(&str, Value)>) -> Value {
 
 /// An evidence category and the first tier that declares it, with that tier's position.
 type EvidenceRow<'a> = (&'static str, Option<(usize, &'a str)>);
-
-/// The one sentence on how a locator is written, from the engine's own
-/// grammar.
-fn locator_form() -> String {
-    format!("a locator is written `<category>:<locator>`; <locator> is {GRAMMAR}")
-}
 
 /// A declared value without its position; a marked default keeps its marker.
 fn bare(v: Value) -> Value {
@@ -872,7 +866,11 @@ impl Ctx<'_> {
         let rows: Vec<Value> = rows
             .into_iter()
             .map(|(category, tier)| match tier {
-                None => json!({"category": category, "no_tier_declares_it": true}),
+                None => json!({
+                    "category": category,
+                    "tier": null,
+                    "note": format!("no entry of `embodiment.tiers` declares `evidence: {category}`"),
+                }),
                 Some((i, state)) => {
                     let mut row = json!({
                         "category": category,
@@ -904,39 +902,30 @@ impl Ctx<'_> {
             ),
             ("evidence_tiers", Value::from(rows)),
             ("resolving_tiers", resolving),
-            (
-                "locator_form",
-                json!({"value": locator_form(), "source": "engine_locator_grammar"}),
-            ),
         ])
     }
 
-    /// The summary's checklist marker: the section, each category that has a
-    /// declared tier with that tier, the categories that have none, and the
-    /// tiers listed as resolving, each read from the same rows as `checklist`.
+    /// The summary's checklist marker: the section, the engine's categories,
+    /// the tier declared for each category that has one, and the tiers listed
+    /// as resolving, each read from the same rows as `checklist`.
     fn checklist_summary(&self, name: &str, d: &StatusDecl) -> Value {
         let Some((delivery, items, path)) = self.items_decl(name, d) else {
             return Value::Null;
         };
         let (rows, declared) = self.evidence_tiers();
-        let evidence: Map<String, Value> = rows
+        let tiers: Map<String, Value> = rows
             .iter()
             .filter_map(|(c, t)| t.map(|(_, state)| (c.to_string(), Value::from(state))))
             .collect();
-        let no_tier: Vec<&str> = rows
-            .iter()
-            .filter(|(_, t)| t.is_none())
-            .map(|(c, _)| *c)
-            .collect();
-        let evidence = if declared {
-            Value::Object(evidence)
+        let tiers = if declared {
+            Value::Object(tiers)
         } else {
-            json!({"value": evidence, "default": true, "source": "built_in_embodiment_tiers"})
+            json!({"value": tiers, "default": true, "source": "built_in_embodiment_tiers"})
         };
         obj(vec![
             ("section", json!(items.section)),
-            ("evidence", evidence),
-            ("no_tier_declares", json!(no_tier)),
+            ("categories", json!(CATEGORIES)),
+            ("tiers", tiers),
             (
                 "resolving_tiers",
                 bare(self.resolving_tiers(delivery, &path)),
