@@ -4,7 +4,7 @@
 //! from a cwd outside the repository is still judged, paths match case
 //! insensitively, an edit through a symlink is judged as its target, and
 //! `export`/`import` name their format. Real git repositories, the real
-//! binary and the real translator. Needs `git`, `python3` and `sh`.
+//! binary and its hook command. Needs `git`, `python3` and `sh`.
 
 mod common;
 
@@ -244,13 +244,8 @@ fn a_forgotten_commit_falls_back_to_head_without_failing() {
 
 // ------------------------------------------- 3. the adapter fails closed
 
-fn translator() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("bundle/claude-code/files/.claude/hooks/urzua-claude-code.py")
-}
-
-/// The translator run the way the settings command runs it, with `engine` as the
-/// command after `--`.
+/// The editor hook run the way the settings command runs it, with `engine` as
+/// the engine (`urzua harness run edit`, or a stand-in).
 fn translate(dir: &Path, payload: &str, engine: &[&str]) -> serde_json::Value {
     translate_home(dir, payload, engine, None)
 }
@@ -262,17 +257,9 @@ fn translate_home(
     engine: &[&str],
     home: Option<&Path>,
 ) -> serde_json::Value {
-    let mut c = Command::new("python3");
-    if let Some(home) = home {
-        c.env("HOME", home);
-    }
-    c.arg("-I")
-        .arg(translator())
-        .args(["edit", "--"])
-        .args(engine)
-        .current_dir(dir)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
-    let out = run_with_stdin(&mut c, payload);
+    let envs: Vec<(&str, &std::ffi::OsStr)> =
+        home.map(|h| ("HOME", h.as_os_str())).into_iter().collect();
+    let out = common::run_hook(dir, "edit", payload, common::engine_or_own(engine), None, &envs);
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     // An allowed call prints nothing.
     if out.stdout.is_empty() {
@@ -545,36 +532,20 @@ fn export_and_import_require_a_format_and_the_help_says_which_is_implemented() {
 // --------------------------- the drafting helper's binary variable, the docs
 
 #[test]
-fn the_drafting_helper_honours_urzua_bin_and_still_accepts_urzua() {
+fn the_drafting_steps_run_the_binary_itself_with_no_script_and_no_variable() {
     let dir = fixture("helper-bin", &config(""));
-    let helper = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("bundle/claude-code/files/.claude/hooks/urzua-record.sh");
-    let fake = dir.join("fake-urzua");
-    std::fs::write(
-        &fake,
-        "#!/bin/sh\necho called >> \"$0.log\"\necho '{\"path\": \"x.md\"}'\n",
-    )
-    .unwrap();
-    bash(&dir, "chmod +x fake-urzua");
-    for var in ["URZUA_BIN", "URZUA"] {
-        let _ = std::fs::remove_file(dir.join("fake-urzua.log"));
-        let out = Command::new("bash")
-            .arg(&helper)
-            .args(["new", "adr", "T"])
-            .current_dir(&dir)
-            .env("PATH", "/usr/bin:/bin")
-            .env_remove("URZUA_BIN")
-            .env_remove("URZUA")
-            .env(var, &fake)
-            .output()
-            .unwrap();
-        let err = String::from_utf8_lossy(&out.stderr);
-        assert!(!err.contains("no urzua binary"), "{var}: {err}");
-        assert!(
-            dir.join("fake-urzua.log").exists(),
-            "{var} was not used: {err}"
-        );
-    }
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "record", "new", "adr", "T"])
+        .current_dir(&dir)
+        .env("PATH", "/usr/bin:/bin")
+        .env_remove("URZUA_BIN")
+        .env_remove("URZUA")
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(text.contains("\"path\""), "{text}");
+    assert!(!dir.join(".claude/hooks").exists());
 }
 
 #[test]
@@ -781,14 +752,7 @@ fn an_mcp_write_it_cannot_judge_applies_on_unjudged_only_to_a_gated_or_protected
             serde_json::json!({"title": "t", "body": "b"}),
         ),
     ] {
-        let mut c = Command::new("python3");
-        c.arg("-I")
-            .arg(translator())
-            .args(["edit", "--"])
-            .args(ENGINE)
-            .current_dir(&dir)
-            .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
-        let out = run_with_stdin(&mut c, &mcp(&dir, tool, input));
+        let out = common::run_hook(&dir, "edit", &mcp(&dir, tool, input), None, None, &[]);
         assert_eq!(out.status.code(), Some(0));
         assert!(out.stdout.is_empty(), "{tool}: {out:?}");
     }
@@ -1865,15 +1829,8 @@ fn every_urzua_mcp_tool_is_left_alone_by_the_editor_hook_even_when_it_names_a_ga
     for name in names {
         let tool = format!("mcp__urzua__{name}");
         for target in [PATH_1, ".claude/settings.json"] {
-            let mut c = Command::new("python3");
-            c.arg("-I")
-                .arg(translator())
-                .args(["edit", "--"])
-                .args(ENGINE)
-                .current_dir(&dir)
-                .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
             let input = serde_json::json!({"path": abs(target), "id": "ADR-1"});
-            let out = run_with_stdin(&mut c, &mcp(&dir, &tool, input));
+            let out = common::run_hook(&dir, "edit", &mcp(&dir, &tool, input), None, None, &[]);
             assert_eq!(out.status.code(), Some(0), "{tool}: {out:?}");
             assert!(
                 out.stdout.is_empty(),
@@ -1929,26 +1886,15 @@ fn run_edit_raw(dir: &Path, raw: &str) -> (i32, serde_json::Value) {
     (out.status.code().unwrap(), json(&out))
 }
 
-/// A copy of the translator installed in `dir` (`<dir>/.claude/hooks/`), so its
-/// project directory is `dir`.
+/// The session's project for the hook (`CLAUDE_PROJECT_DIR`): `dir`.
 fn install_translator(dir: &Path) -> PathBuf {
-    let hooks = dir.join(".claude/hooks");
-    std::fs::create_dir_all(&hooks).unwrap();
-    let script = hooks.join("urzua-claude-code.py");
-    std::fs::copy(translator(), &script).unwrap();
-    script
+    dir.to_path_buf()
 }
 
-/// The installed translator run with `payload`, from `process_cwd`.
-fn translate_installed(script: &Path, process_cwd: &Path, payload: &str) -> serde_json::Value {
-    let mut c = Command::new("python3");
-    c.arg("-I")
-        .arg(script)
-        .args(["edit", "--"])
-        .args(ENGINE)
-        .current_dir(process_cwd)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
-    let out = run_with_stdin(&mut c, payload);
+/// The editor hook of the session whose project is `project`, run with
+/// `payload` from `process_cwd`.
+fn translate_installed(project: &Path, process_cwd: &Path, payload: &str) -> serde_json::Value {
+    let out = common::run_hook(process_cwd, "edit", payload, None, Some(project), &[]);
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     if out.stdout.is_empty() {
         return serde_json::Value::Null;
@@ -2150,12 +2096,14 @@ fn the_translator_runs_the_engine_in_the_project_directory_when_the_payload_cwd_
         "tool_input": {"file_path": "notes.txt", "content": "x"},
     })
     .to_string();
-    let mut c = Command::new("python3");
-    c.arg("-I")
-        .arg(&script)
-        .args(["edit", "--", "urzua-no-such-binary"])
-        .current_dir(&elsewhere);
-    let out = run_with_stdin(&mut c, &payload);
+    let out = common::run_hook(
+        &elsewhere,
+        "edit",
+        &payload,
+        Some(&["urzua-no-such-binary"]),
+        Some(&script),
+        &[],
+    );
     let v = json(&out);
     assert_eq!(decision(&v), Some("deny"), "{v}");
     // An open configuration allows it with a notice.

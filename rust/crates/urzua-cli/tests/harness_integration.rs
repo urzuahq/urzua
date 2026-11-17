@@ -1,6 +1,6 @@
 //! MILE-198, ADR-89: `urzua harness` installs an agent harness bundle and runs
 //! its cores. Real git-repo fixtures, the real binary; all output is JSON.
-//! Needs `python3` and `sh` (the adapter's translator runs under it); a missing
+//! Needs `sh` and `awk` (the hook command's fallback runs under them); a missing
 //! tool fails a test, never skips it.
 
 mod common;
@@ -101,7 +101,8 @@ fn state_of(v: &serde_json::Value, needle: &str) -> String {
         .to_string()
 }
 
-const TRANSLATOR: &str = ".claude/hooks/urzua-claude-code.py";
+/// A file the install owns: a generated command.
+const OWNED: &str = ".claude/commands/done.md";
 const SETTINGS: &str = ".claude/settings.json";
 const LOCK: &str = ".urzua/harness.lock";
 
@@ -117,16 +118,17 @@ fn install_writes_the_translator_settings_block_and_lock_and_dry_run_writes_noth
     let (code, dry) = harness(&dir, &["install", "--dry-run"]);
     assert_eq!(code, 0, "{dry}");
     assert_eq!(dry["dry_run"], true);
-    for rel in [TRANSLATOR, SETTINGS, LOCK] {
+    for rel in [OWNED, SETTINGS, LOCK] {
         assert!(!dir.join(rel).exists(), "{rel} was written by a dry run");
     }
     assert_eq!(read(&dir, "AGENTS.md"), AGENTS);
 
     let v = install(&dir);
     assert_eq!(v["status"], "ok");
-    for rel in [TRANSLATOR, SETTINGS, LOCK] {
+    for rel in [OWNED, SETTINGS, LOCK] {
         assert!(dir.join(rel).is_file(), "{rel}");
     }
+    assert!(!dir.join(".claude/hooks").exists(), "nothing executable is installed");
     // The dry run listed the same things the install did.
     let paths = |v: &serde_json::Value| {
         let mut p: Vec<String> = states(v).into_iter().map(|(p, _)| p).collect();
@@ -144,13 +146,13 @@ fn install_writes_the_translator_settings_block_and_lock_and_dry_run_writes_noth
     // The merged settings run the engine, not a script of the repository.
     let settings = read(&dir, SETTINGS);
     assert!(
-        settings.contains("urzua harness run edit")
-            && settings.contains("urzua harness run session-start")
+        settings.contains("urzua harness hook claude-code edit")
+            && settings.contains("urzua harness hook claude-code session-start")
     );
     assert!(settings.contains("Write|Edit|MultiEdit"));
     let lock = read(&dir, LOCK);
     assert!(
-        lock.contains("\"claude-code\"") && lock.contains(TRANSLATOR) && lock.contains("sha256:")
+        lock.contains("\"claude-code\"") && lock.contains(OWNED) && lock.contains("words-sha256:")
     );
 }
 
@@ -158,7 +160,7 @@ fn install_writes_the_translator_settings_block_and_lock_and_dry_run_writes_noth
 fn a_second_install_changes_nothing_byte_for_byte() {
     let dir = fixture("idempotent", &config(""));
     install(&dir);
-    let before: Vec<String> = [TRANSLATOR, SETTINGS, LOCK, "AGENTS.md"]
+    let before: Vec<String> = [OWNED, SETTINGS, LOCK, "AGENTS.md"]
         .iter()
         .map(|r| read(&dir, r))
         .collect();
@@ -169,7 +171,7 @@ fn a_second_install_changes_nothing_byte_for_byte() {
             .all(|(_, s)| s == "unchanged" || s == "written"),
         "{v}"
     );
-    let after: Vec<String> = [TRANSLATOR, SETTINGS, LOCK, "AGENTS.md"]
+    let after: Vec<String> = [OWNED, SETTINGS, LOCK, "AGENTS.md"]
         .iter()
         .map(|r| read(&dir, r))
         .collect();
@@ -189,17 +191,15 @@ fn an_absent_harness_key_installs_and_enables_nothing() {
             .contains("nothing was installed"),
         "{v}"
     );
-    for rel in [TRANSLATOR, SETTINGS, LOCK] {
+    for rel in [OWNED, SETTINGS, LOCK] {
         assert!(!dir.join(rel).exists());
     }
-    // The core judges nothing: the guardrail is not enabled, and it says so.
+    // The core judges nothing: the guardrail is off by the configuration's
+    // choice, so the edit is allowed and nothing is said about it.
     let (code, verdict) = edit(&dir, PATH_1, RECORD, "agent", &[]);
     assert_eq!(code, 0);
-    assert_eq!(verdict["verdict"], "allow-unjudged", "{verdict}");
-    assert!(
-        verdict["message"].as_str().unwrap().contains("not enabled"),
-        "{verdict}"
-    );
+    assert_eq!(verdict["verdict"], "allow", "{verdict}");
+    assert_eq!(verdict["message"], "", "{verdict}");
 }
 
 #[test]
@@ -210,7 +210,7 @@ fn the_adapters_command_lists_the_adapter_directories_of_the_bundle() {
     let adapters = v["adapters"].as_array().unwrap();
     assert_eq!(adapters.len(), 1);
     assert_eq!(adapters[0]["name"], "claude-code");
-    assert_eq!(adapters[0]["files"][0], TRANSLATOR);
+    assert!(adapters[0]["files"].as_array().unwrap().is_empty(), "{v}");
     assert!(adapters[0]["provides"]
         .as_array()
         .unwrap()
@@ -367,7 +367,7 @@ fn an_existing_settings_file_is_merged_and_every_other_key_and_entry_stays_as_wr
     assert!(merged.contains("\"command\": \"mine\""));
     assert!(merged.contains("\"permissions\": {\n    \"allow\": [\n      \"Read\"\n    ]\n  }"));
     assert!(merged.starts_with("{\n  \"model\": \"x\",\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\""));
-    assert!(merged.contains("urzua harness run edit"));
+    assert!(merged.contains("urzua harness hook claude-code edit"));
     // A second install changes nothing.
     install(&dir);
     assert_eq!(read(&dir, SETTINGS), merged);
@@ -387,13 +387,13 @@ fn a_settings_file_that_is_not_json_or_holds_an_edited_entry_is_refused() {
     assert_eq!(v["status"], "not-run");
     assert!(v["problems"][0].as_str().unwrap().contains(SETTINGS), "{v}");
     assert_eq!(read(&dir, SETTINGS), "{ not json");
-    assert!(!dir.join(LOCK).exists() && !dir.join(TRANSLATOR).exists());
+    assert!(!dir.join(LOCK).exists() && !dir.join(OWNED).exists());
 
     // An entry with our key that a person edited.
     let dir = fixture("edited-entry", &config(""));
     install(&dir);
     let edited =
-        read(&dir, SETTINGS).replace("urzua harness run edit", "urzua harness run edit --quiet");
+        read(&dir, SETTINGS).replace("urzua harness hook claude-code edit", "urzua harness hook claude-code edit --quiet");
     std::fs::write(dir.join(SETTINGS), &edited).unwrap();
     let (code, v) = harness(&dir, &["install"]);
     assert_eq!(code, 2, "{v}");
@@ -451,30 +451,30 @@ fn status_reports_a_missing_a_modified_and_an_out_of_date_file_and_exits_1() {
     assert_eq!(v["status"], "ok");
 
     // Modified.
-    let original = read(&dir, TRANSLATOR);
-    std::fs::write(dir.join(TRANSLATOR), format!("{original}# local change\n")).unwrap();
+    let original = read(&dir, OWNED);
+    std::fs::write(dir.join(OWNED), format!("{original}# local change\n")).unwrap();
     let (code, v) = harness(&dir, &["status"]);
     assert_eq!(code, 1, "{v}");
     assert_eq!(v["status"], "drift");
-    assert_eq!(state_of(&v, "urzua-claude-code.py"), "modified");
+    assert_eq!(state_of(&v, "commands/done.md"), "modified");
 
     // Missing.
-    std::fs::remove_file(dir.join(TRANSLATOR)).unwrap();
+    std::fs::remove_file(dir.join(OWNED)).unwrap();
     let (code, v) = harness(&dir, &["status"]);
     assert_eq!(code, 1, "{v}");
-    assert_eq!(state_of(&v, "urzua-claude-code.py"), "missing");
+    assert_eq!(state_of(&v, "commands/done.md"), "missing");
 
     // Out of date: the file is what an older bundle wrote and the lock agrees,
     // but this binary's bundle differs.
     let older = format!("{original}# older bundle\n");
-    std::fs::write(dir.join(TRANSLATOR), &older).unwrap();
+    std::fs::write(dir.join(OWNED), &older).unwrap();
     let hash = format!("sha256:{}", independent_sha256(&older));
     let lock = read(&dir, LOCK);
-    let lock = replace_hash(&lock, TRANSLATOR, &hash);
+    let lock = replace_hash(&lock, OWNED, &hash);
     std::fs::write(dir.join(LOCK), lock).unwrap();
     let (code, v) = harness(&dir, &["status"]);
     assert_eq!(code, 1, "{v}");
-    assert_eq!(state_of(&v, "urzua-claude-code.py"), "out-of-date");
+    assert_eq!(state_of(&v, "commands/done.md"), "out-of-date");
 
     // A hook entry taken out of the settings is missing too.
     std::fs::write(dir.join(SETTINGS), "{}\n").unwrap();
@@ -527,50 +527,50 @@ fn replace_hash(lock: &str, path: &str, hash: &str) -> String {
 fn update_rewrites_an_unmodified_file_and_reports_a_modified_one_unless_forced() {
     let dir = fixture("update", &config(""));
     install(&dir);
-    let original = read(&dir, TRANSLATOR);
+    let original = read(&dir, OWNED);
     // An older bundle's file, unmodified since install: update replaces it.
     let older = format!("{original}# older bundle\n");
-    std::fs::write(dir.join(TRANSLATOR), &older).unwrap();
+    std::fs::write(dir.join(OWNED), &older).unwrap();
     let lock = replace_hash(
         &read(&dir, LOCK),
-        TRANSLATOR,
+        OWNED,
         &format!("sha256:{}", independent_sha256(&older)),
     );
     std::fs::write(dir.join(LOCK), lock).unwrap();
     let (code, v) = harness(&dir, &["update", "--dry-run"]);
     assert_eq!(code, 0, "{v}");
-    assert_eq!(read(&dir, TRANSLATOR), older, "a dry run writes nothing");
+    assert_eq!(read(&dir, OWNED), older, "a dry run writes nothing");
     let (code, v) = harness(&dir, &["update"]);
     assert_eq!(code, 0, "{v}");
-    assert_eq!(state_of(&v, "urzua-claude-code.py"), "updated");
-    assert_eq!(read(&dir, TRANSLATOR), original);
+    assert_eq!(state_of(&v, "commands/done.md"), "updated");
+    assert_eq!(read(&dir, OWNED), original);
     assert_eq!(harness(&dir, &["status"]).0, 0);
 
     // A file a person changed is reported and left.
     let mine = format!("{original}# mine\n");
-    std::fs::write(dir.join(TRANSLATOR), &mine).unwrap();
+    std::fs::write(dir.join(OWNED), &mine).unwrap();
     let (code, v) = harness(&dir, &["update"]);
     assert_eq!(code, 1, "{v}");
-    assert_eq!(state_of(&v, "urzua-claude-code.py"), "kept-modified");
-    assert_eq!(read(&dir, TRANSLATOR), mine);
+    assert_eq!(state_of(&v, "commands/done.md"), "kept-modified");
+    assert_eq!(read(&dir, OWNED), mine);
     // Still drifted afterwards: the lock kept the old hash.
     assert_eq!(harness(&dir, &["status"]).0, 1);
     let (code, v) = harness(&dir, &["update", "--force"]);
     assert_eq!(code, 0, "{v}");
-    assert_eq!(read(&dir, TRANSLATOR), original);
+    assert_eq!(read(&dir, OWNED), original);
 }
 
 #[test]
 fn uninstall_removes_what_matches_the_lock_and_reports_what_a_person_changed() {
     let dir = fixture("uninstall", &config(""));
     install(&dir);
-    let original = read(&dir, TRANSLATOR);
-    std::fs::write(dir.join(TRANSLATOR), format!("{original}# mine\n")).unwrap();
+    let original = read(&dir, OWNED);
+    std::fs::write(dir.join(OWNED), format!("{original}# mine\n")).unwrap();
     let (code, v) = harness(&dir, &["uninstall"]);
     assert_eq!(code, 1, "{v}");
-    assert_eq!(state_of(&v, "urzua-claude-code.py"), "kept-modified");
+    assert_eq!(state_of(&v, "commands/done.md"), "kept-modified");
     assert!(
-        dir.join(TRANSLATOR).exists(),
+        dir.join(OWNED).exists(),
         "a changed file is not deleted"
     );
     assert!(!dir.join(LOCK).exists(), "the lock goes last, always");
@@ -584,7 +584,7 @@ fn uninstall_removes_what_matches_the_lock_and_reports_what_a_person_changed() {
     install(&dir);
     let (code, _) = harness(&dir, &["uninstall"]);
     assert_eq!(code, 0);
-    for rel in [TRANSLATOR, SETTINGS, LOCK] {
+    for rel in [OWNED, SETTINGS, LOCK] {
         assert!(!dir.join(rel).exists(), "{rel}");
     }
     assert!(
@@ -1078,7 +1078,7 @@ fn hook_command(dir: &Path, handler: &str) -> String {
         .flat_map(|groups| groups.as_array().unwrap())
         .flat_map(|g| g["hooks"].as_array().unwrap())
         .map(|h| h["command"].as_str().unwrap().to_string())
-        .find(|c| c.contains(&format!("urzua harness run {handler}")))
+        .find(|c| c.contains(&format!("urzua harness hook claude-code {handler}")))
         .unwrap_or_else(|| panic!("no {handler} hook command"))
 }
 
@@ -1124,7 +1124,7 @@ fn the_installed_hook_command_judges_an_edit_and_does_not_depend_on_the_project_
     c.args(["-c", &cmd])
         .current_dir(&dir)
         .env_remove("CLAUDE_PROJECT_DIR")
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+        .env("PATH", common::path_with_urzua());
     let out = run_with_stdin(&mut c, &payload(&dir, &wrong));
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     let v = json(&out);
@@ -1138,7 +1138,7 @@ fn the_installed_hook_command_judges_an_edit_and_does_not_depend_on_the_project_
     let mut c = Command::new("sh");
     c.args(["-c", &cmd])
         .current_dir(&dir)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+        .env("PATH", common::path_with_urzua());
     let out = run_with_stdin(&mut c, &payload(&dir, &right));
     assert_eq!(out.status.code(), Some(0));
     assert!(out.stdout.is_empty(), "a clean edit says nothing: {out:?}");
@@ -1150,42 +1150,26 @@ fn without_the_engine_or_the_interpreter_the_command_states_that_the_edit_was_no
     install(&dir);
     let cmd = hook_command(&dir, "edit");
     let wrong = RECORD.replace("Not started", "Verified");
-    // No urzua binary at all.
-    let only_python = path_with(&["python3", "git", "sh"]);
+    // No urzua binary at all: the command's own fallback says so, and names
+    // the fix, whatever the configuration decides about the edit.
+    let no_urzua = path_with(&["git", "sh", "awk"]);
     let mut c = Command::new(which("sh"));
     c.args(["-c", &cmd])
         .current_dir(&dir)
-        .env("PATH", &*only_python)
-        .env_remove("URZUA_BIN");
-    let out = run_with_stdin(&mut c, &payload(&dir, &wrong));
-    assert_eq!(out.status.code(), Some(0), "{out:?}");
-    assert!(
-        json(&out)["systemMessage"]
-            .as_str()
-            .unwrap()
-            .contains("did NOT judge"),
-        "{out:?}"
-    );
-    // No python3: the shell fallback says so.
-    let no_python = path_with(&["git", "sh"]);
-    let mut c = Command::new(which("sh"));
-    c.args(["-c", &cmd])
-        .current_dir(&dir)
-        .env("PATH", &*no_python);
+        .env("PATH", &*no_urzua);
     let out = run_with_stdin(&mut c, &payload(&dir, &wrong));
     assert_eq!(out.status.code(), Some(0), "not 127: {out:?}");
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let _: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert!(
-        json(&out)["systemMessage"]
-            .as_str()
-            .unwrap()
-            .contains("could NOT run"),
-        "{out:?}"
+        text.contains("could NOT run") && text.contains("urzua is not on PATH"),
+        "{text}"
     );
     // An unreadable payload is stated, not swallowed.
     let mut c = Command::new("sh");
     c.args(["-c", &cmd])
         .current_dir(&dir)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+        .env("PATH", common::path_with_urzua());
     let out = run_with_stdin(&mut c, "{ garbage");
     assert_eq!(out.status.code(), Some(0));
     assert!(
@@ -1243,11 +1227,10 @@ fn session_start_is_quiet_when_ready_and_names_each_thing_that_would_fail_open()
     assert_eq!(checks_of(&v), ["environment"], "{v}");
     assert!(msg(&v).contains("CLAUDE_PROJECT_DIR"), "{v}");
 
-    // A missing interpreter.
+    // No interpreter is needed: python3 missing changes nothing.
     let no_python = path_with(&["urzua", "git", "sh"]);
     let v = session_start(&dir, &no_python, true);
-    assert_eq!(checks_of(&v), ["interpreter"], "{v}");
-    assert!(msg(&v).contains("127"), "{v}");
+    assert_eq!(v["verdict"], "allow", "{v}");
 
     // A missing binary.
     let no_urzua = path_with(&["python3", "git", "sh"]);
@@ -1330,7 +1313,7 @@ fn the_session_start_command_relays_its_message_to_the_agent() {
     c.args(["-c", &cmd])
         .current_dir(&dir)
         .env_remove("CLAUDE_PROJECT_DIR")
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+        .env("PATH", common::path_with_urzua());
     let out = run_with_stdin(
         &mut c,
         &serde_json::json!({"hook_event_name": "SessionStart", "cwd": dir.to_string_lossy()})
@@ -1346,7 +1329,7 @@ fn the_session_start_command_relays_its_message_to_the_agent() {
 // ----------------------------------------------------- vendor neutrality
 
 #[test]
-fn no_engine_source_file_names_an_agent_vendor_and_the_bundle_is_the_one_exclusion() {
+fn no_engine_source_file_outside_the_adapter_layer_names_an_agent_vendor() {
     const VENDORS: &[&str] = &[
         "claude",
         "anthropic",
@@ -1367,6 +1350,10 @@ fn no_engine_source_file_names_an_agent_vendor_and_the_bundle_is_the_one_exclusi
         }
     }
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    // The adapter layer: the registry of adapters and one module per adapter,
+    // which turn an agent's hook event into the neutral request. It is the one
+    // place in the source that names an agent product, by design.
+    let adapters = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/harness/hook");
     let mut files = Vec::new();
     for krate in std::fs::read_dir(&crates).unwrap() {
         let src = krate.unwrap().path().join("src");
@@ -1374,6 +1361,8 @@ fn no_engine_source_file_names_an_agent_vendor_and_the_bundle_is_the_one_exclusi
             rust_files(&src, &mut files);
         }
     }
+    let adapters = adapters.canonicalize().unwrap();
+    files.retain(|f| !f.canonicalize().unwrap().starts_with(&adapters));
     assert!(files.len() > 30, "the scan found the engine source");
     for f in &files {
         let text = std::fs::read_to_string(f).unwrap().to_lowercase();

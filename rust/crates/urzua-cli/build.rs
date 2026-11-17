@@ -3,7 +3,7 @@
 //! The table of adapters is generated from the directories under `bundle/`, so
 //! it cannot lag the directory and the engine source never spells an adapter's
 //! name: each directory is one adapter, named by its directory, holding
-//! `adapter.json`, `settings.fragment.json` and `files/` (a tree installed at
+//! `adapter.json`, `settings.fragment.json` and, when it has one, `files/` (a tree installed at
 //! the same relative paths).
 
 use std::fmt::Write as _;
@@ -42,7 +42,9 @@ fn main() {
             .to_string_lossy()
             .to_string();
         let mut files = Vec::new();
-        files_under(&dir.join("files"), &dir.join("files"), &mut files);
+        if dir.join("files").is_dir() {
+            files_under(&dir.join("files"), &dir.join("files"), &mut files);
+        }
         let abs = |p: &Path| format!("{:?}", p.to_string_lossy());
         writeln!(table, "    Adapter {{\n        name: {name:?},").unwrap();
         writeln!(

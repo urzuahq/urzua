@@ -2,7 +2,7 @@
 //! `urzua harness run session-start`.
 //!
 //! They speak a neutral request on stdin and a neutral verdict on stdout, and
-//! know no agent. An adapter's translator turns an agent's hook payload into the
+//! know no agent. An adapter (`urzua harness hook`) turns an agent's hook payload into the
 //! request and the verdict back into the agent's output; everything that used to
 //! fail open in a `jq`, `bash` and `python3` chain (no `jq`, no binary, an
 //! unreadable payload) is a verdict stated here, which `on_unjudged` can turn
@@ -81,6 +81,11 @@ struct Request {
     /// before any record is checked.
     #[serde(default)]
     gates_only: bool,
+    /// Set while the session's own repository judges a file it holds: there an
+    /// editor hook its configuration turned off says nothing. Anywhere else (a
+    /// linked worktree, an outer repository) the unjudged edit stays loud.
+    #[serde(skip)]
+    off_is_quiet: bool,
 }
 
 impl Request {
@@ -739,9 +744,11 @@ fn judge_in_roots(config: Option<PathBuf>, mut request: Request, cwd: &Path) -> 
     // Every repository judges; a deny from any wins. Otherwise the verdict is
     // the first repository's that holds the file (the session's own first).
     let mut verdicts: Vec<(bool, Verdict)> = Vec::new();
-    for root in &roots {
+    for (i, root) in roots.iter().enumerate() {
         let _ = std::env::set_current_dir(root);
-        let verdict = judge_edit_in(config.clone(), request.clone());
+        let mut one = request.clone();
+        one.off_is_quiet = i == 0 && holds(root, cwd, &request);
+        let verdict = judge_edit_in(config.clone(), one);
         if verdict.verdict == "block" {
             return verdict;
         }
@@ -821,7 +828,17 @@ fn judge_edit_in(config: Option<PathBuf>, mut request: Request) -> Verdict {
     if let Some(quiet) = quiet_outside_write(&repo_root, &loaded, &request, actor) {
         return quiet;
     }
+    // An editor hook the session's configuration turned off says nothing about
+    // the edits it does not judge: the choice is the configuration's, and
+    // `harness install` and `doctor` name it.
     let Some(harness) = loaded.harness.as_ref().filter(|h| h.enabled("editor-hook")) else {
+        if request.off_is_quiet {
+            return Verdict::new(
+                "allow",
+                request.paths.first().map(String::as_str),
+                String::new(),
+            );
+        }
         return unjudged(
             OnUnjudged::Allow,
             actor,
@@ -1561,7 +1578,7 @@ fn adapter_problems(lock: &lock::Lock, problems: &mut Vec<Problem>) -> Vec<Strin
             if !on_path(interpreter) {
                 problems.push(Problem {
                     check: "interpreter",
-                    message: format!("'{interpreter}', which the {name} adapter's translator needs, is not on PATH: its hook commands exit 127, which the agent treats as non-blocking and tells you nothing, so edits go unjudged"),
+                    message: format!("'{interpreter}', which the {name} adapter's hook commands need, is not on PATH: its hook commands exit 127, which the agent treats as non-blocking and tells you nothing, so edits go unjudged"),
                 });
             }
         }
@@ -1569,7 +1586,7 @@ fn adapter_problems(lock: &lock::Lock, problems: &mut Vec<Problem>) -> Vec<Strin
             if std::env::var_os(var).is_none_or(|v| v.is_empty()) {
                 problems.push(Problem {
                     check: "environment",
-                    message: format!("{var} is not set in this session. The {name} adapter's hook commands find the project from it; without it they fall back to the nearest git repository at or above the current directory that holds .urzua/config.yaml and the translator, which is the same project only while the session was started inside it"),
+                    message: format!("{var} is not set in this session. The {name} adapter's hook commands find the project from it; without it they fall back to the nearest git repository at or above the current directory that holds .urzua/config.yaml, which is the same project only while the session was started inside it"),
                 });
             }
         }
@@ -1623,7 +1640,7 @@ fn owned_file_problems(
                 check: "file",
                 message: format!("{path} is missing: it is part of the installed harness and the guardrail that uses it cannot run (run `urzua harness status`, then `urzua harness update`)"),
             }),
-            Ok(Some(text)) if !customisable && lock::hash(&text) != *locked => {
+            Ok(Some(text)) if !customisable && !lock::text_matches(locked, &text) => {
                 problems.push(Problem {
                     check: "file",
                     message: format!("{path} is not the file the install wrote (its hash differs from {}): it may judge nothing (run `urzua harness status`, then `urzua harness update --force` to restore it)", lock::LOCK_PATH),
@@ -1742,6 +1759,12 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
     hook_entry_problems(&ws.repo_root, &lock, &wanted, &mut docs, &mut problems);
     owned_file_problems(&ws.repo_root, &lock, &command_dirs, &mut problems);
     kill_switch_problems(&ws.repo_root, &lock, &mut docs, &mut problems);
+    for message in super::presence::leftovers(&ws.repo_root, &lock.adapters) {
+        problems.push(Problem {
+            check: "leftover",
+            message,
+        });
+    }
 
     for message in crate::commands::doctor::git_hook_problems(&ws.repo_root) {
         problems.push(Problem {

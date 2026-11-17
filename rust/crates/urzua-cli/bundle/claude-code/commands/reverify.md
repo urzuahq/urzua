@@ -22,7 +22,7 @@ first, with its own reason; if it refuses a drifted locator that has no pin, pin
    non-empty reason, and prints a `Re-verified:` line (and a `Pinned:` line when it wrote a first pin).
 
    ```bash step
-   bash .claude/hooks/urzua-record.sh reverify "$RECORD" "$REASON"
+   urzua harness record reverify "$RECORD" "$REASON"
    ```
 
 2. Put every `Pinned:` and `Re-verified:` line this command printed in the pull request body, so a

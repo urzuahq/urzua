@@ -26,7 +26,7 @@ evidence has nothing computed, and the command says so and stops.
    `urzua check` on it with its examined count.
 
    ```bash step
-   bash .claude/hooks/urzua-record.sh done "$RECORD"
+   urzua harness record done "$RECORD"
    ```
 
 3. The engine computes the state from the items, so three of five items evidenced leaves the record

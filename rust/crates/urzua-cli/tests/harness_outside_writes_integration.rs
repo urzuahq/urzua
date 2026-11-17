@@ -392,34 +392,9 @@ fn a_nested_plain_repository_is_outside_under_deny_and_unjudged_under_shared() {
     assert_eq!((code, verdict(&v)), (0, "not-governed"), "{v}");
 }
 
-/// The installed translator, run as the agent's hook for a Claude Code tool call.
+/// The editor hook of a session in `proj`, run for a Claude Code tool call.
 fn translate(proj: &Path, payload: serde_json::Value) -> serde_json::Value {
-    let dest = proj.join(".claude/hooks");
-    std::fs::create_dir_all(&dest).unwrap();
-    let script = dest.join("urzua-claude-code.py");
-    std::fs::copy(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("bundle/claude-code/files/.claude/hooks/urzua-claude-code.py"),
-        &script,
-    )
-    .unwrap();
-    let mut c = Command::new("python3");
-    c.arg("-I")
-        .arg(&script)
-        .args(["edit", "--", "urzua", "harness", "run", "edit"])
-        .current_dir(proj)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = c.spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(payload.to_string().as_bytes())
-        .unwrap();
-    let out = child.wait_with_output().unwrap();
+    let out = common::run_hook(proj, "edit", &payload.to_string(), None, Some(proj), &[]);
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null)
 }

@@ -1,8 +1,10 @@
 //! The bundle embedded in the binary (`ADR-89` option B): one version with the
 //! engine, available offline. `bundle/` is laid out so it could later also be
 //! published as a release asset without a second format: `instructions.md`, and
-//! one directory per adapter holding `adapter.json`, `settings.fragment.json`
-//! and `files/`, whose tree is installed at the same relative paths.
+//! one directory per adapter holding `adapter.json`, `settings.fragment.json`,
+//! `commands/` and, when an adapter needs one, `files/`, whose tree is
+//! installed at the same relative paths. An adapter whose hook commands call
+//! the binary has none.
 //!
 //! An adapter is exactly the agent-specific part. Everything else in the engine
 //! names no agent: adapters are found here by the name the directory carries,
@@ -30,9 +32,22 @@ pub struct Adapter {
 // under `bundle/`.
 include!(concat!(env!("OUT_DIR"), "/bundle_table.rs"));
 
+/// How the agent enables a plugin that registers the same hooks, so `status`
+/// and `doctor` can say which registration is in effect.
+#[derive(Debug, Deserialize)]
+pub struct Plugin {
+    /// The plugin's id in the agent's settings.
+    pub id: String,
+    /// The settings key that maps plugin ids to enabled.
+    pub enabled_key: String,
+    /// The settings files that may enable it, highest precedence first; `~/`
+    /// is the home directory, any other relative path is the repository's.
+    pub settings_files: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Requires {
-    /// Interpreters the adapter's translator runs under.
+    /// Interpreters the adapter's hook commands need besides `urzua`.
     pub interpreters: Vec<String>,
     /// Environment variables the agent sets for its hook commands.
     pub env: Vec<String>,
@@ -55,6 +70,14 @@ pub struct Manifest {
     /// session-start check reports one that is set: no hook entry can show it.
     #[serde(default)]
     pub kill_switches: Vec<String>,
+    /// Files an older bundle of this adapter installed and this one does not.
+    /// `status`, `doctor` and the session-start check name one that is still
+    /// there, and a settings entry that still runs one, with the steps that
+    /// remove it; nothing removes them automatically.
+    #[serde(default)]
+    pub retired_files: Vec<String>,
+    #[serde(default)]
+    pub plugin: Option<Plugin>,
     pub requires: Requires,
 }
 
@@ -112,7 +135,9 @@ mod tests {
             let root = bundle_dir().join(a.name);
             assert_eq!(a.manifest().name, a.name);
             let mut on_disk = Vec::new();
-            files_under(&root.join("files"), &root.join("files"), &mut on_disk);
+            if root.join("files").is_dir() {
+                files_under(&root.join("files"), &root.join("files"), &mut on_disk);
+            }
             on_disk.sort();
             let table: Vec<String> = a.files.iter().map(|(p, _)| p.to_string()).collect();
             assert_eq!(on_disk, table, "{}", a.name);

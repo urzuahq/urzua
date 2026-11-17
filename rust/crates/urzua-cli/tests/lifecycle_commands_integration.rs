@@ -38,7 +38,6 @@ fn json(out: &Output) -> serde_json::Value {
     })
 }
 
-const HELPER: &str = ".claude/hooks/urzua-record.sh";
 
 const BASE: &str = "schema_version: 2\nrules:\n  status.delivery-agreement: error\n  embodiment.locator-exists: error\nharness:\n  adapters: [claude-code]\n  guardrails:\n    editor-hook: {enabled: true}\nrecord_types:\n  milestone:\n    dir: \"docs/milestones\"\n    prefix: \"MILE\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Realized-by\"]\n    header_shape: \"yaml-frontmatter\"\n    statuses:\n      values: [Planned, InProgress, Done, WontDo]\n      success: [Done]\n      failure: [WontDo]\n      delivery:\n        delivered_tiers: [Implemented, Verified]\n        unevidenced_tiers: [\"Not started\"]\n        not_done: [Planned, InProgress]\n        set_status: Done\n  note:\n    dir: \"docs/notes\"\n    prefix: \"NOTE\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n    statuses:\n      values: [Open, Closed]\n";
 
@@ -70,15 +69,15 @@ fn installed(name: &str, config: &str) -> common::TempDir {
 }
 
 fn helper(dir: &Path, args: &[&str]) -> Output {
-    Command::new("bash")
-        .arg(dir.join(HELPER))
+    Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "record"])
         .args(args)
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
         .env("PATH", common::path_with_stub_gh())
         .env_remove("URZUA_BY")
         .current_dir(dir)
         .output()
-        .expect("bash should run")
+        .expect("urzua should run")
 }
 
 fn read(dir: &Path, rel: &str) -> String {
@@ -168,9 +167,13 @@ fn no_generated_command_names_a_field_or_status_of_the_configuration() {
             assert!(!text.contains(word), "{name}.md restates `{word}`");
         }
     }
-    let script = read(&dir, HELPER);
+    let helper = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/harness/record.rs"),
+    )
+    .unwrap();
+    let helper = helper.split("#[cfg(test)]").next().unwrap();
     for word in &literals {
-        assert!(!script.contains(word), "{HELPER} restates `{word}`");
+        assert!(!helper.contains(word), "urzua harness record restates `{word}`");
     }
 }
 
@@ -180,8 +183,8 @@ fn no_generated_command_names_a_field_or_status_of_the_configuration() {
 fn done_sets_the_status_only_through_the_engines_computation() {
     let dir = installed("done", BASE);
     let before = read(&dir, "docs/milestones/MILE-1-x.md");
-    let out = Command::new("bash")
-        .arg(dir.join(HELPER))
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "record"])
         .args(["done", "docs/milestones/MILE-1-x.md"])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
         .env("PATH", common::path_with_stub_gh())
@@ -213,8 +216,8 @@ fn done_refuses_when_the_engine_computes_no_status() {
     let path = "docs/milestones/MILE-1-x.md";
     let text = read(&dir, path).replace("Realized-by: code:src/a.rs\n", "");
     std::fs::write(dir.join(path), &text).unwrap();
-    let out = Command::new("bash")
-        .arg(dir.join(HELPER))
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "record"])
         .args(["done", path])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
         .env("PATH", common::path_with_stub_gh())
@@ -246,8 +249,8 @@ fn a_status_an_authority_gate_names_is_never_written_by_fix_or_done() {
         "{report}"
     );
     assert_eq!(read(&dir, path), before);
-    let out = Command::new("bash")
-        .arg(dir.join(HELPER))
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "record"])
         .args(["done", path])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
         .env("PATH", common::path_with_stub_gh())
@@ -279,8 +282,8 @@ fn with_stale_pin(name: &str) -> common::TempDir {
 }
 
 fn repin(dir: &Path, reason: &str) -> Output {
-    Command::new("bash")
-        .arg(dir.join(HELPER))
+    Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "record"])
         .args(["repin", "docs/milestones/MILE-1-x.md", reason])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
         .env("PATH", common::path_with_stub_gh())
@@ -348,8 +351,8 @@ fn with_expiry_rule(name: &str) -> common::TempDir {
 }
 
 fn reverify(dir: &Path, reason: &str) -> Output {
-    Command::new("bash")
-        .arg(dir.join(HELPER))
+    Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "record"])
         .args(["reverify", "docs/milestones/MILE-1-x.md", reason])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
         .env("PATH", common::path_with_stub_gh())
@@ -393,20 +396,6 @@ fn reverify_lists_the_review_passes_actor_agent_and_prints_the_lines_for_the_pr_
             && stderr.contains("read a.rs against the item"),
         "{stderr}"
     );
-}
-
-/// The helper runs under `set -o pipefail`. `printf ... | grep -q` there is a race: `grep -q`
-/// exits on its first match and a `printf` still writing is killed by SIGPIPE, so the whole
-/// condition reads false although the text matched (the `Pinned:` line went missing about once
-/// in a thousand runs under load). A match is tested on a here-string, which has no writer to kill.
-#[test]
-fn the_helper_never_tests_a_match_through_a_pipe_into_grep_q() {
-    let script = include_str!("../bundle/claude-code/files/.claude/hooks/urzua-record.sh");
-    let piped: Vec<&str> = script
-        .lines()
-        .filter(|l| !l.trim_start().starts_with('#') && l.contains("| grep -q"))
-        .collect();
-    assert!(piped.is_empty(), "{piped:#?}");
 }
 
 #[test]

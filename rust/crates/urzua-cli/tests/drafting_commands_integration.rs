@@ -134,12 +134,19 @@ fn pinned_bin(dir: &Path) -> String {
 }
 
 fn run_step_with_bin(dir: &Path, script: &str, title: &str, record: &str, bin: &str) -> Output {
+    // A step calls `urzua` from PATH: `bin`, first.
+    let bins = dir.join(".urzua-step-bin");
+    std::fs::create_dir_all(&bins).unwrap();
+    let _ = std::fs::remove_file(bins.join("urzua"));
+    std::os::unix::fs::symlink(bin, bins.join("urzua")).unwrap();
+    let mut path = vec![bins];
+    path.extend(std::env::split_paths(&common::path_with_stub_gh()));
     Command::new("bash")
         .args(["-ec", script])
         .env("TITLE", title)
         .env("RECORD", record)
         .env("URZUA", bin)
-        .env("PATH", common::path_with_stub_gh())
+        .env("PATH", std::env::join_paths(path).unwrap())
         .current_dir(dir)
         .output()
         .expect("bash should run")
@@ -394,7 +401,7 @@ fn commands_carry_no_schema_knowledge_of_their_own() {
         let d = fixture(&format!("vocab-{t}"));
         let out = run_step(
             &d,
-            &format!("bash .claude/hooks/urzua-record.sh new {t} Vocab"),
+            &format!("urzua harness record new {t} Vocab"),
             "",
             "",
         );
@@ -414,10 +421,13 @@ fn commands_carry_no_schema_knowledge_of_their_own() {
             assert!(!text.contains(word.as_str()), "{file} restates `{word}`");
         }
     }
-    let script =
-        std::fs::read_to_string(repo_root().join(".claude/hooks/urzua-record.sh")).unwrap();
+    let helper = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/harness/record.rs"),
+    )
+    .unwrap();
+    let helper = helper.split("#[cfg(test)]").next().unwrap();
     for word in ["Status", "Accepted", "Proposed", "Deciders", "Implements"] {
-        assert!(!script.contains(word), "urzua-record.sh restates `{word}`");
+        assert!(!helper.contains(word), "urzua harness record restates `{word}`");
     }
 }
 
@@ -481,6 +491,9 @@ fn this_repository_runs_on_the_installed_bundle_with_no_drift_and_no_hook_script
     }
     assert!(!root.join("scripts/hooks").exists());
     assert!(!root.join("scripts/draft-record.sh").exists());
+    // Nothing executable is installed: the hooks and the drafting steps call the binary.
+    assert!(!root.join(".claude/hooks/urzua-claude-code.py").exists());
+    assert!(!root.join(".claude/hooks/urzua-record.sh").exists());
 }
 
 /// MILE-200: the files that enforce the gate are protected paths in this repository's own

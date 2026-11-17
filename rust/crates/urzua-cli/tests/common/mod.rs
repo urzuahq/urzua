@@ -314,3 +314,57 @@ pub fn urzua_as(gh: &TempDir) -> std::process::Command {
     command.env("PATH", std::env::join_paths(paths).unwrap());
     command
 }
+
+/// `urzua harness hook claude-code <event>` run from `dir` with `payload` on
+/// stdin, as an agent's hook command runs it. `engine`, when given, is the argv
+/// of a stand-in engine (a debug build's seam); `project` is the session's
+/// project (`CLAUDE_PROJECT_DIR`), `None` for a session whose project holds no
+/// configuration.
+pub fn run_hook(
+    dir: &Path,
+    event: &str,
+    payload: &str,
+    engine: Option<&[&str]>,
+    project: Option<&Path>,
+    envs: &[(&str, &std::ffi::OsStr)],
+) -> std::process::Output {
+    use std::io::Write;
+    let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_urzua"));
+    c.args(["harness", "hook", "claude-code", event])
+        .current_dir(dir)
+        .env(
+            "CLAUDE_PROJECT_DIR",
+            project.map_or_else(|| "/nonexistent-project".into(), |p| p.as_os_str().to_owned()),
+        )
+        .env_remove("URZUA_HOOK_ENGINE_FOR_TESTS");
+    if let Some(argv) = engine {
+        c.env(
+            "URZUA_HOOK_ENGINE_FOR_TESTS",
+            serde_json::to_string(argv).unwrap(),
+        );
+    }
+    for (k, v) in envs {
+        c.env(k, v);
+    }
+    c.stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let mut child = c.spawn().unwrap();
+    let _ = child.stdin.take().unwrap().write_all(payload.as_bytes());
+    child.wait_with_output().unwrap()
+}
+
+/// The engine argv the old translator was given, `urzua harness run edit` and
+/// the like: the binary's own engine, no stand-in.
+pub fn engine_or_own<'a>(engine: &'a [&'a str]) -> Option<&'a [&'a str]> {
+    (engine.first() != Some(&"urzua")).then_some(engine)
+}
+
+/// `PATH` with this build's `urzua` first, for running an installed hook
+/// command the way the agent runs it.
+pub fn path_with_urzua() -> std::ffi::OsString {
+    let bin = Path::new(env!("CARGO_BIN_EXE_urzua")).parent().unwrap().to_path_buf();
+    let mut dirs = vec![bin];
+    dirs.extend(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()));
+    std::env::join_paths(dirs).unwrap()
+}

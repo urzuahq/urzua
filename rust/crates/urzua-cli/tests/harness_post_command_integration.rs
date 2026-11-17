@@ -550,9 +550,9 @@ fn run_hook(dir: &Path, cmd: &str, stdin: &str, path: Option<&Path>) -> Output {
     let mut c = Command::new("sh");
     c.args(["-c", cmd])
         .current_dir(dir)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+        .env("PATH", common::path_with_urzua());
     if let Some(p) = path {
-        c.env("PATH", p).env_remove("URZUA_BIN");
+        c.env("PATH", p);
     }
     run_with_stdin(&mut c, stdin)
 }
@@ -564,7 +564,7 @@ fn the_claude_code_adapter_wires_a_post_tool_use_hook_on_bash_and_relays_the_rep
     git(&dir, &["add", "-A"]);
     git(&dir, &["commit", "-q", "-m", "install"]);
     let cmd = hook_command(&dir, "Bash");
-    assert!(cmd.contains("urzua harness run post-command"), "{cmd}");
+    assert!(cmd.contains("urzua harness hook claude-code post-command"), "{cmd}");
 
     // A clean tree: the hook says nothing.
     let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
