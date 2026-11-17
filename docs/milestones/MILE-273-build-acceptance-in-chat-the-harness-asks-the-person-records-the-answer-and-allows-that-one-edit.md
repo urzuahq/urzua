@@ -24,6 +24,8 @@ The maintainer reported on 2026-11-16 that every acceptance ends with the agent 
 - An approval is refused for another record, another status, a changed body, another session or after its expiry, shown by a test per case.
 - The agent cannot write an approval: an edit or shell write to where approvals are kept is refused or reported like any protected harness state.
 - The harness writes the acceptance fields and a revision-log row naming the method, and a rule reports a record at a reserved status with no receipt.
+- A person at a terminal can accept a record with one command that makes the status change, writes the row naming who accepted and how, and leaves what the local hook and CI need to let it through, shown by a test.
+- An approval given in an agent session is recorded as that ("approved in an agent session by" the person), never as the person having edited the file, and the local hook and the CI rule both honour the same record of it, shown by a test of each.
 - A configuration that does not declare the mode behaves as before, shown by a test.
 - The installed instructions block tells the agent to ask the person, and this repository's own configuration uses the mode.
 
@@ -33,3 +35,4 @@ The maintainer reported on 2026-11-16 that every acceptance ends with the agent 
 > |---|---|---|
 > | 2026-11-16 | Initial record, `Status: Planned`. **Why:** The maintainer asked for acceptance by a question in the chat on 2026-11-16; `ADR-102` is drafted as Proposed and this tracks the build. | **structural** |
 > | 2026-11-16 | Added a Done-means item for the approval tool as the first mechanism. **Why:** `ADR-102`'s amendment of 2026-11-16, accepted by the maintainer, makes it the primary route and the chat question the fallback. | **substantive** |
+> | 2026-11-17 | Added two Done-means items: a terminal command for a person, and one record of an approval that the local hook and CI both honour. **Why:** an adopting repository reported on 2026-11-17 that its maintainer approved a record in chat and expected that to be enough ("I want to be able to accept decisions if I give you my explicit approval through the chat"), that the agent's change was then stopped at commit by the rule that checks who made a gated move, and that the same would have stopped the person; decided by the orchestrator on 2026-11-17, pending maintainer review. | **substantive** |
