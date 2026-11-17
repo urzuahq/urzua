@@ -5,17 +5,17 @@
     "claude-code"
   ],
   "files": {
-    ".claude/commands/adr.md": "words-sha256:f33075aacfc222e24987bdf2d3c4da78101edde50aefafa79a75fa3f760df0e7",
-    ".claude/commands/amend.md": "words-sha256:f65f8201c763c59f0d50143dc1130c6703f67b5ee4c3c27e7bdb0d06a10e984d",
-    ".claude/commands/bug.md": "words-sha256:02d2ae0221c4bd99d88d8d0c09fe3fbc3de6a8e6b802d48a698193cad0367d8e",
-    ".claude/commands/condition.md": "words-sha256:4688eedd4f807452c9be7f5b2ee14d8e80ac4d84a6e88755027caf5c94432199",
-    ".claude/commands/done.md": "words-sha256:1d26ef28798696bced0e5469c10469000d174a1a9db97d67d02ab5351efc50f7",
-    ".claude/commands/milestone.md": "words-sha256:a016b81edc5742b224cd8bb669c756df0a1888ea3dec9c4319da73fb743a434e",
-    ".claude/commands/repin.md": "words-sha256:25196097e5d17f120a3ac5116eb718f1ce6831c59641771def16e2415c71749f",
-    ".claude/commands/reverify.md": "words-sha256:6ea1042f3a7bfde73177938a97225cded80b755e438acf6933b12f80d4851086",
-    ".claude/commands/rfc.md": "words-sha256:08601bea46f42eac9a9f08c6079cf1f9a9a935429f4db8126ed3c7ae8df0b867",
-    ".claude/commands/spec.md": "words-sha256:6c13c9f874fe8d953e5982424d8aa27db38a1abcaed199aff459b5ea9ba4e23a",
-    ".claude/commands/waiver.md": "words-sha256:68df8c879fc8af2dba5e492c362666127014a830be588e8fe2601c1fc2122105"
+    ".claude/commands/adr.md": "words-sha256:663a86d45b8ac95a841bbdea58ab71bcc53067ec0790a5e328538a108dcfcb7e",
+    ".claude/commands/amend.md": "words-sha256:6a738dc69993429c8a29e35d056179d92895865eb41841c68f17290bd2e900d9",
+    ".claude/commands/bug.md": "words-sha256:2e7ba44ac2610ee6cfee7b7898b17022bbb1674a281e172b62d54f6e7083db49",
+    ".claude/commands/condition.md": "words-sha256:c3c41ee175dc97ee0f6383ad5bf4ff973a943ab0bc0304926fef78aa3db92bb1",
+    ".claude/commands/done.md": "words-sha256:bbb84af262527ff6229edecd82e0fac57edd9ccea9db9f70658580743cade5c3",
+    ".claude/commands/milestone.md": "words-sha256:05f77679783a82446be0ae0a454a4a8031e48230ef2435fdef33055b751774fa",
+    ".claude/commands/repin.md": "words-sha256:8d804ed1af2812a374fa11c863d56622449f49ee4d763c70ee9f266d5b8041a6",
+    ".claude/commands/reverify.md": "words-sha256:1cb24bf7827cf100025326bb3f8edf9c06b00c22138c816b78050b838ff12b40",
+    ".claude/commands/rfc.md": "words-sha256:a719ede4bcdf4c2de16d6290e50368744b825e4ca3ea18ab795dfbbd5ceab6b7",
+    ".claude/commands/spec.md": "words-sha256:9354573cab5350aa6a24ec1377619835a05267cac30c1e0923dfce8663049a06",
+    ".claude/commands/waiver.md": "words-sha256:c235cda429151a13199a677360b00e51c353164aef30d39db773a48bab0d3cc6"
   },
   "entries": [
     {
@@ -23,26 +23,26 @@
       "event": "PostToolUse",
       "matcher": "Bash",
       "handler": "post-command",
-      "hash": "sha256:bf84010fe4da7022492a80d99c5215ee8f6cdecdd39ebd77f1755f29034edd6c"
+      "hash": "sha256:e2e369fb8a912f9fb4324e23f4cda461ae42412482026bbd865c4bd7795a99a7"
     },
     {
       "file": ".claude/settings.json",
       "event": "PreToolUse",
       "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
       "handler": "edit",
-      "hash": "sha256:36b86649ae7f0e2fc0e1b18296dfefa5eec81885e04ed5a076d4b6d8df3042b5"
+      "hash": "sha256:7e23af0b0defeda7122ce43d1fabcd6de49536d4691d64cd9e1de415a971f0a6"
     },
     {
       "file": ".claude/settings.json",
       "event": "SessionStart",
       "handler": "session-start",
-      "hash": "sha256:c0be536c3ebc0f00662d1c7b39f82766e32c138f4d339f7dcec0a7d14c618fc3"
+      "hash": "sha256:99f850af7ccf1571fb63b857f0a688552fc39ed26eae555b891b1836223139fc"
     }
   ],
   "blocks": [
     {
       "file": "AGENTS.md",
-      "hash": "words-sha256:f573786adccf37e57d5fbe6d44b23bef965e70952b8f3dabafedb15deb695143"
+      "hash": "words-sha256:cef5e6e13f8d4213e806f888da28b3b65bddef6c173eb6302a8a656c524d76c3"
     }
   ]
 }
