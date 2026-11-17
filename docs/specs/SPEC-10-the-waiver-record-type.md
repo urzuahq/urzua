@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.26'
+Version: '0.27'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -204,3 +204,4 @@ record is edited later.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` 5d2d1d6d977d -> 2016ec1cda92, `rust/crates/urzua-core/src/rules/waiver.rs` 6d20296d8b4e -> 86a7f24a267d. Reason: rules/waiver.rs: waiver.matches-nothing says the Expires is empty and must be filled or the line removed when an expired waiver's Expires is empty; other messages unchanged; waiver.rs reads a present but empty or null Expires as the empty string again, so the waiver is expired and covers nothing as on release 0.4.7, never permanent; its unit test covers both forms and an absent Expires. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | The rows of 2026-11-17 (re-baseline) describe intermediate states of the pull request for `MILE-322` and `MILE-324` that the final change does not contain: reading an empty waiver `Expires` as no `Expires`. The final change writes such a field empty and lists it in `to_fill`, has no such flag or function, leaves `is_record_reference`'s visibility as on main, and keeps a present but empty `Expires` expired, as releases 0.4.7 and 0.4.8 do. The earlier rows stay as history. **Why:** review of that pull request asked that rows naming designs absent from the final tree be closed. | **structural** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` 2016ec1cda92 -> 96877e268ec3. Reason: waiver.rs: test comment wording only (no record id, no temporal wording). The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.27`. The closing row and re-pin rows above change no statement of this spec. **Why:** a versioned spec carrying new rows takes a version above main's. | **structural** |
