@@ -489,10 +489,7 @@ fn a_commit_with_a_broken_record_is_blocked_and_a_clean_one_passes() {
     let out = commit(&dir, "clean");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
-    assert!(
-        stderr.contains("pre-commit: urzua check --base HEAD: no blocking findings"),
-        "{stderr}"
-    );
+    assert!(!stderr.contains("no blocking findings"), "{stderr}");
 }
 
 #[test]
@@ -559,7 +556,7 @@ fn the_hooks_key_names_what_each_hook_runs_and_rejects_an_empty_list() {
     let dir = fixture("config");
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        format!("{CONFIG}hooks:\n  pre-commit: [check]\n"),
+        format!("{CONFIG}hooks:\n  pre-commit: [check]\n  print_success: true\n"),
     )
     .unwrap();
     let out = common::urzua()
@@ -584,4 +581,895 @@ fn the_hooks_key_names_what_each_hook_runs_and_rejects_an_empty_list() {
             .contains("hooks: 'pre-push' must run `check`"),
         "{report}"
     );
+}
+
+#[test]
+fn a_clean_hooks_run_prints_nothing_and_a_refusal_is_unchanged() {
+    let dir = fixture("quiet");
+    let run = |dir: &Path| {
+        common::urzua()
+            .args(["hooks", "run", "pre-commit"])
+            .current_dir(dir)
+            .output()
+            .unwrap()
+    };
+    let out = run(&dir);
+    assert!(out.status.success(), "{out:?}");
+    assert!(out.stdout.is_empty() && out.stderr.is_empty(), "{out:?}");
+
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-b.md"),
+        "---\nDate: 2026-01-01\n---\n# B\n",
+    )
+    .unwrap();
+    common::git(&dir, &["add", "-A"]);
+    let out = run(&dir);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("1 blocking finding(s)"), "{stderr}");
+    assert!(
+        stderr.contains("header.required-fields docs/adr/ADR-2-b.md"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("the full report: urzua check --base HEAD"),
+        "{stderr}"
+    );
+}
+
+fn commit_hook_dir(dir: &Path) {
+    for hook in ["pre-commit", "pre-push"] {
+        write_exec(
+            &dir.join(".git-hooks").join(hook),
+            &format!("#!/bin/sh\n\"${{URZUA_BIN:-urzua}}\" hooks run {hook}\n"),
+        );
+    }
+}
+
+const DIR_CONFIG: &str = "hooks:\n  path: .git-hooks\n  pre-commit: {managed: declared}\n  pre-push: {managed: declared}\n";
+
+#[test]
+fn a_named_hook_directory_is_reported_until_install_points_the_clone_at_it() {
+    let dir = fixture("hook-dir");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&dir);
+
+    let (code, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(code, 1, "{status}");
+    assert_eq!(
+        states(&status),
+        ["pre-commit=not-pointed", "pre-push=not-pointed"]
+    );
+    assert_eq!(status["next_action"], "urzua hooks install", "{status}");
+    let text = status.to_string();
+    assert!(text.contains("not pointed at .git-hooks"), "{status}");
+    assert!(!text.contains(".git/hooks"), "{status}");
+
+    let checks = hook_checks(&dir);
+    assert!(
+        checks.iter().all(|c| c["state"] == "not-pointed"),
+        "{checks:?}"
+    );
+    assert!(
+        checks
+            .iter()
+            .all(|c| !c["message"].as_str().unwrap().contains(".git/hooks")),
+        "{checks:?}"
+    );
+    let (_, doctor) = urzua(&dir, &["doctor"]);
+    assert_eq!(doctor["next_action"], "urzua hooks install", "{doctor}");
+
+    let (code, dry) = urzua(&dir, &["hooks", "install", "--dry-run"]);
+    assert_eq!(code, 0, "{dry}");
+    assert_eq!(states(&dry)[0], "core.hooksPath=would-point");
+    let unset = common::isolated_git()
+        .args(["config", "--get", "core.hooksPath"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(!unset.status.success());
+
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(
+        states(&report),
+        [
+            "core.hooksPath=pointed",
+            "pre-commit=declared",
+            "pre-push=declared"
+        ]
+    );
+    let (code, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(code, 0, "{status}");
+    assert_eq!(
+        states(&status),
+        ["pre-commit=declared", "pre-push=declared"]
+    );
+
+    let (code, report) = urzua(&dir, &["hooks", "uninstall"]);
+    assert_eq!(code, 0, "{report}");
+    assert!(
+        states(&report).contains(&"core.hooksPath=unset".to_string()),
+        "{report}"
+    );
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(
+        states(&status),
+        ["pre-commit=not-pointed", "pre-push=not-pointed"]
+    );
+}
+
+fn urzua_env(dir: &Path, args: &[&str], env: &[(&str, &Path)]) -> (i32, serde_json::Value) {
+    let mut cmd = common::urzua();
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let out = cmd.args(args).current_dir(dir).output().unwrap();
+    let json = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|_| panic!("urzua {args:?}: {}", String::from_utf8_lossy(&out.stderr)));
+    (out.status.code().unwrap(), json)
+}
+
+fn local_hooks_path(dir: &Path) -> Option<String> {
+    let out = common::isolated_git()
+        .args(["config", "--local", "--get", "core.hooksPath"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// Another `core.hooksPath`, set locally or globally: no next action, the
+/// message names its scope and the command a person may choose, and nothing
+/// suggests unsetting it.
+fn assert_conflict_reported(dir: &Path, env: &[(&str, &Path)], scope: &str) {
+    let (code, report) = urzua_env(dir, &["hooks", "install"], env);
+    assert_eq!(code, 2, "{report}");
+    let problem = report["problems"][0].as_str().unwrap();
+    assert!(problem.contains(&format!("scope {scope}")), "{report}");
+    assert!(
+        problem.contains("git config --local core.hooksPath .git-hooks"),
+        "{report}"
+    );
+    assert!(!report.to_string().contains("--unset"), "{report}");
+
+    let (_, status) = urzua_env(dir, &["hooks", "status"], env);
+    assert!(status["next_action"].is_null(), "{status}");
+    assert!(
+        status.to_string().contains(&format!("scope {scope}")),
+        "{status}"
+    );
+    assert!(!status.to_string().contains("--unset"), "{status}");
+    let (_, doctor) = urzua_env(dir, &["doctor"], env);
+    for c in doctor["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["check"] == "hook-wired")
+    {
+        assert!(c.get("fix").is_none(), "{c}");
+        assert!(
+            c["message"]
+                .as_str()
+                .unwrap()
+                .contains(&format!("scope {scope}")),
+            "{c}"
+        );
+    }
+}
+
+#[test]
+fn a_local_hooks_path_set_elsewhere_is_named_and_left_to_a_person() {
+    let dir = fixture("hook-dir-local");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&dir);
+    common::git(&dir, &["config", "core.hooksPath", "elsewhere"]);
+    assert_conflict_reported(&dir, &[], "local");
+    urzua(&dir, &["hooks", "uninstall"]);
+    assert_eq!(local_hooks_path(&dir).as_deref(), Some("elsewhere"));
+}
+
+#[test]
+fn a_global_hooks_path_is_named_and_left_to_a_person() {
+    let dir = fixture("hook-dir-global");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&dir);
+    let home = common::TempDir::new("urzua-hooks-global-home");
+    let global = home.join("gitconfig");
+    std::fs::write(&global, "[core]\n\thooksPath = /somewhere/else\n").unwrap();
+    assert_conflict_reported(&dir, &[("GIT_CONFIG_GLOBAL", &global)], "global");
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn a_hook_directory_that_resolves_outside_the_repository_is_refused_before_git_config() {
+    let dir = fixture("hook-dir-escape");
+    let outside = common::TempDir::new("urzua-hooks-escape-target");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(&outside, dir.join(".git-hooks")).unwrap();
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(
+        report["problems"][0]
+            .as_str()
+            .unwrap()
+            .contains("outside the repository"),
+        "{report}"
+    );
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn install_reports_a_declared_hook_missing_from_the_hook_directory() {
+    let dir = fixture("hook-dir-missing");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    write_exec(
+        &dir.join(".git-hooks/pre-commit"),
+        "#!/bin/sh\nurzua hooks run pre-commit\n",
+    );
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 1, "{report}");
+    assert_ne!(report["status"], "ok", "{report}");
+    assert!(
+        states(&report).contains(&"pre-push=declared-missing".to_string()),
+        "{report}"
+    );
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(
+        states(&status),
+        ["pre-commit=declared", "pre-push=declared-missing"]
+    );
+}
+
+#[test]
+fn uninstall_in_a_fresh_clone_leaves_the_committed_hooks() {
+    let origin = fixture("hook-dir-origin");
+    std::fs::write(
+        origin.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&origin);
+    common::git(&origin, &["add", "-A"]);
+    common::git(&origin, &["commit", "-q", "--no-verify", "-m", "hooks"]);
+    let parent = common::TempDir::new("urzua-hooks-clone");
+    let clone = parent.join("c");
+    common::git(&parent, &["clone", "-q", &origin.to_string_lossy(), "c"]);
+
+    let (code, report) = urzua(&clone, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(local_hooks_path(&clone).as_deref(), Some(".git-hooks"));
+    let (code, report) = urzua(&clone, &["hooks", "uninstall"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(
+        states(&report),
+        ["pre-commit=left", "pre-push=left", "core.hooksPath=unset"]
+    );
+    assert!(report.to_string().contains("leaves its files"), "{report}");
+    for hook in ["pre-commit", "pre-push"] {
+        assert!(clone.join(".git-hooks").join(hook).is_file());
+    }
+    let st = common::isolated_git()
+        .args(["status", "--porcelain"])
+        .current_dir(&clone)
+        .output()
+        .unwrap();
+    assert!(
+        st.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&st.stdout)
+    );
+    assert_eq!(local_hooks_path(&clone), None);
+}
+
+#[test]
+fn a_declared_hook_with_no_hook_directory_does_not_ask_for_one_under_the_git_directory() {
+    let dir = fixture("declared-default");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}hooks:\n  pre-commit: {{managed: declared}}\n"),
+    )
+    .unwrap();
+    let checks = hook_checks(&dir);
+    let pre_commit = checks.iter().find(|c| c["layer"] == "pre-commit").unwrap();
+    let m = pre_commit["message"].as_str().unwrap();
+    assert!(m.contains("hooks.path"), "{m}");
+    assert!(!m.contains("write the hook"), "{m}");
+}
+
+#[test]
+fn a_hook_directory_outside_the_repository_is_a_config_error() {
+    let dir = fixture("hook-dir-bad");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}hooks:\n  path: ../x\n"),
+    )
+    .unwrap();
+    let (code, _) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(code, 2);
+    for bad in [
+        ".git/hooks",
+        ".git",
+        ".",
+        "./x",
+        "a//b",
+        "/abs",
+        "~/hk",
+        "~",
+        ".GIT/hooks",
+        ".Git",
+        "C:\\x",
+        "a\\..\\..\\x",
+        "a\nb",
+        "sub/.git/hooks",
+        ".git.",
+        ".git ",
+        "x/.GIT. .",
+        "GIT~1",
+        "git~1/hooks",
+        ".g\u{200c}it",
+        "\u{feff}.git",
+    ] {
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            format!(
+                "{CONFIG}hooks:\n  path: {}\n",
+                serde_json::to_string(bad).unwrap()
+            ),
+        )
+        .unwrap();
+        let (code, report) = urzua(&dir, &["hooks", "status"]);
+        assert_eq!(code, 2, "{bad}: {report}");
+    }
+}
+
+fn tree_status(dir: &Path) -> String {
+    let out = common::isolated_git()
+        .args(["status", "--porcelain", "--ignored"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[test]
+fn a_symlinked_hook_file_in_the_hook_directory_refuses_before_anything_is_written() {
+    let dir = fixture("hook-dir-file-link");
+    let outside = common::TempDir::new("urzua-hooks-file-link-target");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}hooks:\n  path: .git-hooks\n"),
+    )
+    .unwrap();
+    write_exec(&outside.join("pre-commit"), "#!/bin/sh\necho hi\n");
+    std::fs::create_dir_all(dir.join(".git-hooks")).unwrap();
+    std::os::unix::fs::symlink(
+        outside.join("pre-commit"),
+        dir.join(".git-hooks/pre-commit"),
+    )
+    .unwrap();
+    let before = tree_status(&dir);
+
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    assert!(status["next_action"].is_null(), "{status}");
+    assert!(status.to_string().contains("symlink"), "{status}");
+
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(
+        report["problems"][0]
+            .as_str()
+            .unwrap()
+            .contains("nothing was written"),
+        "{report}"
+    );
+    assert_eq!(local_hooks_path(&dir), None);
+    assert_eq!(tree_status(&dir), before);
+    assert!(!dir.join(".git-hooks/pre-push").exists());
+}
+
+#[test]
+fn a_hook_directory_linked_into_the_git_directory_is_refused() {
+    let dir = fixture("hook-dir-into-git");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}hooks:\n  path: hk\n"),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(dir.join(".git/hooks"), dir.join("hk")).unwrap();
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(
+        states(&status),
+        ["pre-commit=unsafe-dir", "pre-push=unsafe-dir"]
+    );
+    assert!(status["next_action"].is_null(), "{status}");
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(
+        report.to_string().contains("inside the git directory"),
+        "{report}"
+    );
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn a_hook_directory_replaced_by_a_link_outside_after_install_is_a_problem() {
+    let dir = fixture("hook-dir-replaced");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&dir);
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    let outside = common::TempDir::new("urzua-hooks-replaced-target");
+    for hook in ["pre-commit", "pre-push"] {
+        std::fs::copy(dir.join(".git-hooks").join(hook), outside.join(hook)).unwrap();
+    }
+    std::fs::remove_dir_all(dir.join(".git-hooks")).unwrap();
+    std::os::unix::fs::symlink(&outside, dir.join(".git-hooks")).unwrap();
+    let (code, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(code, 1, "{status}");
+    assert_eq!(
+        states(&status),
+        ["pre-commit=unsafe-dir", "pre-push=unsafe-dir"]
+    );
+    let checks = hook_checks(&dir);
+    assert!(checks.iter().all(|c| c["status"] != "ok"), "{checks:?}");
+}
+
+#[test]
+fn a_hooks_path_from_an_included_file_is_named_and_left_by_uninstall() {
+    let dir = fixture("hook-dir-include");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&dir);
+    let inc = common::TempDir::new("urzua-hooks-include");
+    std::fs::write(inc.join("extra"), "[core]\n\thooksPath = .git-hooks\n").unwrap();
+    common::git(
+        &dir,
+        &[
+            "config",
+            "include.path",
+            &inc.join("extra").to_string_lossy(),
+        ],
+    );
+    let (code, report) = urzua(&dir, &["hooks", "uninstall"]);
+    assert_eq!(code, 0, "{report}");
+    assert!(
+        states(&report).contains(&"core.hooksPath=left".to_string()),
+        "{report}"
+    );
+    assert!(report.to_string().contains("extra"), "{report}");
+}
+
+#[test]
+fn install_lists_a_missing_declared_hook_once() {
+    let dir = fixture("hook-dir-once");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    write_exec(
+        &dir.join(".git-hooks/pre-commit"),
+        "#!/bin/sh\nurzua hooks run pre-commit\n",
+    );
+    let (_, report) = urzua(&dir, &["hooks", "install", "--dry-run"]);
+    assert_eq!(
+        states(&report),
+        [
+            "core.hooksPath=would-point",
+            "pre-commit=declared",
+            "pre-push=declared-missing"
+        ]
+    );
+}
+
+const TOOLS_DECLARED: &str = "hooks:\n  path: tools/hooks\n  pre-commit: {managed: declared}\n  pre-push: {managed: declared}\n";
+
+#[test]
+fn a_declared_hook_linked_outside_the_repository_is_refused_before_anything_is_written() {
+    let dir = fixture("unsafe-declared");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{TOOLS_DECLARED}"),
+    )
+    .unwrap();
+    let outside = common::TempDir::new("urzua-hooks-unsafe-target");
+    write_exec(
+        &outside.join("pre-commit"),
+        "#!/bin/sh\nurzua hooks run pre-commit\n",
+    );
+    std::fs::create_dir_all(dir.join("tools/hooks")).unwrap();
+    std::os::unix::fs::symlink(
+        outside.join("pre-commit"),
+        dir.join("tools/hooks/pre-commit"),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        "../../.git/hooks/pre-push.sample",
+        dir.join("tools/hooks/pre-push"),
+    )
+    .unwrap();
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "--no-verify", "-m", "links"]);
+
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(
+        states(&status),
+        ["pre-commit=unsafe-hook", "pre-push=unsafe-hook"]
+    );
+    assert!(status["next_action"].is_null(), "{status}");
+    let checks = hook_checks(&dir);
+    assert!(
+        checks
+            .iter()
+            .all(|c| c["state"] == "unsafe-hook" && c.get("fix").is_none()),
+        "{checks:?}"
+    );
+
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(
+        report.to_string().contains("inside the git directory"),
+        "{report}"
+    );
+    assert_eq!(local_hooks_path(&dir), None);
+    assert_eq!(tree_status(&dir), "");
+}
+
+fn swap_for_outside_link(dir: &Path, hook: &str) -> common::TempDir {
+    let outside = common::TempDir::new("urzua-hooks-swap-target");
+    let path = dir.join(".git-hooks").join(hook);
+    std::fs::copy(&path, outside.join(hook)).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    std::os::unix::fs::symlink(outside.join(hook), &path).unwrap();
+    outside
+}
+
+fn assert_unsafe_after_install(dir: &Path) {
+    let (code, status) = urzua(dir, &["hooks", "status"]);
+    assert_eq!(code, 1, "{status}");
+    assert!(
+        states(&status).contains(&"pre-commit=unsafe-hook".to_string()),
+        "{status}"
+    );
+    assert_eq!(status["next_action"], "urzua hooks uninstall", "{status}");
+    let (code, report) = urzua(dir, &["hooks", "uninstall", "--dry-run"]);
+    assert_eq!(code, 0, "{report}");
+    assert!(
+        states(&report).contains(&"core.hooksPath=would-unset".to_string()),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_declared_hook_swapped_for_an_outside_link_after_install_is_unsafe() {
+    let dir = fixture("swap-declared");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&dir);
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    assert!(report.to_string().contains("every worktree"), "{report}");
+    let _keep = swap_for_outside_link(&dir, "pre-commit");
+    assert_unsafe_after_install(&dir);
+}
+
+#[test]
+fn a_managed_hook_swapped_for_an_outside_link_after_install_is_unsafe() {
+    let dir = fixture("swap-managed");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}hooks:\n  path: .git-hooks\n"),
+    )
+    .unwrap();
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    let _keep = swap_for_outside_link(&dir, "pre-commit");
+    assert_unsafe_after_install(&dir);
+}
+
+#[test]
+fn a_hook_directory_that_cannot_be_created_is_not_offered_and_install_writes_nothing() {
+    let dir = fixture("ro-managed");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}hooks:\n  path: ro/hooks\n"),
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("ro")).unwrap();
+    std::fs::set_permissions(dir.join("ro"), std::fs::Permissions::from_mode(0o555)).unwrap();
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    let pointed = local_hooks_path(&dir);
+    std::fs::set_permissions(dir.join("ro"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(status["next_action"].is_null(), "{status}");
+    assert!(status.to_string().contains("cannot be created"), "{status}");
+    assert_eq!(code, 2, "{report}");
+    assert_eq!(pointed, None);
+}
+
+#[test]
+fn pointing_needs_no_write_when_every_hook_is_declared() {
+    let dir = fixture("ro-declared");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}hooks:\n  path: ro/hooks\n  pre-commit: {{managed: declared}}\n  pre-push: {{managed: declared}}\n"),
+    )
+    .unwrap();
+    for hook in ["pre-commit", "pre-push"] {
+        write_exec(
+            &dir.join("ro/hooks").join(hook),
+            &format!("#!/bin/sh\nurzua hooks run {hook}\n"),
+        );
+    }
+    std::fs::set_permissions(dir.join("ro/hooks"), std::fs::Permissions::from_mode(0o555)).unwrap();
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    let pointed = local_hooks_path(&dir);
+    std::fs::set_permissions(dir.join("ro/hooks"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(status["next_action"], "urzua hooks install", "{status}");
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(pointed.as_deref(), Some("ro/hooks"));
+}
+
+#[test]
+fn uninstall_does_not_claim_to_unset_a_value_set_elsewhere() {
+    let dir = fixture("uninstall-notice");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&dir);
+    let inc = common::TempDir::new("urzua-hooks-include-notice");
+    std::fs::write(inc.join("extra"), "[core]\n\thooksPath = .git-hooks\n").unwrap();
+    common::git(
+        &dir,
+        &[
+            "config",
+            "include.path",
+            &inc.join("extra").to_string_lossy(),
+        ],
+    );
+    let (_, report) = urzua(&dir, &["hooks", "uninstall"]);
+    assert!(report.to_string().contains("leaves its files"), "{report}");
+    assert!(
+        !report.to_string().contains("unsets this clone"),
+        "{report}"
+    );
+}
+
+fn declared_tools_hooks(name: &str) -> common::TempDir {
+    let dir = fixture(name);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{TOOLS_DECLARED}"),
+    )
+    .unwrap();
+    for hook in ["pre-commit", "pre-push"] {
+        write_exec(
+            &dir.join("tools/hooks").join(hook),
+            &format!("#!/bin/sh\nurzua hooks run {hook}\n"),
+        );
+    }
+    dir
+}
+
+#[test]
+fn any_hook_name_linked_outside_the_repository_is_refused_before_anything_is_written() {
+    let dir = declared_tools_hooks("unsafe-any-name");
+    let outside = common::TempDir::new("urzua-hooks-any-name-target");
+    write_exec(&outside.join("x"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(outside.join("x"), dir.join("tools/hooks/commit-msg")).unwrap();
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "--no-verify", "-m", "hooks"]);
+
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    assert!(
+        states(&status).contains(&"commit-msg=unsafe-hook".to_string()),
+        "{status}"
+    );
+    assert!(status["next_action"].is_null(), "{status}");
+    let checks = hook_checks(&dir);
+    assert!(
+        checks
+            .iter()
+            .any(|c| c["layer"] == "commit-msg" && c["state"] == "unsafe-hook"),
+        "{checks:?}"
+    );
+
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(report.to_string().contains("commit-msg"), "{report}");
+    assert!(!report.to_string().contains("would-"), "{report}");
+    assert_eq!(local_hooks_path(&dir), None);
+    assert_eq!(tree_status(&dir), "");
+}
+
+#[test]
+fn any_hook_name_linked_outside_after_install_is_unsafe_and_uninstall_is_offered() {
+    let dir = declared_tools_hooks("unsafe-any-name-after");
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    let outside = common::TempDir::new("urzua-hooks-any-name-after-target");
+    write_exec(&outside.join("x"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(outside.join("x"), dir.join("tools/hooks/commit-msg")).unwrap();
+
+    let (code, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(code, 1, "{status}");
+    assert!(
+        states(&status).contains(&"commit-msg=unsafe-hook".to_string()),
+        "{status}"
+    );
+    assert_eq!(status["next_action"], "urzua hooks uninstall", "{status}");
+    let (code, report) = urzua(&dir, &["hooks", "uninstall"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn a_dangling_link_into_the_git_directory_is_unsafe() {
+    let dir = declared_tools_hooks("unsafe-dangling");
+    std::os::unix::fs::symlink(
+        "../../.git/hooks/post-checkout",
+        dir.join("tools/hooks/post-checkout"),
+    )
+    .unwrap();
+    assert!(!dir.join(".git/hooks/post-checkout").exists());
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    assert!(
+        states(&status).contains(&"post-checkout=unsafe-hook".to_string()),
+        "{status}"
+    );
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(
+        report.to_string().contains("inside the git directory"),
+        "{report}"
+    );
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn a_dangling_two_hop_link_leaving_the_repository_is_unsafe() {
+    let dir = declared_tools_hooks("unsafe-two-hop");
+    let outside = common::TempDir::new("urzua-hooks-two-hop-target");
+    std::os::unix::fs::symlink(outside.join("y"), dir.join("tools/B")).unwrap();
+    std::os::unix::fs::symlink("../B", dir.join("tools/hooks/commit-msg")).unwrap();
+    let (_, status) = urzua(&dir, &["hooks", "status"]);
+    assert!(
+        states(&status).contains(&"commit-msg=unsafe-hook".to_string()),
+        "{status}"
+    );
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn a_link_loop_is_unsafe() {
+    let dir = declared_tools_hooks("unsafe-loop");
+    std::os::unix::fs::symlink("b", dir.join("tools/hooks/a")).unwrap();
+    std::os::unix::fs::symlink("a", dir.join("tools/hooks/b")).unwrap();
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(
+        report.to_string().contains("could not be resolved"),
+        "{report}"
+    );
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn a_two_hop_link_that_stays_inside_the_tree_is_safe() {
+    let dir = declared_tools_hooks("safe-two-hop");
+    write_exec(&dir.join("tools/real-msg"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink("real-msg", dir.join("tools/B")).unwrap();
+    std::os::unix::fs::symlink("../B", dir.join("tools/hooks/commit-msg")).unwrap();
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(local_hooks_path(&dir).as_deref(), Some("tools/hooks"));
+}
+
+#[test]
+fn reinstalling_an_already_pointed_clone_runs_the_same_guards_as_status() {
+    let dir = declared_tools_hooks("reinstall-guards");
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    let outside = common::TempDir::new("urzua-hooks-reinstall-target");
+    write_exec(&outside.join("x"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(outside.join("x"), dir.join("tools/hooks/commit-msg")).unwrap();
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(
+        states(&report).contains(&"commit-msg=unsafe-hook".to_string()),
+        "{report}"
+    );
+    assert_eq!(report["next_action"], "urzua hooks uninstall", "{report}");
+    std::fs::remove_file(dir.join("tools/hooks/commit-msg")).unwrap();
+
+    let moved = common::TempDir::new("urzua-hooks-reinstall-moved");
+    std::fs::rename(dir.join("tools"), moved.join("tools")).unwrap();
+    std::os::unix::fs::symlink(moved.join("tools"), dir.join("tools")).unwrap();
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(
+        states(&report).contains(&"pre-commit=unsafe-dir".to_string()),
+        "{report}"
+    );
+    assert_eq!(report["next_action"], "urzua hooks uninstall", "{report}");
+}
+
+fn parent_through_linked_dir(
+    name: &str,
+    create_target: bool,
+) -> (common::TempDir, common::TempDir) {
+    let dir = declared_tools_hooks(name);
+    let outside = common::TempDir::new("urzua-hooks-dotdot-target");
+    std::fs::create_dir_all(outside.join("d")).unwrap();
+    if create_target {
+        write_exec(&outside.join("y"), "#!/bin/sh\necho OUTSIDE-RAN >&2\n");
+    }
+    std::os::unix::fs::symlink(outside.join("d"), dir.join("tools/sub")).unwrap();
+    std::os::unix::fs::symlink("../sub/../y", dir.join("tools/hooks/commit-msg")).unwrap();
+    (dir, outside)
+}
+
+#[test]
+fn a_parent_step_after_a_linked_directory_is_taken_from_where_the_link_went() {
+    for (name, exists) in [("dotdot-existing", true), ("dotdot-dangling", false)] {
+        let (dir, _outside) = parent_through_linked_dir(name, exists);
+        let (_, status) = urzua(&dir, &["hooks", "status"]);
+        assert!(
+            states(&status).contains(&"commit-msg=unsafe-hook".to_string()),
+            "{name}: {status}"
+        );
+        let (code, report) = urzua(&dir, &["hooks", "install"]);
+        assert_eq!(code, 2, "{name}: {report}");
+        assert_eq!(local_hooks_path(&dir), None, "{name}");
+    }
+}
+
+#[test]
+fn a_parent_step_after_a_linked_directory_inside_the_tree_is_safe() {
+    let dir = declared_tools_hooks("dotdot-inside");
+    std::fs::create_dir_all(dir.join("other")).unwrap();
+    write_exec(&dir.join("x"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink("../other", dir.join("tools/sub")).unwrap();
+    std::os::unix::fs::symlink("../sub/../x", dir.join("tools/hooks/commit-msg")).unwrap();
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(local_hooks_path(&dir).as_deref(), Some("tools/hooks"));
 }

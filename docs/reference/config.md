@@ -236,6 +236,7 @@ revision_log:
   tool_class: structural       # the class tool-written rows carry
   evidence_class: evidence     # optional: the class of re-pin rows (fix --rebaseline, reverify, fix --conflicts);
                                # must be in classes; leave it out of version_bump.classes so a re-pin needs no bump
+  narrative_column: Change     # optional: the narrative header of a log fix --rebaseline/--pin creates (default Change; no `|` or line break in any *_column)
 ```
 
 Give exactly one of `marker` or `heading`. Omitted, the marker is `**Revision log**`. `version_bump:

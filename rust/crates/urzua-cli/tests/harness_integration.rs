@@ -1292,6 +1292,36 @@ fn session_start_is_quiet_when_ready_and_names_each_thing_that_would_fail_open()
 }
 
 #[test]
+fn session_start_names_the_unpointed_hook_directory_and_states_no_consequence_for_git_hooks_alone()
+{
+    let deny = format!(
+        "{BASE}harness:\n  adapters: [claude-code]\n  instructions_file: AGENTS.md\n  guardrails:\n    editor-hook: {{enabled: true, on_unjudged: deny}}\n    session-start: {{enabled: true}}\nhooks:\n  path: .git-hooks\n  pre-commit: {{managed: declared}}\n  pre-push: {{managed: declared}}\n"
+    );
+    let dir = fixture("session-hooks-dir", &deny);
+    install(&dir);
+    for hook in ["pre-commit", "pre-push"] {
+        let path = dir.join(".git-hooks").join(hook);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, format!("#!/bin/sh\nurzua hooks run {hook}\n")).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let ok = path_with(&["urzua", "python3", "git", "sh"]);
+
+    let v = session_start(&dir, &ok, true);
+    assert_eq!(checks_of(&v), ["git-hook", "git-hook"], "{v}");
+    let m = msg(&v);
+    assert!(m.contains("not pointed at .git-hooks"), "{v}");
+    assert!(m.contains("`urzua hooks install`"), "{v}");
+    assert!(!m.contains(".git/hooks"), "{v}");
+    assert!(!m.contains("on_unjudged"), "{v}");
+
+    std::fs::write(dir.join(SETTINGS), "{}\n").unwrap();
+    let v = session_start(&dir, &ok, true);
+    assert!(msg(&v).contains("on_unjudged: deny"), "{v}");
+}
+
+#[test]
 fn the_session_start_command_relays_its_message_to_the_agent() {
     let dir = fixture("session-command", &config(""));
     install(&dir);

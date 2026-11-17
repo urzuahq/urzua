@@ -9,9 +9,11 @@ use urzua_core::config::{Config, RuleLevel};
 use urzua_core::fix::{Attestation, FailedPin, Rebaseline, Repair};
 use urzua_core::record::Record;
 use urzua_core::report::{
-    CouldNotRun, Failure, FixFailure, FixReport, FixStatus, Notice, NoticeSeverity, Population,
+    CouldNotRun, Failure, FixFailure, FixReport, FixStatus, NextAction, Notice, NoticeSeverity,
+    Population,
 };
 
+use super::evidence_log::{evidence_log, with_evidence_log, EvidenceLog, LogHistory};
 use crate::session::Session;
 use crate::{emit, NOTICE_IDENTITY};
 
@@ -31,6 +33,7 @@ pub struct FixArgs {
     pub pin: bool,
     pub replace: Option<String>,
     pub remove: Option<String>,
+    pub base: Option<String>,
 }
 
 /// Why a command could not run: the sentence `urzua` prints as `not-run`.
@@ -91,6 +94,8 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
     // A re-pin compares hashes and needs neither repair rule: it is the fix
     // `embodiment.pin-stale` suggests, and that rule is on by default.
     if args.rebaseline {
+        let history = LogHistory::resolve(&repo_root, args.base.as_deref())
+            .map_err(|e| refuse(format!("urzua fix --rebaseline: {e}")))?;
         return Ok(run_rebaseline(RebaselineArgs {
             repo_root: &repo_root,
             config: &config,
@@ -104,6 +109,7 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
             actor: args.actor,
             reason: &reason,
             after_lock: &|| {},
+            history: &history,
         }));
     }
     // Drift is the expensive part (several `git` subprocesses per record) and
@@ -184,11 +190,17 @@ fn run_pin(config_path: Option<PathBuf>, args: &FixArgs) -> Result<ExitCode, Ref
             reason: args.reason.as_deref(),
             replace: args.replace.as_deref(),
             remove: args.remove.as_deref(),
+            base: args.base.as_deref(),
         },
     )
 }
 
 fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
+    if args.base.is_some() && !args.rebaseline {
+        return Err(refuse(
+            "--base belongs to --rebaseline and --pin: the ref whose merge-base copy of a record is read before a revision log is created",
+        ));
+    }
     if args.tier != 1 {
         return Err(refuse(
             "--tier accepts only 1: the one tier-2 repair built, the missing inverse of a relation, runs in every run without it, and tier 3 is not built",
@@ -812,6 +824,8 @@ fn build_report(parts: ReportParts) -> FixReport {
             .into_iter()
             .chain(extra_notices)
             .collect(),
+        failure_action: None,
+        revision_log_base: None,
     }
 }
 
@@ -873,6 +887,7 @@ struct RebaselineArgs<'a> {
     actor: urzua_core::fix::ActorKind,
     reason: &'a str,
     after_lock: &'a dyn Fn(),
+    history: &'a LogHistory<'a>,
 }
 
 /// What the re-baseline detect pass found.
@@ -921,14 +936,16 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
     };
     let unmatched = std::mem::take(&mut args.unmatched);
     let Some(identity) = identity else {
-        let (found, unmatched) = narrow_to_ids(
+        let (found, mut unmatched) = narrow_to_ids(
             scan.found,
             |r| r.record.display().to_string(),
             args.ids,
             unmatched,
             REBASELINE_UNMATCHED,
         );
-        return Ok(emit(&build_report(ReportParts {
+        let (found, failure_action) = plan_rebaseline_logs(&args, found, &mut unmatched);
+        let created = found.iter().any(|r| r.creates_revision_log);
+        let mut report = build_report(ReportParts {
             population: scan.population,
             repairs: Vec::new(),
             rebaselines: found,
@@ -938,8 +955,12 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
             ran_apply: false,
             extra_notices: super::fix_conflicts::unmerged_records_notice(repo_root, config)
                 .into_iter()
+                .chain(args.history.notice(created))
                 .collect(),
-        })));
+        });
+        report.failure_action = failure_action;
+        report.revision_log_base = args.history.report(created);
+        return Ok(emit(&report));
     };
     Ok(apply_rebaselines(&args, identity, scan, unmatched))
 }
@@ -962,18 +983,24 @@ fn apply_rebaselines(
             REBASELINE_UNMATCHED,
         ));
     }
-    let mut applied = Vec::new();
-    for rb in scan
+    let selected: Vec<Rebaseline> = scan
         .found
         .into_iter()
         .filter(|r| args.force || args.ids.contains(&r.record.display().to_string()))
-    {
+        .collect();
+    let (selected, failure_action) = plan_rebaseline_logs(args, selected, &mut failed);
+    let mut applied = Vec::new();
+    for rb in selected {
         match write_rebaseline(args, &rb, &today, &identity.attestation) {
-            Ok(()) => applied.push(rb),
+            Ok(created) => applied.push(Rebaseline {
+                creates_revision_log: created,
+                ..rb
+            }),
             Err(e) => failed.push((rb.record.clone(), e)),
         }
     }
-    emit(&build_report(ReportParts {
+    let created = applied.iter().any(|r| r.creates_revision_log);
+    let mut report = build_report(ReportParts {
         population: scan.population,
         repairs: Vec::new(),
         rebaselines: applied,
@@ -981,17 +1008,21 @@ fn apply_rebaselines(
         failed,
         identity: Some(identity),
         ran_apply: true,
-        extra_notices: Vec::new(),
-    }))
+        extra_notices: args.history.notice(created).into_iter().collect(),
+    });
+    report.failure_action = failure_action;
+    report.revision_log_base = args.history.report(created);
+    emit(&report)
 }
 
-/// Re-pins one record on disk; the error is the failure's message.
+/// Re-pins one record on disk, creating its revision log when it has none;
+/// the error is the failure's message.
 fn write_rebaseline(
     args: &RebaselineArgs<'_>,
     rb: &Rebaseline,
     today: &str,
     attestation: &Attestation,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if let Some(refusal) = urzua_core::authority::path_gate_refusal(
         args.config.authority.as_ref(),
         &rb.record,
@@ -1002,28 +1033,83 @@ fn write_rebaseline(
     let full_path = args.repo_root.join(&rb.record);
     let fresh =
         urzua_io::read_to_string(&full_path).map_err(|e| format!("could not re-read: {e}"))?;
-    let record_type = args
-        .records
-        .iter()
-        .find(|r| r.path == rb.record)
-        .map(|r| r.record_type.as_str());
+    let record_type = record_type_of(args.records, &rb.record);
+    let (fresh, created) = with_evidence_log(
+        args.history,
+        args.config,
+        record_type,
+        &rb.record,
+        &fresh,
+        "re-baseline",
+    )?;
     let log_id = record_type
         .map(|t| args.config.revision_log_id(t))
         .unwrap_or_default();
     let log_shape = record_type
         .map(|t| args.config.revision_log_shape(t))
         .unwrap_or_default();
+    let reason = if created {
+        format!("{} {}", args.reason, args.history.row_note())
+    } else {
+        args.reason.to_string()
+    };
     let new = urzua_core::fix::apply_rebaseline(
         &fresh,
         rb,
         today,
         attestation,
-        args.reason,
+        &reason,
         &log_id,
         &log_shape,
     )?;
     urzua_io::write_atomic_in(args.repo_root, &full_path, &new)
-        .map_err(|e| format!("could not write: {e}"))
+        .map_err(|e| format!("could not write: {e}"))?;
+    Ok(created)
+}
+
+fn record_type_of<'a>(records: &'a [Record], path: &Path) -> Option<&'a str> {
+    records
+        .iter()
+        .find(|r| r.path == path)
+        .map(|r| r.record_type.as_str())
+}
+
+/// Marks each listed re-pin that would create its record's revision log, and
+/// moves one that is refused into `failed`, returning the command that clears
+/// the first refusal that has one.
+fn plan_rebaseline_logs(
+    args: &RebaselineArgs<'_>,
+    found: Vec<Rebaseline>,
+    failed: &mut Vec<(PathBuf, String)>,
+) -> (Vec<Rebaseline>, Option<NextAction>) {
+    let mut kept = Vec::new();
+    let mut action = None;
+    for mut rb in found {
+        let content =
+            urzua_io::read_to_string(&args.repo_root.join(&rb.record)).unwrap_or_default();
+        let record_type = record_type_of(args.records, &rb.record);
+        match evidence_log(
+            args.history,
+            args.config,
+            record_type,
+            &rb.record,
+            &content,
+            "re-baseline",
+        ) {
+            EvidenceLog::Present => kept.push(rb),
+            EvidenceLog::Create(_) => {
+                rb.creates_revision_log = true;
+                kept.push(rb);
+            }
+            EvidenceLog::Refused(error, next) => {
+                if action.is_none() {
+                    action = next;
+                }
+                failed.push((rb.record, error));
+            }
+        }
+    }
+    (kept, action)
 }
 
 #[cfg(test)]
@@ -1107,6 +1193,7 @@ mod tests {
             actor: urzua_core::fix::ActorKind::Agent,
             reason: "checked",
             after_lock: &|| std::fs::write(&evidence, v3).unwrap(),
+            history: &LogHistory::resolve(&root, None).unwrap(),
         });
         let written = std::fs::read_to_string(root.join("docs/adr/ADR-1-a.md")).unwrap();
         assert!(

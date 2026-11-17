@@ -44,6 +44,7 @@ pub struct Repair {
 }
 
 pub mod inverse;
+pub mod new_log;
 pub mod pin;
 
 /// What an inverse repair answers: the claim that asks for it, and the
@@ -753,6 +754,10 @@ pub struct Rebaseline {
     /// The type's declared item section name, for messages (`ADR-96`).
     #[serde(skip)]
     pub items_section: String,
+    /// Whether the record has no revision log and the re-pin creates one, in
+    /// the type's declared shape, to hold its row.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub creates_revision_log: bool,
 }
 
 // Implements: ADR-67 (attributed re-baselining of a pin)
@@ -791,6 +796,7 @@ pub fn detect_rebaselines(
             found.push(Rebaseline {
                 item_lines,
                 items_section: crate::rules::items_section(config, &record.record_type),
+                creates_revision_log: false,
                 record: record.path.clone(),
                 field: locator_field.to_string(),
                 line: field_line(record, locator_field),
@@ -1241,6 +1247,7 @@ mod tests {
         let rb = || Rebaseline {
             item_lines: Vec::new(),
             items_section: String::new(),
+            creates_revision_log: false,
             record: PathBuf::from("docs/adr/ADR-1-a.md"),
             field: "Realized-by".to_string(),
             line: 3,
@@ -1273,6 +1280,7 @@ mod tests {
         let rb = Rebaseline {
             item_lines: Vec::new(),
             items_section: String::new(),
+            creates_revision_log: false,
             record: PathBuf::from("docs/adr/ADR-1-a.md"),
             field: "Realized-by".to_string(),
             line: 3,
@@ -1313,6 +1321,7 @@ mod tests {
         let rb = Rebaseline {
             item_lines: Vec::new(),
             items_section: String::new(),
+            creates_revision_log: false,
             record: PathBuf::from("docs/adr/ADR-1-a.md"),
             field: "Realized-by".to_string(),
             line: 2,
@@ -1351,6 +1360,7 @@ mod tests {
         let rb = Rebaseline {
             item_lines: Vec::new(),
             items_section: "Done when".to_string(),
+            creates_revision_log: false,
             record: PathBuf::from("docs/adr/ADR-1-a.md"),
             field: "Realized-by".to_string(),
             line: 2,
@@ -1998,6 +2008,7 @@ mod tests {
             date_column: date_column.map(str::to_string),
             tool_class: tool_class.to_string(),
             evidence_class: tool_class.to_string(),
+            narrative_column: "Change".to_string(),
         }
     }
 

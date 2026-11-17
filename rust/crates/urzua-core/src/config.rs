@@ -125,6 +125,16 @@ pub struct HooksDecl {
     /// the hook and everything it started. Default 600.
     #[serde(default = "HooksDecl::default_verify_timeout")]
     pub verify_timeout_seconds: u64,
+    /// The directory, relative to the repository root, the hooks are
+    /// committed in. git's `core.hooksPath` is per clone, so `urzua hooks
+    /// install` points each clone at it and the reports name it when a clone
+    /// is not pointed there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// `urzua hooks run` prints a line when nothing blocks. Default false:
+    /// a clean run prints nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub print_success: bool,
 }
 
 /// One hook: the urzua arguments it runs and who maintains the hook file.
@@ -215,6 +225,8 @@ impl Default for HooksDecl {
             pre_push: HookDecl::default(),
             on_not_run: HookOnNotRun::default(),
             verify_timeout_seconds: Self::default_verify_timeout(),
+            path: None,
+            print_success: false,
         }
     }
 }
@@ -1542,6 +1554,10 @@ pub struct RevisionLogDecl {
     /// `version_bump.classes`, a re-pin does not bump the version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_class: Option<String>,
+    /// The header cell of the narrative column in a log `urzua fix` creates.
+    /// Absent: `DEFAULT_REVISION_LOG_NARRATIVE_COLUMN`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrative_column: Option<String>,
 }
 
 /// A type's version-bump requirement: a revision-log row of one of `classes`
@@ -1564,6 +1580,8 @@ pub struct VersionBumpDecl {
 /// The default marker line: what every repository used before the identity
 /// was declared.
 pub const DEFAULT_REVISION_LOG_MARKER: &str = "**Revision log**";
+/// The narrative column's header cell in a log `urzua fix` creates.
+pub const DEFAULT_REVISION_LOG_NARRATIVE_COLUMN: &str = "Change";
 
 /// The default class vocabulary of a revision log, held in the engine so a type
 /// that declares no `classes` behaves as every type did before `ADR-94`. This
@@ -1596,6 +1614,8 @@ pub struct RevisionLogShape {
     /// The class of the rows that move evidence pins; `tool_class` unless
     /// declared.
     pub evidence_class: String,
+    /// The narrative column's header cell in a log `urzua fix` creates.
+    pub narrative_column: String,
 }
 
 impl RevisionLogShape {
@@ -1620,6 +1640,7 @@ impl Default for RevisionLogShape {
             date_column: None,
             tool_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
             evidence_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
+            narrative_column: DEFAULT_REVISION_LOG_NARRATIVE_COLUMN.to_string(),
         }
     }
 }
@@ -1708,6 +1729,7 @@ impl RecordTypeConfig {
                 .or_else(|| name(&decl.tool_class))
                 .unwrap_or_else(|| default.tool_class.clone()),
             tool_class: name(&decl.tool_class).unwrap_or(default.tool_class),
+            narrative_column: name(&decl.narrative_column).unwrap_or(default.narrative_column),
         }
     }
 
@@ -2191,7 +2213,8 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
                 || decl.class_column.is_some()
                 || decl.date_column.is_some()
                 || decl.tool_class.is_some()
-                || decl.evidence_class.is_some() =>
+                || decl.evidence_class.is_some()
+                || decl.narrative_column.is_some() =>
         {
             None
         }
@@ -2205,6 +2228,34 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
         }
         _ => None,
     }
+}
+
+/// A blank name, or a column name a table header cell cannot hold.
+fn named_key_problem(decl: &RevisionLogDecl) -> Option<String> {
+    for (key, value) in [
+        ("class_column", &decl.class_column),
+        ("date_column", &decl.date_column),
+        ("tool_class", &decl.tool_class),
+        ("evidence_class", &decl.evidence_class),
+        ("narrative_column", &decl.narrative_column),
+    ] {
+        if value
+            .as_deref()
+            .is_some_and(|v| strip_emphasis(v).is_empty())
+        {
+            return Some(format!("a blank `{key}` -- it names nothing"));
+        }
+        if key.ends_with("_column")
+            && value
+                .as_deref()
+                .is_some_and(|v| v.contains(['|', '\n', '\r']))
+        {
+            return Some(format!(
+                "a `{key}` holding `|` or a line break -- a table header cell cannot"
+            ));
+        }
+    }
+    None
 }
 
 /// Why a type's `revision_log` declaration cannot be used, or `None`: the
@@ -2259,18 +2310,8 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
             }
         }
     }
-    for (key, value) in [
-        ("class_column", &decl.class_column),
-        ("date_column", &decl.date_column),
-        ("tool_class", &decl.tool_class),
-        ("evidence_class", &decl.evidence_class),
-    ] {
-        if value
-            .as_deref()
-            .is_some_and(|v| strip_emphasis(v).is_empty())
-        {
-            return Some(format!("a blank `{key}` -- it names nothing"));
-        }
+    if let Some(problem) = named_key_problem(decl) {
+        return Some(problem);
     }
     if let (Some(class), Some(date)) = (&decl.class_column, &decl.date_column) {
         if strip_emphasis(class) == strip_emphasis(date) {
@@ -3279,6 +3320,44 @@ pub fn parse_with_document_models(
     Ok((config, models))
 }
 
+/// Why `hooks.path` cannot name a committed directory inside the repository
+/// that git resolves to the same place, or `None`. git expands a leading `~`
+/// and reads a backslash or colon as a path separator or drive on some hosts,
+/// and `.git` matches case-insensitively on case-insensitive filesystems.
+fn hooks_path_problem(path: &str) -> Option<&'static str> {
+    if path.starts_with('~') {
+        return Some("may not begin with '~', which git expands to a home directory");
+    }
+    if path.starts_with('/') {
+        return Some("must be relative to the repository root");
+    }
+    for c in path.split('/') {
+        if c.is_empty() || c == "." || c == ".." {
+            return Some(
+                "must be written without '.', '..' or empty parts, for example .git-hooks",
+            );
+        }
+        if c.contains(['\\', ':']) || c.chars().any(char::is_control) {
+            return Some("may not contain a backslash, a colon or a control character");
+        }
+        if is_git_dir_name(c) {
+            return Some("may not name .git in any part (compared case-insensitively), which is not committed");
+        }
+    }
+    None
+}
+
+/// `.git` as Windows and HFS+ read it: trailing dots and spaces dropped,
+/// ignorable zero-width characters skipped, and the 8.3 short name `GIT~1`.
+fn is_git_dir_name(c: &str) -> bool {
+    let visible: String = c
+        .chars()
+        .filter(|ch| !matches!(ch, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{206A}'..='\u{206F}' | '\u{FEFF}'))
+        .collect();
+    let trimmed = visible.trim_end_matches(['.', ' ']);
+    trimmed.eq_ignore_ascii_case(".git") || trimmed.eq_ignore_ascii_case("git~1")
+}
+
 /// A hook runs only a read-only check of this repository: another subcommand could write files
 /// (`fix --apply`), reach the network (`refs`) or call the hook again
 /// (`hooks run`) on every commit.
@@ -3287,6 +3366,13 @@ fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
         return Err(ConfigError::InvalidHooks {
             reason: "'verify_timeout_seconds' must be at least 1".to_string(),
         });
+    }
+    if let Some(path) = &hooks.path {
+        if let Some(why) = hooks_path_problem(path) {
+            return Err(ConfigError::InvalidHooks {
+                reason: format!("'path' {why}; got {path:?}"),
+            });
+        }
     }
     for name in ["pre-commit", "pre-push"] {
         let args = hooks.args(name).unwrap_or_default();
@@ -6008,6 +6094,7 @@ rules:
             date_column: None,
             tool_class: "structural".into(),
             evidence_class: "structural".into(),
+            narrative_column: "Change".into(),
         };
         assert_eq!(RevisionLogShape::default(), want);
         let c = parse(LOG_BASE).unwrap();
@@ -6097,6 +6184,16 @@ rules:
         assert_eq!(shape.tool_class, "structural");
         // With the vocabulary undeclared the tool class is not checked.
         assert!(log_shape("{tool_class: whatever}").is_ok());
+        for key in ["narrative_column", "date_column", "class_column"] {
+            let err = log_shape(&format!("{{{key}: \"a|b\"}}"))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(key) && err.contains('|'), "{err}");
+            assert!(
+                log_shape(&format!("{{{key}: \"a\\nb\"}}")).is_err(),
+                "{key}"
+            );
+        }
     }
 
     #[test]
