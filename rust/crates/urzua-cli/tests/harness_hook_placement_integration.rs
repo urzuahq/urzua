@@ -311,3 +311,13 @@ fn an_unreadable_edit_payload_is_silent_where_nothing_governs_and_refused_where_
     let out = hook(&w.gov, &Project::Dir(&w.gov), "garbage{", None);
     assert_eq!(rank(&out), 2, "{out}");
 }
+
+#[test]
+fn an_unreadable_edit_payload_under_an_open_config_goes_through_with_a_notice() {
+    let root = common::TempDir::new("urzua-placement-open-unreadable");
+    let dir = root.join("o");
+    repo(&dir, Some(&format!("{TYPES}harness:\n  guardrails:\n    protected-paths: {{enabled: true, on_unjudged: allow}}\n{GATE}")));
+    let out = hook(&dir, &Project::Dir(&dir), "garbage{", None);
+    assert_eq!(rank(&out), 1, "{out}");
+    assert!(out.contains("NOT judged"), "{out}");
+}

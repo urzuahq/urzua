@@ -105,8 +105,22 @@ fn run(
     payload: &str,
     old: bool,
 ) -> (String, std::time::Duration) {
+    let (out, _, took) = run_env(cmd, combo, Some(project), cwd, payload, old, &[]);
+    (out, took)
+}
+
+/// [`run`] with `CLAUDE_PROJECT_DIR` optional and extra variables; also stderr.
+fn run_env(
+    cmd: &str,
+    combo: &Combo,
+    project: Option<&str>,
+    cwd: &Path,
+    payload: &str,
+    old: bool,
+    envs: &[(&str, &str)],
+) -> (String, String, std::time::Duration) {
     let tools = common::TempDir::new("urzua-fallback-path");
-    for tool in ["dirname", "cat"] {
+    for tool in ["dirname", "cat", "tr", "wc"] {
         std::os::unix::fs::symlink(which(tool).unwrap(), tools.join(tool)).unwrap();
     }
     std::os::unix::fs::symlink(&combo.awk, tools.join("awk")).unwrap();
@@ -126,10 +140,15 @@ fn run(
         .current_dir(cwd)
         .env_clear()
         .env("PATH", tools.path())
-        .env("CLAUDE_PROJECT_DIR", project)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(p) = project {
+        c.env("CLAUDE_PROJECT_DIR", p);
+    }
+    for (k, v) in envs {
+        c.env(k, v);
+    }
     let start = std::time::Instant::now();
     let mut child = c.spawn().unwrap();
     let _ = child.stdin.take().unwrap().write_all(payload.as_bytes());
@@ -146,7 +165,11 @@ fn run(
     }
     let out = child.wait_with_output().unwrap();
     assert_eq!(out.status.code(), Some(0), "{out:?}");
-    (String::from_utf8(out.stdout).unwrap(), start.elapsed())
+    (
+        String::from_utf8(out.stdout).unwrap(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+        start.elapsed(),
+    )
 }
 
 fn denied(out: &str) -> bool {
@@ -300,5 +323,136 @@ fn without_urzua_the_walk_up_from_the_session_ends_on_double_slash_paths() {
                 combo.shell
             );
         }
+    }
+}
+
+fn write_payload(dir: &Path) -> String {
+    serde_json::json!({"tool_name": "Write", "cwd": dir.to_string_lossy(), "tool_input": {"file_path": dir.join(".claude/settings.json").to_string_lossy(), "content": "{}"}}).to_string()
+}
+
+/// A repository with `config` written as bytes (`None`: `.urzua/config.yaml` is
+/// a directory).
+fn repo_with(name: &str, config: Option<&[u8]>) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-fallback-shape-{name}"));
+    git(&dir, &["init", "-q"]);
+    std::fs::create_dir_all(dir.join(".claude")).unwrap();
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    match config {
+        Some(c) => std::fs::write(dir.join(".urzua/config.yaml"), c).unwrap(),
+        None => std::fs::create_dir_all(dir.join(".urzua/config.yaml")).unwrap(),
+    }
+    dir
+}
+
+fn ordinary_payload(dir: &Path) -> String {
+    serde_json::json!({"tool_name": "Write", "cwd": dir.to_string_lossy(), "tool_input": {"file_path": dir.join("notes.txt").to_string_lossy(), "content": "x"}}).to_string()
+}
+
+/// How strictly the real engine treats `payload`: a refusal, a notice, silence.
+fn engine_rank(dir: &Path, payload: &str) -> u8 {
+    let out = common::run_hook(dir, "edit", payload, None, Some(dir), &[]);
+    let o = String::from_utf8(out.stdout).unwrap();
+    if denied(&o) { 2 } else { u8::from(!o.trim().is_empty()) }
+}
+
+fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, bool)> {
+    let g = |body: &str| format!("{TYPES}harness:\n  guardrails:\n{body}{GATE}").into_bytes();
+    let utf16: Vec<u8> = String::from_utf8(g("    protected-paths: {enabled: false}\n")).unwrap().encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+    let mut nul = g("    protected-paths: {enabled: false}\n");
+    nul.insert(10, 0);
+    // (name, config, the engine reads it as open)
+    vec![
+        ("an escaped key", Some(g("    \"protected\\x2dpaths\":\n      enabled: true\n")), false),
+        ("a quoted key", Some(g("    \"protected-paths\":\n      enabled: true\n")), false),
+        ("broken YAML", Some(format!("{TYPES}schema_version: [\nharness:\n  guardrails:\n    protected-paths: {{enabled: false}}\n{GATE}").into_bytes()), false),
+        ("UTF-16", Some(utf16), false),
+        ("a NUL byte", Some(nul), false),
+        ("a tab in indentation", Some(format!("{TYPES}harness:\n\tguardrails:\n\t\tprotected-paths: {{enabled: false}}\n{GATE}").into_bytes()), false),
+        ("a repeated key", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: deny\n      on_unjudged: allow\n")), false),
+        ("a child deeper than its siblings", Some(g("    protected-paths:\n      enabled: false\n        on_unjudged: allow\n")), false),
+        ("the configuration a directory", None, false),
+        ("editor-hook with pending_pair, one line", Some(g("    editor-hook: {enabled: true, on_unjudged: allow, pending_pair: allow}\n")), true),
+        ("editor-hook with pending_pair, block", Some(g("    editor-hook:\n      enabled: true\n      on_unjudged: allow\n      pending_pair: allow\n")), true),
+        ("a double-quoted allow", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: \"allow\"\n")), true),
+        ("a single-quoted allow", Some(g("    protected-paths: {enabled: true, on_unjudged: 'allow'}\n")), true),
+        ("a guardrail's name in a value", Some(format!("description: Records the acceptance of a decision\n{TYPES}harness:\n  guardrails:\n    session-start: {{enabled: true}}\n{GATE}").into_bytes()), true),
+    ]
+}
+
+#[test]
+fn without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused_and_an_open_one_is_open() {
+    let cmds = commands();
+    for (name, config, open) in shapes() {
+        let dir = repo_with(&name.replace(' ', "-"), config.as_deref());
+        // An open shape: the engine lets an ordinary edit through, and the
+        // fallback must too (with its notice). Any other: the engine refuses a
+        // write to a protected file where it can read the configuration, and
+        // the fallback refuses it in every case.
+        let payload = if open { ordinary_payload(&dir) } else { write_payload(&dir) };
+        let engine = engine_rank(&dir, &payload);
+        if open {
+            assert!(engine < 2, "{name}: the engine lets an ordinary edit through");
+        }
+        for combo in combos() {
+            let (out, _) = run(&cmds["PreToolUse"], &combo, &dir.to_string_lossy(), &dir, &payload, false);
+            let what = format!("{name} {:?} {:?}: engine {engine}, fallback {out}", combo.shell, combo.awk);
+            if open {
+                assert!(!denied(&out) && out.contains("could NOT run"), "{what}");
+            } else {
+                assert!(denied(&out), "{what}");
+            }
+        }
+    }
+}
+
+#[test]
+fn without_urzua_a_session_through_a_symlink_into_a_governed_subdirectory_is_refused() {
+    let cmds = commands();
+    let root = common::TempDir::new("urzua-fallback-link");
+    let gov = root.join("gov");
+    std::fs::create_dir_all(gov.join("sub")).unwrap();
+    git(&gov, &["init", "-q"]);
+    std::fs::create_dir_all(gov.join(".urzua")).unwrap();
+    std::fs::write(gov.join(".urzua/config.yaml"), format!("{TYPES}harness:\n  guardrails:\n    protected-paths: {{enabled: true}}\n{GATE}")).unwrap();
+    let link = root.join("link-gov-sub");
+    std::os::unix::fs::symlink(gov.join("sub"), &link).unwrap();
+    let l = link.to_string_lossy().to_string();
+    for combo in combos() {
+        // The project variable names the link.
+        let (out, _, _) = run_env(&cmds["PreToolUse"], &combo, Some(&l), &link, &write_payload(&link), false, &[]);
+        assert!(denied(&out), "project {:?}: {out}", combo.shell);
+        // No project variable; the working directory is the link, logically.
+        let (out, _, _) = run_env(&cmds["PreToolUse"], &combo, None, &link, &write_payload(&link), false, &[("PWD", &l)]);
+        assert!(denied(&out), "pwd {:?}: {out}", combo.shell);
+    }
+}
+
+#[test]
+fn without_urzua_either_the_project_or_the_working_directory_finding_a_closed_config_refuses() {
+    let cmds = commands();
+    let none = session("none");
+    let closed = session("closed");
+    for combo in combos() {
+        let (out, _, _) = run_env(&cmds["PreToolUse"], &combo, Some(&none.to_string_lossy()), &closed, &write_payload(&closed), false, &[]);
+        assert!(denied(&out), "working directory closed {:?}: {out}", combo.shell);
+        let (out, _, _) = run_env(&cmds["PreToolUse"], &combo, Some(&closed.to_string_lossy()), &none, &write_payload(&none), false, &[]);
+        assert!(denied(&out), "project closed {:?}: {out}", combo.shell);
+    }
+}
+
+#[test]
+fn without_urzua_silence_is_stdout_and_stderr_and_post_command_says_one_short_line() {
+    let cmds = commands();
+    let none = session("none");
+    let open = session("open");
+    for combo in combos() {
+        for event in ["PreToolUse", "PostToolUse", "SessionStart"] {
+            let (out, err, _) = run_env(&cmds[event], &combo, Some(&none.to_string_lossy()), &none, &write_payload(&none), false, &[]);
+            assert!(out.is_empty() && err.is_empty(), "{event} {:?}: out {out} err {err}", combo.shell);
+        }
+        let bash = serde_json::json!({"tool_name": "Bash", "cwd": open.to_string_lossy(), "tool_input": {"command": "true"}}).to_string();
+        let (out, _, _) = run_env(&cmds["PostToolUse"], &combo, Some(&open.to_string_lossy()), &open, &bash, false, &[]);
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert!(v.get("hookSpecificOutput").is_none() && out.lines().count() == 1, "{out}");
     }
 }

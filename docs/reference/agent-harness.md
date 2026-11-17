@@ -64,12 +64,17 @@ says nothing; if one is found and is not read with certainty as letting an unjud
 refused. Read with certainty as open means: neither `acceptance` nor `protected-paths` enabled without
 `on_unjudged: allow`, and `editor-hook` not enabled with `on_unjudged: deny`.
 
-When the binary cannot run at all, the hook command reads no path from the payload and decides from the session's
-directory alone: with no `.urzua/config.yaml` at or above it, it says nothing; with one it reads with certainty as
-open (only the block form `enabled: true|false`, `on_unjudged: allow|deny` and the one-line `{...}` form, comments
-stripped, no anchor, alias or tag), it lets the call through with a notice; with any other, it refuses every edit
-and MCP call until urzua is installed or upgraded, because without the binary it cannot tell a protected file from
-another. A missing binary closes the gate rather than opening it.
+When the binary cannot run at all, the hook command reads no path from the payload and decides from the session
+alone: from `CLAUDE_PROJECT_DIR` and from the working directory, each resolved to its physical path, it looks for
+the nearest `.urzua/config.yaml` at or above. With none, it says nothing, on stdout or stderr. With one that it reads
+with certainty as open, it lets the call through with a notice. With any other, it refuses every edit and MCP call
+until urzua is installed or upgraded, because without the binary it cannot tell a protected file from another.
+Read with certainty means: guardrails only at a key position under `harness.guardrails`, in the block form or the
+one-line `{...}` form, with only the keys a guardrail carries (`enabled: true|false`, `on_unjudged: allow|deny`,
+`pending_pair: allow|refuse`), values plain or quoted. A quoted key, an anchor, alias or tag, unbalanced brackets, a
+tab in indentation, a repeated key, a child indented unlike its siblings, `on_unjudged:` with its value on the next
+line, or a file that is not plain text is not certain, and is refused. So with the binary missing the hook closes
+the gate in a governed session, and it cannot see beyond the session's directory.
 
 With urzua missing or too old, the hook decides from the session's directory only. A session rooted in a
 directory with no configuration, or in a repository whose configuration is open, is not stopped from editing a
@@ -77,7 +82,7 @@ file in a different, governed repository. Install urzua to close it: with the bi
 placed and judged. (Accepted by the maintainer on 2026-11-17 that a file the fallback cannot see is not checked;
 deciding from the session alone is the orchestrator's decision of 2026-11-17, pending maintainer review.)
 
- A panic inside the binary, or an engine that does
+A panic inside the binary, or an engine that does
 not answer before the hook's own deadline (15 seconds short of `hook_timeout_seconds`), also ends in a
 refusal, as one JSON document.
 
