@@ -165,6 +165,30 @@ pub enum PendingPair {
     Allow,
 }
 
+/// How the `acceptance` guardrail meets an agent's gated move: refuse it, or
+/// ask the person at the keyboard through the agent host (`ADR-102`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InSession {
+    #[default]
+    Refuse,
+    Ask,
+}
+
+impl InSession {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            InSession::Refuse => "refuse",
+            InSession::Ask => "ask",
+        }
+    }
+}
+
+/// How long a person's approval of a gated move stays good for a commit when
+/// `approval_minutes` is not declared, and the most it may be declared.
+pub const DEFAULT_APPROVAL_MINUTES: u32 = 60;
+pub const MAX_APPROVAL_MINUTES: u32 = 1440;
+
 impl PendingPair {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -188,6 +212,10 @@ pub struct Guardrail {
     /// `post-command` only: the level of a gated change whose content is the
     /// one on `base`; `None` is `info`.
     pub base_match: Option<crate::report::FindingSeverity>,
+    /// `acceptance` only; `None` is `refuse`.
+    pub in_session: Option<InSession>,
+    /// `acceptance` only; `None` is [`DEFAULT_APPROVAL_MINUTES`].
+    pub approval_minutes: Option<u32>,
 }
 
 /// The post-command comparison ref when `base` is not declared: the remote's
@@ -255,6 +283,8 @@ impl GuardrailInfo {
     fn keys(&self) -> &'static [&'static str] {
         if self.name == "editor-hook" {
             &["enabled", "on_unjudged", "pending_pair"]
+        } else if self.name == "acceptance" {
+            &["enabled", "on_unjudged", "in_session", "approval_minutes"]
         } else if self.name == "post-command" {
             &["enabled", "base", "base_match"]
         } else if self.takes_on_unjudged {
@@ -293,6 +323,8 @@ impl HarnessDecl {
             pending_pair: None,
             base: None,
             base_match: None,
+            in_session: None,
+            approval_minutes: None,
         };
         for (k, val) in body {
             match k.as_str().unwrap_or("?") {
@@ -322,6 +354,10 @@ impl HarnessDecl {
                             "harness.guardrails.editor-hook.pending_pair must be refuse or allow",
                         )),
                     })
+                }
+                "in_session" | "approval_minutes" if name == "acceptance" => {
+                    read_acceptance_key(&mut guardrail, k.as_str().unwrap_or("?"), val)
+                        .map_err(D::Error::custom)?
                 }
                 "base" if name == "post-command" => match val.as_str().map(str::trim) {
                     // A leading '-' would reach git as an option.
@@ -374,6 +410,22 @@ impl HarnessDecl {
             .get("editor-hook")
             .and_then(|g| g.pending_pair)
             .unwrap_or_default()
+    }
+
+    /// The effective `acceptance.in_session`: the declared value, else `refuse`.
+    pub fn in_session(&self) -> InSession {
+        self.guardrails
+            .get("acceptance")
+            .and_then(|g| g.in_session)
+            .unwrap_or_default()
+    }
+
+    /// The effective `acceptance.approval_minutes`.
+    pub fn approval_minutes(&self) -> u32 {
+        self.guardrails
+            .get("acceptance")
+            .and_then(|g| g.approval_minutes)
+            .unwrap_or(DEFAULT_APPROVAL_MINUTES)
     }
 
     /// The effective `post-command.base`.
@@ -482,6 +534,32 @@ impl<'de> Deserialize<'de> for HarnessDecl {
         }
         Ok(decl)
     }
+}
+
+/// `acceptance.in_session` or `acceptance.approval_minutes` into `guardrail`.
+fn read_acceptance_key(
+    guardrail: &mut Guardrail,
+    key: &str,
+    val: &yaml_serde::Value,
+) -> Result<(), String> {
+    if key == "in_session" {
+        guardrail.in_session = Some(match val.as_str() {
+            Some("refuse") => InSession::Refuse,
+            Some("ask") => InSession::Ask,
+            _ => {
+                return Err("harness.guardrails.acceptance.in_session must be refuse or ask".into())
+            }
+        });
+        return Ok(());
+    }
+    let minutes = val
+        .as_u64()
+        .filter(|m| (1..=u64::from(MAX_APPROVAL_MINUTES)).contains(m))
+        .ok_or_else(|| {
+            format!("harness.guardrails.acceptance.approval_minutes must be a whole number from 1 to {MAX_APPROVAL_MINUTES}")
+        })?;
+    guardrail.approval_minutes = Some(minutes as u32);
+    Ok(())
 }
 
 /// `harness.adapters`: a list of non-blank adapter names.
@@ -626,6 +704,36 @@ mod tests {
 
     fn parse(yaml: &str) -> Result<HarnessDecl, yaml_serde::Error> {
         yaml_serde::from_str(yaml)
+    }
+
+    #[test]
+    fn acceptance_asks_in_the_session_only_when_it_says_so() {
+        let off = parse("guardrails:\n  acceptance: {enabled: true}\n").unwrap();
+        assert_eq!(off.in_session(), InSession::Refuse);
+        assert_eq!(off.approval_minutes(), DEFAULT_APPROVAL_MINUTES);
+        let on = parse(
+            "guardrails:\n  acceptance: {enabled: true, in_session: ask, approval_minutes: 5}\n",
+        )
+        .unwrap();
+        assert_eq!(on.in_session(), InSession::Ask);
+        assert_eq!(on.approval_minutes(), 5);
+        assert!(on.problems.is_empty(), "{:?}", on.problems);
+        for bad in [
+            "in_session: yes",
+            "approval_minutes: 0",
+            "approval_minutes: 1441",
+            "approval_minutes: soon",
+        ] {
+            let e = parse(&format!(
+                "guardrails:\n  acceptance: {{enabled: true, {bad}}}\n"
+            ))
+            .unwrap_err()
+            .to_string();
+            assert!(e.contains("harness.guardrails.acceptance."), "{bad}: {e}");
+        }
+        let other =
+            parse("guardrails:\n  editor-hook: {enabled: true, in_session: ask}\n").unwrap();
+        assert_eq!(other.unknown_keys.len(), 1);
     }
 
     #[test]

@@ -55,6 +55,28 @@ fn kinds_text(authority: &AuthorityDecl) -> String {
         .join(" or ")
 }
 
+/// What the agent harness kept locally about a person's approval of a gated
+/// move in an agent session (`ADR-102`). It exists only in the checkout's git
+/// directory, so it is read by a local run with no actors file and never in CI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionApproval {
+    /// A confirmed approval for this record, this status and these bytes.
+    Valid(String),
+    /// The approved bytes are on disk but the host never reported the approved
+    /// call as landed.
+    Pending(String),
+    /// An approval names the record but does not hold, and why.
+    Invalid(String),
+}
+
+/// Who made the change, as far as the run can tell: the actors file the host
+/// wrote, else the harness's local approvals (read only without one).
+#[derive(Clone, Copy, Default)]
+pub struct DeciderEvidence<'a> {
+    pub actors: Option<&'a Actors>,
+    pub approvals: Option<&'a HashMap<PathBuf, SessionApproval>>,
+}
+
 /// One gated change found in the diff.
 struct Gated<'a> {
     path: &'a Path,
@@ -243,15 +265,34 @@ fn finding_for(
     judged: &Judged<'_>,
     actors: Option<&Actors>,
     opts: &DeciderRequiredOpts,
+    approval: Option<&SessionApproval>,
 ) -> Option<Finding> {
     let group = &g.gate.by;
     let gate_text = match judged.label {
         Some(label) => format!("{}, in {label}", g.gate.describe()),
         None => g.gate.describe(),
     };
-    let (message, declared_severity) = match actors {
-        Some(actors) if judged.table.satisfied(g.gate, actors) => return None,
-        Some(actors) => (
+    let approval =
+        approval.filter(|_| actors.is_none() && g.variant == "gated-move-without-decider");
+    let (message, declared_severity) = match (actors, approval) {
+        (Some(actors), _) if judged.table.satisfied(g.gate, actors) => return None,
+        (None, Some(SessionApproval::Valid(how))) => (
+            format!(
+                "{}: {} (gate: {gate_text}), {how}; the agent harness's local state backs this receipt, which only this checkout can read, so CI still requires the actors file to name a login in the decider group '{group}'",
+                g.path.display(),
+                g.what,
+            ),
+            Some(FindingSeverity::Info),
+        ),
+        (None, Some(SessionApproval::Pending(why))) => (
+            format!(
+                "{}: {} (gate: {gate_text}), and {why}; approve the edit again in the agent session so the host reports it, or a person in the decider group '{group}' makes the change outside the agent harness",
+                g.path.display(),
+                g.what,
+            ),
+            None,
+        ),
+        (Some(actors), _) => (
             format!(
                 "{}: {} (gate: {gate_text}), and {} -- none is in the decider group '{group}' (evidence accepted: {})",
                 g.path.display(),
@@ -261,11 +302,15 @@ fn finding_for(
             ),
             None,
         ),
-        None => (
+        (None, other) => (
             format!(
-                "{}: {} (gate: {gate_text}), but no --actors file was given, so who made it is not known and the decider group '{group}' cannot be checked; run `urzua check --base REF --actors FILE` (the gate action writes FILE)",
+                "{}: {} (gate: {gate_text}), but no --actors file was given, so who made it is not known and the decider group '{group}' cannot be checked; run `urzua check --base REF --actors FILE` (the gate action writes FILE){}",
                 g.path.display(),
                 g.what,
+                match other {
+                    Some(SessionApproval::Invalid(why)) => format!(". An approval given in an agent session names this record and does not hold: {why}; approve the move again in the agent session, or a decider makes it outside the agent harness"),
+                    _ => String::new(),
+                }
             ),
             (!opts.require_evidence).then_some(FindingSeverity::Info),
         ),
@@ -299,10 +344,11 @@ pub fn decider_required(
     records: &[Record],
     config: &Config,
     history: &BaseHistory<'_>,
-    actors: Option<&Actors>,
+    evidence: DeciderEvidence<'_>,
     base: &BaseAuthority,
     opts: &DeciderRequiredOpts,
 ) -> (RuleExecution, Vec<Finding>) {
+    let DeciderEvidence { actors, approvals } = evidence;
     const RULE_ID: &str = RULE_DIFF_DECIDER_REQUIRED;
     let (Some(changed), Some(head)) = (changed, config.authority.as_ref()) else {
         return not_applicable(RULE_ID);
@@ -324,7 +370,8 @@ pub fn decider_required(
         );
         for g in &gated {
             gated_paths.insert(g.path);
-            findings.extend(finding_for(g, &judged, actors, opts));
+            let approval = approvals.and_then(|a| a.get(g.path));
+            findings.extend(finding_for(g, &judged, actors, opts, approval));
         }
     }
     let population = census(PopulationUnit::ChangedPath, paths, |path| {
@@ -386,7 +433,10 @@ mod tests {
                 committed: Some(&committed(base)),
                 deleted: &[],
             },
-            who,
+            DeciderEvidence {
+                actors: who,
+                approvals: None,
+            },
             &BaseAuthority::Absent,
             &DeciderRequiredOpts {
                 require_evidence: require,
@@ -406,7 +456,7 @@ mod tests {
                 committed: None,
                 deleted: &[],
             },
-            None,
+            DeciderEvidence::default(),
             &BaseAuthority::Absent,
             &DeciderRequiredOpts::default(),
         );
@@ -541,7 +591,10 @@ mod tests {
                 committed: Some(&HashMap::new()),
                 deleted: &deleted(status),
             },
-            Some(who),
+            DeciderEvidence {
+                actors: Some(who),
+                approvals: None,
+            },
             &BaseAuthority::Absent,
             &DeciderRequiredOpts::default(),
         )

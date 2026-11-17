@@ -13,6 +13,7 @@
 //! Nothing here names an agent: an adapter is a directory of the bundle, found by
 //! its name.
 
+pub(crate) mod approval;
 mod block;
 mod bundle;
 mod gate;

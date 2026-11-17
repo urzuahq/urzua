@@ -9,10 +9,11 @@
 //! from allow into deny for an agent.
 //!
 //! Request: `{event, tool, paths, content, actor, cwd, override?}`.
-//! Verdict: `{verdict, path?, message, findings, override?}` with `verdict` one
-//! of `allow`, `allow-with-warnings`, `block`, `allow-unjudged`,
-//! `allow-override` and `not-governed`. Exit 0 for every verdict but `block`
-//! (exit 1).
+//! Verdict: `{verdict, path?, message, findings, override?, content?}` with
+//! `verdict` one of `allow`, `allow-with-warnings`, `block`, `allow-unjudged`,
+//! `allow-override`, `not-governed` and `ask` (the adapter asks the person
+//! through the host and, on approval, writes `content`). Exit 0 for every
+//! verdict but `block` (exit 1).
 
 use std::collections::HashSet;
 use std::io::Read;
@@ -33,6 +34,7 @@ use crate::commands::check::judge_proposed;
 use crate::emit;
 use crate::session::Workspace;
 
+mod ask;
 mod outside;
 pub(super) mod unjudged;
 
@@ -82,6 +84,10 @@ struct Request {
     /// before any record is checked.
     #[serde(default)]
     gates_only: bool,
+    /// What the adapter knows about asking the person at the keyboard about
+    /// this call (`ADR-102`); absent from an adapter that cannot ask.
+    #[serde(default)]
+    ask: Option<ask::AskRequest>,
     /// Set while the session's own repository judges a file it holds: there an
     /// editor hook its configuration turned off says nothing. Anywhere else (a
     /// linked worktree, an outer repository) the unjudged edit stays loud.
@@ -119,6 +125,19 @@ struct Verdict {
     /// Only for a `gates_only` request that no gate denied.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     gates: Option<Box<GatesAnswer>>,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    asking: Option<Box<Asking>>,
+}
+
+/// What a verdict carries for the person to be asked (`ADR-102`).
+#[derive(Serialize, Default)]
+struct Asking {
+    /// Only for `ask`: the file as the approved edit writes it, receipt included.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    /// The move a refusal is about, when a person may answer it in the session.
+    #[serde(skip)]
+    gated_move: Option<gate::GatedMove>,
 }
 
 /// The answer to a `gates_only` request that no gate denied: whether the full
@@ -139,6 +158,7 @@ impl Verdict {
             findings: Vec::new(),
             override_name: None,
             gates: None,
+            asking: None,
         }
     }
 }
@@ -259,14 +279,21 @@ fn denied(denial: &gate::Denial, rel: &str, request: &Request) -> Verdict {
         ),
         None => String::new(),
     };
-    Verdict::new(
+    let mut v = Verdict::new(
         "block",
         Some(rel),
         format!(
             "urzua harness ({}): refused. {}. A person makes this change by editing outside the agent harness (a plain editor or a terminal), where no hook runs. The override of ADR-78 is not accepted for this verdict.{override_note}",
             denial.guardrail, denial.reason
         ),
-    )
+    );
+    if let Some(mv) = denial.gated_move.clone() {
+        v.asking = Some(Box::new(Asking {
+            content: None,
+            gated_move: Some(mv),
+        }));
+    }
+    v
 }
 
 /// When the configuration does not load, the raw file still says what the
@@ -848,7 +875,8 @@ fn judge_edit_in(config: Option<PathBuf>, mut request: Request) -> Verdict {
     // path, is refused outright (`ADR-89` section 4).
     if actor == Actor::Agent {
         if let Some(denial) = agent_gate_denial(&repo_root, &loaded, &request) {
-            return denial;
+            let ws = (repo_root.as_path(), config_path.as_path(), &loaded);
+            return answer_denial(ws, config.clone(), &request, denial);
         }
         if request.gates_only {
             return gates_only_verdict(&repo_root, &loaded, &request);
@@ -916,6 +944,29 @@ fn judge_edit_in(config: Option<PathBuf>, mut request: Request) -> Verdict {
         },
         content,
         &request,
+    )
+}
+
+/// A gate's refusal of an agent's edit, or the person asked instead (`run/ask.rs`).
+fn answer_denial(
+    (repo_root, config_path, loaded): (&Path, &Path, &Config),
+    config_arg: Option<PathBuf>,
+    request: &Request,
+    denial: Verdict,
+) -> Verdict {
+    ask::ask_or_refuse(
+        &Judging {
+            repo_root,
+            config_path,
+            config: loaded,
+            config_arg,
+            on: OnUnjudged::Allow,
+            actor: Actor::Agent,
+            rel: PathBuf::new(),
+            rel_text: "",
+        },
+        request,
+        denial,
     )
 }
 
@@ -1116,7 +1167,7 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
     let rel = j.rel_text;
     let report = match proposed_report(j, content) {
         Ok(r) => r,
-        Err(verdict) => return verdict,
+        Err(verdict) => return *verdict,
     };
 
     // Missing history costs only the rules that read it (embodiment drift).
@@ -1269,26 +1320,26 @@ fn follow_up(pending: &[&Finding], allowed: bool) -> String {
 
 /// The check report of the proposed content, or the verdict when it cannot
 /// be had.
-fn proposed_report(j: &Judging<'_>, content: String) -> Result<CheckReport, Verdict> {
+fn proposed_report(j: &Judging<'_>, content: String) -> Result<CheckReport, Box<Verdict>> {
     let rel = j.rel_text;
     match judge_proposed(j.config_arg.clone(), j.rel.clone(), content) {
-        Err(e) if e.message.starts_with("no record type governs ") => Err(Verdict::new(
+        Err(e) if e.message.starts_with("no record type governs ") => Err(Box::new(Verdict::new(
             "not-governed",
             Some(rel),
             format!("{rel} is not a governed record; nothing to judge"),
-        )),
-        Err(e) => Err(unjudged(
+        ))),
+        Err(e) => Err(Box::new(unjudged(
             j.on,
             j.actor,
             Some(rel),
             &format!("urzua reported not-run: {}", e.message),
-        )),
-        Ok(r) if r.status == ReportStatus::NotRun => Err(unjudged(
+        ))),
+        Ok(r) if r.status == ReportStatus::NotRun => Err(Box::new(unjudged(
             j.on,
             j.actor,
             Some(rel),
             "urzua reported not-run: no enabled rule examined the record",
-        )),
+        ))),
         Ok(r) => Ok(r),
     }
 }

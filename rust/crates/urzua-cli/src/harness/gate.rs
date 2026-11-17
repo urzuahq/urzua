@@ -34,6 +34,23 @@ use urzua_core::rules;
 pub(super) struct Denial {
     pub guardrail: &'static str,
     pub reason: String,
+    /// Set for a move into a gated status, the one denial a person may answer
+    /// in the session when `acceptance.in_session` is `ask`.
+    pub gated_move: Option<GatedMove>,
+}
+
+/// A move of one record into a status a gate reserves, as read from the
+/// record and the configuration.
+#[derive(Debug, Clone)]
+pub(super) struct GatedMove {
+    pub rel: PathBuf,
+    pub record_type: String,
+    pub field: String,
+    /// The status it leaves; `None` for a record filed straight at the gated one.
+    pub from: Option<String>,
+    pub to: String,
+    pub group: String,
+    pub gate: String,
 }
 
 fn status_of(config: &Config, rel: &Path, text: &str) -> Option<(String, String)> {
@@ -322,6 +339,7 @@ fn judge_leaving(
         ),
     };
     Some(Denial {
+        gated_move: None,
         guardrail: "acceptance",
         reason: format!(
             "this edit {what}, taking it out of a gated status, which has a deletion's outcome and which the authority table reserves for a decider ({}); an agent cannot make it through the edit tools",
@@ -342,6 +360,7 @@ pub(super) fn judge(
     if harness.enabled("protected-paths") {
         if let Some(gate) = protected_gate(authority, rel) {
             return Some(Denial {
+                gated_move: None,
                 guardrail: "protected-paths",
                 reason: format!(
                     "{} is a protected path ({}); only that decider group may change it, and an agent's edit through the edit tools is refused",
@@ -354,6 +373,7 @@ pub(super) fn judge(
     if harness.enabled("protected-paths") {
         if let Some(entry) = owned_entry(config, rel) {
             return Some(Denial {
+                gated_move: None,
                 guardrail: "protected-paths",
                 reason: format!(
                     "{} is kept by urzua itself ({entry}: the post-command baselines, the harness lock, the override log, the git hooks and configuration); an agent's edit through the edit tools is refused, because a change there would disarm a report or a review. urzua writes it; a person edits it outside the agent harness",
@@ -373,8 +393,9 @@ pub(super) fn judge(
         let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
         // An edit that leaves the status where it was is not a move; any other
         // edit to a gated status, a record filed straight at it included, is.
-        let from = match status_before(repo_root, config, rel) {
-            Some(Some(before)) if same_status(&before, &status) => return None,
+        let before = status_before(repo_root, config, rel);
+        let from = match &before {
+            Some(Some(before)) if same_status(before, &status) => return None,
             Some(Some(before)) => format!("moves {} from {field} '{before}' to '{status}'", rel.display()),
             Some(None) => format!("files {} already at {field} '{status}'", rel.display()),
             None => format!(
@@ -382,7 +403,18 @@ pub(super) fn judge(
                 rel.display()
             ),
         };
+        // A copy that could not be read is no move a person can be shown.
+        let gated_move = before.map(|from| GatedMove {
+            rel: rel.to_path_buf(),
+            record_type: record_type.clone(),
+            field: field.to_string(),
+            from,
+            to: status.clone(),
+            group: gate.by.clone(),
+            gate: gate_summary(gate),
+        });
         return Some(Denial {
+            gated_move,
             guardrail: "acceptance",
             reason: format!(
                 "this edit {from}, a move the authority table reserves for a decider ({}); an agent cannot make it through the edit tools",

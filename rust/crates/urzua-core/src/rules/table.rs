@@ -2447,7 +2447,10 @@ pub const RULE_TABLE: &[RuleDef] = &[
                     committed: c.committed_statuses,
                     deleted: c.deleted_records,
                 },
-                c.actors,
+                DeciderEvidence {
+                    actors: c.actors,
+                    approvals: c.session_approvals,
+                },
                 c.base_authority,
                 &opts,
             )

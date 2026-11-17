@@ -14,6 +14,15 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{hook:post-edit}}"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {

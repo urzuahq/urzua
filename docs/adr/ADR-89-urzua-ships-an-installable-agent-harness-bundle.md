@@ -1104,6 +1104,32 @@ be read, since it names no file the hook can place. Front matter is compared as 
 a table separator cell must be one of `---`, `:---`, `---:`, `:---:`. Accepted limit, pending maintainer review:
 in a repository that does not use urzua, the fallback refuses an edit whose path has a `.` or `..` component.
 
+## Amendment (2026-11-17): an approval given at the agent host's prompt is a person's act, and what it proves
+
+`ADR-102`, amended on 2026-11-17 with the maintainer's acceptance ("I'm happy for you to amend ADR 102. I'll give you
+my acceptance."), lets the `acceptance` guardrail put an agent's gated move to the person through the agent host's
+permission prompt instead of refusing it, when the configuration sets `in_session: ask`. Section 4 holds that moving a
+record to a reserved status is a person's act; this amendment states how such an approval stands under it. Everything
+below is decided by the builder on 2026-11-17, pending maintainer review.
+
+1. **A person's act.** Approving the host's prompt for a gated edit is the person's decision to make that move, as
+   editing the file outside the agent is. The agent proposed and typed the edit; the person decided it. The receipt says
+   so: the move was approved in an agent session by the named person. It never says the person edited the file.
+2. **What it proves locally.** A confirmed approval kept under `.git/urzua/approvals` proves, on that machine, that the
+   host showed a prompt for that edit of that record into that status, in that session, that the call then ran (the host
+   runs its post-edit hook only after an approved tool call), and that the file still holds exactly the approved bytes.
+   The pre-commit check accepts the move on that basis, without an actors file and without `--no-verify`.
+3. **What it does not prove.** Which person clicked: only as far as the identity source says (`gh-verified` names the
+   signed-in login, `git-config` names whatever the configuration holds), and the host's own guarantee that a prompt it
+   shows in a given permission mode is answered by a person. That nothing else answered the prompt: a host program or
+   extension that answers prompts defeats it, as it defeats any prompt. That no shell command wrote the approval: the edit
+   tools cannot (`.git/urzua` is protected state), but a shell command can, as it can write the record itself; the
+   post-command check reports such a command's status move, and this stays inside the accepted risk of section 4.
+4. **CI is unchanged.** The approval lives in the git directory, which no commit carries, so CI never reads it.
+   `diff.decider-required` still requires the gate action's actors file to name a login in the decider group; a receipt
+   in the record is not evidence there. A repository that needs proof of who decided keeps acceptance in a pull request
+   authored or approved by the decider.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1162,3 +1188,4 @@ in a repository that does not use urzua, the fallback refuses an edit whose path
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, third review): an unjudged edit is decided from the engine's inputs`: path placement and configuration discovery as the engine does them, silence only where nothing governs any path, the closed list of formatter differences, `editor-hook` deny honoured, and the shell fallback's limit stated. **Why:** third review of the pull request that moved the harness into the binary; the placement rule and the drift list decided by the orchestrator on 2026-11-17, the rest by the builder, all pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, fourth review): every candidate path counts, and the shell refuses what it cannot place`. **Why:** fourth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, fifth review): the shell fallback places only plain paths`. **Why:** fifth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17): an approval given at the agent host's prompt is a person's act, and what it proves`. **Why:** `ADR-102` Consequences require it, and the maintainer accepted the amendment of `ADR-102` on 2026-11-17 ("I'm happy for you to amend ADR 102. I'll give you my acceptance.") that makes the host's prompt the first mechanism; the amendment's content was decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |

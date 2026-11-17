@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.162'
+Version: '0.163'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:e2981c06fd2407d7fe81d1c1d5a796caf66cfa47d57f6e188a22412d3d1a545d, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -989,7 +989,7 @@ harness:
     editor-hook:    {enabled: true, on_unjudged: allow, pending_pair: allow}   # allow | deny; allow | refuse
     session-start:  {enabled: true}
     post-command:   {enabled: false, base: origin/HEAD, base_match: info}   # a ref; info | warning | error
-    acceptance:     {enabled: false, on_unjudged: deny}
+    acceptance:     {enabled: false, on_unjudged: deny, in_session: refuse, approval_minutes: 60}   # refuse | ask; 1 to 1440
     protected-paths: {enabled: false, on_unjudged: deny}
   limits:                            # optional; each key undeclared is its built-in value
     hook_timeout_seconds: 120
@@ -1030,6 +1030,18 @@ harness:
   person's is allowed). A denying guardrail that cannot judge refuses an agent's edit to the protected
   paths too, including this file; a person repairs it by editing outside the agent harness (a plain editor
   or a terminal), where no hook runs. `urzua doctor` and the verdict's message say so.
+- **`acceptance.in_session`** is `refuse` or `ask` (anything else is a load error; `ADR-102`, amendment of
+  2026-11-17). `refuse`, and the key undeclared, refuse an agent's move to a gated status as before. `ask` puts an
+  agent's edit that moves one record into a gated status to the person through the agent host's permission prompt,
+  with a reason the hook writes from the record and the configuration and with the receipt added to the edit (each
+  date field the entered status requires that is missing or blank and that `date.field-valid` declares, set to today,
+  and a revision-log row reading that the move was approved in an agent session by the named person); where the
+  adapter cannot show the person that prompt (a subagent, a permission mode that does not prompt or that it does not
+  know) the edit stays refused and the message says what to do. **`acceptance.approval_minutes`** (a whole number from
+  1 to 1440, default 60; anything else is a load error) is how long the approval kept under `.git/urzua/approvals`
+  stays good for the local commit check. With `ask`, `urzua check` with no `--actors` file reports a gated move as
+  `info` when a confirmed approval names that record and status and the file's bytes match it, and CI, given the actors
+  file, never reads it (`SPEC-24`, `docs/reference/agent-harness.md`). The key's name, its values, `approval_minutes` and the permission modes the Claude Code adapter asks in were decided by the builder on 2026-11-17, pending maintainer review.
 - **`editor-hook.pending_pair`** is `allow` or `refuse` (anything else is a load error; `ADR-69` amendment of
   2026-11-16, `MILE-287`). It decides an edit whose only new error findings are `relation.pair-reciprocity` or
   `relation.supersession-reciprocity` findings that one edit of another record would satisfy (the other half of a
@@ -2998,3 +3010,4 @@ proves this configuration produces the three findings.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 8827e0da41fb -> 4c2fb7f2d848. Reason: config.rs: merged main's pointer target types, hooks.path and post-command base keys; this branch adds the optional field_values map with a deserializer that reads scalars as text and refuses null, validated at load **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.162`. A type declaring `statuses.delivery.items` need not list the evidence field in `required_fields` or `known_fields` (it is still required of a `delivery` without `items`); the rules that judge a checklist and the two status-requirement rules are on by declaration, and only an `off` entry for `status.delivery-agreement` is refused at load; an incomplete checklist declaration is refused naming the missing key and printing the smallest block that loads; the embodiment `evidence` categories gain `record`, which counts only where a tier declares it, and a `record:` locator in a Done-means item must name a record of a declared type (decided by the builder, accepted by the maintainer on 2026-11-17: "I'm happy with the decisions the builder made."); a `record:` locator in a `Realized-by` header must name one too, which extends that to the header (decided by the builder on 2026-11-17, pending maintainer review). **Why:** `MILE-335`, `MILE-326` and an adopting repository's report on setting up a checklist; a configuration that declares none of these keys is unchanged. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 4c2fb7f2d848 -> e2981c06fd24. Reason: rust/crates/urzua-core/src/config.rs: Config gains a skipped declared_status_entries field, filled at load from the validated status declarations; no key is read or written differently **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.163`. Adds `harness.guardrails.acceptance.in_session` (`refuse`, the default, or `ask`) and `acceptance.approval_minutes` (1 to 1440, default 60): with `ask` an agent's gated move is put to the person through the agent host with its receipt, and a confirmed approval lets the local commit check accept the move with no actors file; CI is unchanged. A configuration that does not declare the key behaves as before (`ADR-101`). The key's name, its values, `approval_minutes` and the permission modes the Claude Code adapter asks in were decided by the builder on 2026-11-17, pending maintainer review. **Why:** `ADR-102`, as amended on 2026-11-17 with the maintainer's acceptance ("I'm happy for you to amend ADR 102. I'll give you my acceptance."): the host asks the person about the edit; an adopting repository's maintainer approved a record in chat and the move was then refused at the edit and at commit. | **substantive** |

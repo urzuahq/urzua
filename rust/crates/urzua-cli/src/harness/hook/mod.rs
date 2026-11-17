@@ -157,7 +157,7 @@ fn project_dir() -> Option<PathBuf> {
     project_dir_from(std::env::var(claude_code::PROJECT_ENV).ok())
 }
 
-fn git_toplevel(dir: &Path) -> Option<PathBuf> {
+pub(super) fn git_toplevel(dir: &Path) -> Option<PathBuf> {
     let out = Command::new("git")
         .arg("-C")
         .arg(dir)

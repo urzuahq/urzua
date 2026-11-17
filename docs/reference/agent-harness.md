@@ -190,6 +190,56 @@ See `SPEC-3`, "Who may accept a record", for the full table. In CI the same tabl
 pull request by the `diff.decider-required` rule, fed by the gate action's `actors` input
 ([CI](ci.md)).
 
+### Asking the person about a gated edit
+
+By default the `acceptance` guardrail refuses an agent's move to a status the `authority` table reserves, and a
+person makes the move outside the agent. Set `in_session: ask` to have the person asked instead, in the session
+(`ADR-102`, amendment of 2026-11-17):
+
+```yaml
+harness:
+  guardrails:
+    acceptance: {enabled: true, in_session: ask, approval_minutes: 60}   # refuse (default) | ask; 1 to 1440
+```
+
+A configuration that does not declare `in_session` refuses, exactly as before. With `ask`, an agent's Write, Edit or
+MultiEdit that moves one record into a gated status goes to the person through the agent host's own permission
+prompt:
+
+- The hook writes the prompt's reason, never the agent: the record's id and title, the status it leaves, the status it
+  enters and the decider group that may make the move, read from the record and the configuration.
+- The edit shown is the agent's edit plus its receipt, which the hook adds: each date field the entered status requires
+  (`statuses.require`) that is missing or blank and that `date.field-valid` declares gets today's date, and the
+  revision log gets a row reading that the move was approved in an agent session by the named person, with the identity
+  source (`gh-verified`, `asserted` or `git-config`, as attestations resolve it). It never says the person edited the
+  file. An Edit or MultiEdit is put to the person as one replacement of the whole file, because the receipt lies outside
+  the lines the agent changed.
+- Approving writes the edit and its receipt in one write, so no commit can land between them. Declining writes nothing.
+- When `gh` names a login outside the gate's decider group, the person is not asked: approving would prove nothing CI
+  accepts.
+
+It stays refused, with a message saying what to do, where the person cannot be asked: a call from a subagent (hand back
+to the main session), a NotebookEdit or a file-writing MCP tool, and every permission mode in which the host does not
+show the prompt. For Claude Code only Manual (`default`) asks; `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`,
+`plan`, a mode the adapter does not know and a payload with no mode are refused.
+
+**What the receipt proves, and where.** Before asking, the hook keeps a pending approval under `.git/urzua/approvals`
+naming the record, the status entered, a sha256 of the file as the approved edit writes it, the session, the host's
+id for the call, the person and an expiry (`approval_minutes`, default 60). Claude Code runs the post-edit hook
+(`PostToolUse` on Write, Edit and MultiEdit) only after the tool ran, which in Manual mode means after the person
+approved; it confirms the approval for that call. `urzua check` with no `--actors` file (the pre-commit hook) then
+accepts the gated move, reported at `info`, when a confirmed approval names that record and that status, the file's
+bytes match and it has not expired. Anything else is the usual `diff.decider-required` finding, with the reason the
+approval does not hold; the same bytes written without the host reporting the call (a shell write after a decline) are
+an error even without `require_evidence`.
+
+The agent's edit tools cannot write `.git/urzua` (the `protected-paths` guardrail refuses them). A shell command can,
+as it can write any file the user can, and it can run the post-edit hook itself with a made-up payload; either way the
+record's status has to be written by a shell command too, and the post-command check reports that move to you. The approval
+proves, on this machine, that a person answered the host's prompt for that move; who, only as far as the identity source
+says. CI cannot read `.git/urzua` and never counts it: `diff.decider-required` there still requires the gate action's
+actors file to name a login in the decider group, exactly as without the mode.
+
 `outside_writes` decides how a write outside the session's repository is judged: `allow` (leave it to
 that repository), `shared` (also judge a file of a linked worktree of the same repository by the
 same gates; recommended) or `deny` (refuse an agent's write outside, except under `allow_paths`).

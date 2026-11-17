@@ -153,6 +153,10 @@ pub struct RuleCtx<'a> {
     /// The identities the host supplied (`urzua check --actors`); `None` when
     /// no file was given (`MILE-200`).
     pub actors: Option<&'a crate::authority::Actors>,
+    /// What the harness's local state says about each changed record's gated
+    /// move (`ADR-102`); `None` when the configuration does not ask the person
+    /// in the session, and never given with `actors`.
+    pub session_approvals: Option<&'a HashMap<PathBuf, crate::rules::SessionApproval>>,
     /// The base revision's `authority` table (`authority.decider_table`);
     /// `Absent` on a run with no `--base`.
     pub base_authority: &'a crate::authority::BaseAuthority,
