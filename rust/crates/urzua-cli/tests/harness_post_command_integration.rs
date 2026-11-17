@@ -1536,3 +1536,60 @@ fn a_pull_with_an_unrelated_local_commit_still_matches() {
     let v = post(&dir);
     assert_eq!(base_paths(&v).len(), 3, "{v}");
 }
+
+#[test]
+fn a_change_hidden_in_a_merge_commit_does_not_match() {
+    let (up, dir, _h) = cloned_fixture("two-merge");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only && git checkout -qb s1 && echo 1 > src/s1.rs && git add -A && git commit -qm s1 && git checkout -qb s2 main && echo 2 > src/s2.rs && git add -A && git commit -qm s2 && git checkout -q main && git merge -q --no-ff --no-commit s1 && echo evil >> .github/workflows/ci.yml && git add .github/workflows/ci.yml && git commit -qm M1 && git merge -q --no-ff --no-commit s2 && git checkout -q origin/main -- .github/workflows/ci.yml && git commit -qm M2");
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_real_merge_of_the_base_into_local_commits_still_matches() {
+    let (up, dir, _h) = cloned_fixture("real-merge");
+    bash(
+        &dir,
+        "echo x > notes.txt && git add notes.txt && git commit -qm notes",
+    );
+    assert_eq!(post(&dir)["verdict"], "allow");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --no-rebase --no-edit");
+    let v = post(&dir);
+    assert_eq!(base_paths(&v).len(), 3, "{v}");
+}
+
+#[test]
+fn an_evil_merge_resolution_does_not_match() {
+    let (up, dir, _h) = cloned_fixture("evil-merge");
+    bash(
+        &dir,
+        "echo x > notes.txt && git add notes.txt && git commit -qm notes",
+    );
+    assert_eq!(post(&dir)["verdict"], "allow");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --no-rebase --no-commit && echo evil >> .github/workflows/ci.yml && git add .github/workflows/ci.yml && git commit -qm merge");
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}

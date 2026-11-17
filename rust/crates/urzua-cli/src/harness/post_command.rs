@@ -1001,7 +1001,19 @@ fn committed_state(
     let mut foreign = HashSet::new();
     if start != "HEAD" {
         let mut log = flags.to_vec();
-        log.extend(["log", "--format=", "--name-only", "-z"].map(String::from));
+        // `--full-history --cc` so a merge commit that changed the path is listed;
+        // `-m` would also list a clean merge of the base.
+        log.extend(
+            [
+                "log",
+                "--full-history",
+                "--cc",
+                "--format=",
+                "--name-only",
+                "-z",
+            ]
+            .map(String::from),
+        );
         log.extend([
             format!("{start}..HEAD"),
             "--not".to_string(),
