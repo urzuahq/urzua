@@ -487,7 +487,7 @@ const HUSKY_SH: &str = "if [ -z \"$husky_skip_init\" ]; then\n  readonly husky_s
 
 #[test]
 fn husky_v8_with_the_source_line_later_still_runs_the_block_once() {
-    let dir = fixture("husky-later", "");
+    let dir = fixture("husky-later", "hooks:\n  print_success: true\n");
     write_exec(&dir.join(".husky/_/husky.sh"), HUSKY_SH);
     let hook = dir.join(".husky/pre-commit");
     write_exec(

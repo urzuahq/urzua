@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.29'
+Version: '0.30'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -122,7 +122,7 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   that is not wired or is not the one the install wrote, an installed file (the translator) that is gone or
   differs from the lock, a settings key that switches every hook off (`disableAllHooks`) and a git hook that
   is not wired (`urzua doctor`, `MILE-179`), in the layouts `doctor` reads, with the command that wires it
-  (`urzua hooks install`, `MILE-220`); a hook declared under `hooks.<hook>.managed: declared` is ready while it is plausible, and any other mention of urzua outside the managed block is reported, since reading a hook cannot prove it runs. `urzua harness status` lists the same git hooks as warnings.
+  (`urzua hooks install`, `MILE-220`); a hook declared under `hooks.<hook>.managed: declared` is ready while it is plausible, and any other mention of urzua outside the managed block is reported, since reading a hook cannot prove it runs. While the clone is not pointed at the directory `hooks.path` names, the problem says so and names `urzua hooks install`. The paragraph on `on_unjudged: deny` follows the list only when a listed problem comes from a check other than the git-hook check, since a git hook that does not run cannot make a guardrail refuse an edit. `urzua harness status` lists the same git hooks as warnings.
 - **The post-command check.** `urzua harness run post-command`, wired by the adapter as a `PostToolUse` hook on
   `Bash` and on only when `harness.guardrails.post-command` is named (`ADR-78` amendment, `MILE-202`), runs
   `check` on the records `git status` shows as changed after any Bash command, untracked ones included, and
@@ -298,3 +298,4 @@ and this section claims only what each place does.
 > | 2026-11-09 | Bumped to `0.28`. The editor hook judges an MCP path that starts with `~` or `$HOME` as the home directory it names and a path nested under a content key such as `payload` or `data`; the acceptance gate treats `.MD` and `.Md` as the record extension `.md` (a case-insensitive filesystem makes them the same file); a write into a linked worktree is compared with that worktree's copy of the record (`SPEC-24` `0.27`). **Why:** the sixth review of the harness and the adopter dry run found each spelling allowed unjudged. | **substantive** |
 > | 2026-11-16 | Bumped to `0.29`. The session-start git-hook problem reads husky, the pre-commit framework and `core.hooksPath` layouts and names `urzua hooks install`; `harness status` lists unwired git hooks as warnings. **Why:** `MILE-220`: every session of an adopting repository warned about hooks no command installed. | **substantive** |
 > | 2026-11-16 | The session-start git-hook problem reads a declared hook as ready and a hand-written call as unmanaged. **Why:** `MILE-220`'s third review: text proves nothing but the managed block. | **substantive** |
+> | 2026-11-16 | Bumped to `0.30`. The session-start git-hook problem names a clone not pointed at `hooks.path`; the `on_unjudged: deny` paragraph appears only when a problem other than a git hook is listed. **Why:** `MILE-309`: the report stated a consequence that git-hook problems alone do not have. | **substantive** |
