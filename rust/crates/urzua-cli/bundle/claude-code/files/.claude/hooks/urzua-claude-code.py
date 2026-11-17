@@ -662,6 +662,9 @@ def main():
     if event == "session-start":
         if kind != "allow" and message:
             out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": message}})
+        elif kind == "allow" and verdict.get("agent"):
+            # For the agent alone: a healthy session start shows the person nothing.
+            out({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": verdict["agent"]}})
         return 0
     if event == "post-command":
         # A report, never a decision: the command has already run.

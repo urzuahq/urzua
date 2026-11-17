@@ -361,7 +361,9 @@ pub struct FieldToFill {
     pub if_empty: Option<String>,
 }
 
-/// Where `new` took a record's starting status from: the first of
+/// Where `new` took a record's starting status from, and the status itself:
+/// `None` when the type does not require its status field or declares no
+/// statuses. Otherwise the first of
 /// `statuses.initial` when the type declares it, else the first of
 /// `statuses.values`. `other_initial` lists the remaining declared initial
 /// states, so a caller sees that the choice among them was made for it.
@@ -375,10 +377,15 @@ pub struct StatusFrom {
 
 /// The starting status `new` writes for `type_config`, and where it came from.
 pub fn status_from(type_config: &crate::config::RecordTypeConfig) -> Option<StatusFrom> {
-    let decl = type_config.status_decl()?;
     let field = type_config
         .relation_field(crate::config::RelationRole::Status)
         .to_string();
+    // The scaffold fills only required fields, so a status field the type does
+    // not require is written empty like any other.
+    if !type_config.required_fields.iter().any(|f| *f == field) {
+        return None;
+    }
+    let decl = type_config.status_decl()?;
     if let Some((first, rest)) = decl.initial.split_first() {
         return Some(StatusFrom {
             field,
@@ -656,6 +663,13 @@ impl<'a> ScaffoldSpec<'a> {
     }
 }
 
+/// The status a new record's scaffold writes, or `None` when it writes none;
+/// [`status_from`] holds the choice, so the scaffold, `new`'s report and
+/// `explain` cannot disagree.
+pub fn scaffold_status(type_config: &crate::config::RecordTypeConfig) -> Option<String> {
+    status_from(type_config).map(|s| s.value)
+}
+
 /// The initial text of a record: a synthesized YAML header from the type's
 /// declarations, then the body scaffolding of `template` (the caller reads the
 /// checked-in template, if any). Pure: no file is read or written.
@@ -676,7 +690,7 @@ pub fn scaffold_record_reporting(
     let type_config = spec.type_config;
     // The entry state of the type's own vocabulary, not a choice: moving a
     // record on from it stays a human decision.
-    let starting_status = status_from(type_config);
+    let initial_status = scaffold_status(type_config);
     let params = NewRecordParams {
         display_number: spec.display_number,
         // The H1 id is padded exactly as the file name is: the width of the
@@ -686,7 +700,7 @@ pub fn scaffold_record_reporting(
             .and_then(|c| c.identify(spec.filename).number)
             .map_or(0, |n| n.len()),
         h1_prefix: spec.compiled.map(|_| spec.type_prefix),
-        initial_status: starting_status.as_ref().map(|s| s.value.as_str()),
+        initial_status: initial_status.as_deref(),
         status_field: type_config.relation_field(crate::config::RelationRole::Status),
         date_field: type_config.date_field(),
         author_field: type_config.author_field(),

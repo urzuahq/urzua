@@ -3,9 +3,11 @@
 
 pub mod audit;
 pub mod check;
+pub(crate) mod config_lines;
 pub mod doctor;
 pub(crate) mod evidence_log;
 pub mod explain;
+pub mod explain_types;
 pub mod export;
 pub mod fix;
 pub(crate) mod fix_conflicts;
