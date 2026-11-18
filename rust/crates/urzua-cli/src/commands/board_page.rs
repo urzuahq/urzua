@@ -214,101 +214,108 @@ impl<'a> Page<'a> {
             .join(", ")
     }
 
-    fn marks(&self, r: &ExportedRecord) -> String {
+    /// The waits-on text: amber, with the ids as in-page links.
+    fn waits(&self, r: &ExportedRecord) -> Option<String> {
         let v = &r.view;
-        let mut out = format!(
-            "<span class=\"mark m-{}\">{}</span>",
-            state_key(v.state),
-            state_word(v.state)
-        );
-        if v.state.is_open() && !v.waiting_on.is_empty() {
-            out.push_str(" <span class=\"mark m-waiting\">waiting</span>");
+        (v.state.is_open() && !v.waiting_on.is_empty()).then(|| self.links(&v.waiting_on))
+    }
+
+    /// The right-hand details of a row, in the order they are dropped for room:
+    /// what it waits on, a chip per declared-value field, the checklist count,
+    /// how many records refer to it, and a parent's progress.
+    fn details(&self, r: &ExportedRecord) -> String {
+        let v = &r.view;
+        let mut out = String::new();
+        if let Some(links) = self.waits(r) {
+            let _ = write!(out, "<span class=\"x w\">waits on {links}</span>");
         }
-        if v.ready {
-            out.push_str(" <span class=\"mark m-ready\">ready</span>");
+        if let Some(role) = self.e.type_roles.get(&r.record_type) {
+            for name in &role.value_fields {
+                let text = v.fields.get(name).map(field_text).unwrap_or_default();
+                if !text.is_empty() {
+                    let _ = write!(
+                        out,
+                        "<span class=\"x k\" title=\"{}\">{}</span>",
+                        esc(name),
+                        esc(&text)
+                    );
+                }
+            }
         }
-        if v.state_disagrees_with_children {
-            out.push_str(" <span class=\"mark m-disagree\">status and children disagree</span>");
+        if let Some((resolved, total)) = checklist_ratio(r) {
+            let _ = write!(
+                out,
+                "<span class=\"x\" title=\"checklist items resolved\">{resolved}/{total}</span>"
+            );
+        }
+        let referrers: usize = v.referred_by.values().map(Vec::len).sum();
+        if referrers > 0 {
+            let _ = write!(out, "<span class=\"x\">{referrers} refer</span>");
+        }
+        if !v.children.is_empty() {
+            let _ = write!(
+                out,
+                "<span class=\"x\">{} of {} done{}</span>",
+                v.children_by_state.finished,
+                v.children.len(),
+                if v.state_disagrees_with_children {
+                    " · disagrees"
+                } else {
+                    ""
+                }
+            );
         }
         out
     }
 
-    fn counts(&self, r: &ExportedRecord) -> String {
-        let c = &r.view.children_by_state;
-        let parts: Vec<String> = [
-            (c.finished, "finished"),
-            (c.dropped, "dropped"),
-            (c.under_way, "under way"),
-            (c.not_started, "not started"),
-            (c.open, "open"),
-            (c.none, "no status"),
-        ]
-        .into_iter()
-        .filter(|(n, _)| *n > 0)
-        .map(|(n, word)| format!("{n} {word}"))
-        .collect();
-        format!(
-            "<span class=\"counts\">{} {}: {}</span>",
-            r.view.children.len(),
-            if r.view.children.len() == 1 {
-                "child"
-            } else {
-                "children"
-            },
-            parts.join(", ")
-        )
-    }
-
-    /// The row a record opens with: id, title, status, marks.
-    fn row(&self, i: usize, extra: &str) -> String {
+    /// The row: a disclosure slot, the id, the title (one line), and at the
+    /// right the details, the dot and the status.
+    fn summary(&self, i: usize, parent: bool) -> String {
         let r = self.record(i);
+        let id = esc(r.id.as_deref().unwrap_or(&r.path.to_string_lossy()));
         let title = if r.view.title_is_fallback {
             String::new()
         } else {
-            format!("<span class=\"title\">{}</span>", esc(&r.view.title))
+            esc(&r.view.title)
         };
-        let status = r
-            .view
-            .status
-            .as_deref()
-            .map(|s| format!("<span class=\"status\">{}</span>", esc(s)))
-            .unwrap_or_default();
+        let hover = if title.chars().count() > TITLE_HOVER {
+            format!(" title=\"{title}\"")
+        } else {
+            String::new()
+        };
         format!(
-            "<span class=\"id\">{}</span> {title} {status} {} {extra}",
-            esc(r.id.as_deref().unwrap_or(&r.path.to_string_lossy())),
-            self.marks(r)
+            "<summary><span class=\"ch{}\"></span><span class=\"id\">{id}</span><span class=\"t\"{hover}>{title}</span><span class=\"s\">{}{}</span></summary>",
+            if parent { " tri" } else { "" },
+            self.details(r),
+            status_cell(r)
         )
     }
 
-    /// What the record waits on, its checklist, its declared-value fields and
-    /// its references: the lines under its row.
-    fn meta(&self, i: usize) -> String {
+    /// What a tap opens: the lines the row has no room for, the references and
+    /// what refers to the record, the checklist, and its text.
+    fn more(&self, i: usize) -> String {
         let r = self.record(i);
         let v = &r.view;
-        let mut out = String::from("<div class=\"meta\">");
+        let role = self.e.type_roles.get(&r.record_type);
+        let mut out = String::from("<div class=\"more\">");
         if let Some(parent) = &v.parent {
-            let _ = write!(out, "<div>part of: {}</div>", self.link(parent));
+            let _ = write!(out, "<div>part of {}</div>", self.link(parent));
         }
-        if v.state.is_open() && !v.waiting_on.is_empty() {
-            let _ = write!(out, "<div>waits on: {}</div>", self.links(&v.waiting_on));
+        if let Some(links) = self.waits(r) {
+            let _ = write!(out, "<div class=\"w\">waits on {links}</div>");
         }
-        if let Some(line) = checklist_line(r) {
-            let _ = write!(out, "<div>{}</div>", esc(&line));
-        }
-        if let Some(role) = self.e.type_roles.get(&r.record_type) {
+        if let Some(role) = role {
             for name in &role.value_fields {
                 if let Some(value) = v.fields.get(name) {
                     let _ = write!(out, "<div>{}: {}</div>", esc(name), esc(&field_text(value)));
                 }
             }
         }
-        let role = self.e.type_roles.get(&r.record_type);
         let shown_once = |field: &String| {
             let parent =
                 v.parent.is_some() && role.is_some_and(|t| t.part_of.as_ref() == Some(field));
-            let waits = v.state.is_open()
-                && !v.waiting_on.is_empty()
-                && role.is_some_and(|t| t.waits_through.contains(field));
+            let waits =
+                self.waits(r).is_some() && role.is_some_and(|t| t.waits_through.contains(field));
             parent || waits
         };
         for (field, ids) in v.refers_to.iter().filter(|(f, _)| !shown_once(f)) {
@@ -322,21 +329,7 @@ impl<'a> Page<'a> {
                 esc(&ids.join(", "))
             );
         }
-        out.push_str("</div>");
-        out
-    }
-
-    /// The expandable area: what refers to the record, and its text.
-    fn more(&self, i: usize) -> String {
-        let r = self.record(i);
-        let mut out = String::from(
-            "<details class=\"more\"><summary>What refers to it and its text</summary>",
-        );
-        out.push_str("<div class=\"meta\">");
-        if r.view.referred_by.is_empty() {
-            out.push_str("<div>Nothing refers to it.</div>");
-        }
-        for (field, ids) in &r.view.referred_by {
+        for (field, ids) in &v.referred_by {
             let _ = write!(
                 out,
                 "<div>referred to through {}: {}</div>",
@@ -344,71 +337,154 @@ impl<'a> Page<'a> {
                 self.links(ids)
             );
         }
+        out.push_str(&self.checklist_items(r));
+        out.push_str(&self.text_block(r));
         out.push_str("</div>");
-        match (self.text, r.raw_text.as_ref(), r.id.as_deref()) {
-            (Text::Inline, Some(text), _) => {
-                let _ = write!(out, "<pre>{}</pre>", esc(text));
-            }
-            (Text::Linked, _, Some(id)) if is_path_id(id) => {
-                let _ = write!(out, "<p class=\"note\"><a href=\"record/{}\">The record's text</a>, as plain text.</p>", esc(id));
-            }
-            _ => {}
-        }
-        out.push_str("</details>");
         out
     }
 
-    fn attrs(&self, i: usize) -> String {
-        let r = self.record(i);
-        let search =
-            format!("{} {}", r.id.as_deref().unwrap_or_default(), r.view.title).to_lowercase();
-        format!(
-            "id=\"{}\" class=\"rec\" data-record=\"{}\" data-state=\"{}\" data-search=\"{}\"",
-            esc(&self.anchors[i]),
-            esc(&r.record_type),
-            state_key(r.view.state),
-            esc(&search)
-        )
-    }
-
-    /// A work record: its row and lines always visible, text on demand.
-    fn work_entry(&self, i: usize, kids: &str) -> String {
-        let r = self.record(i);
-        if r.view.children.is_empty() {
-            return format!(
-                "<li {}><div class=\"row\">{}{}{}</div></li>",
-                self.attrs(i),
-                self.row(i, ""),
-                self.meta(i),
-                self.more(i)
+    fn checklist_items(&self, r: &ExportedRecord) -> String {
+        if self.text != Text::Inline {
+            return String::new();
+        }
+        let Some(items) = r
+            .sections
+            .as_ref()
+            .and_then(|s| s.iter().find_map(|s| s.items.as_ref()))
+        else {
+            return String::new();
+        };
+        let mut out = String::new();
+        for item in items {
+            let mark = if item.resolved {
+                "[x]"
+            } else if item.waived {
+                "[w]"
+            } else {
+                "[ ]"
+            };
+            let evidence = item
+                .evidence
+                .as_deref()
+                .map(|e| format!(" — {}", esc(e)))
+                .unwrap_or_default();
+            let _ = write!(
+                out,
+                "<div class=\"item\"><code>{mark}</code> {}{evidence}</div>",
+                esc(&item.text)
             );
         }
+        out
+    }
+
+    fn text_block(&self, r: &ExportedRecord) -> String {
+        match (self.text, r.raw_text.as_ref(), r.id.as_deref()) {
+            (Text::Inline, Some(text), _) => format!("<pre>{}</pre>", esc(text)),
+            (Text::Linked, _, Some(id)) if is_path_id(id) => {
+                format!(
+                    "<div><a href=\"record/{}\">The record's text</a></div>",
+                    esc(id)
+                )
+            }
+            _ => String::new(),
+        }
+    }
+
+    fn attrs(&self, i: usize, level: usize, parent: bool) -> String {
+        let r = self.record(i);
+        let mut flags = Vec::new();
+        if !r.view.gated_moves.is_empty() {
+            flags.push("needs");
+        }
+        if r.view.ready {
+            flags.push("ready");
+        }
         format!(
-            "<li {}><details open><summary>{}</summary>{}{}{kids}</details></li>",
-            self.attrs(i),
-            self.row(i, &self.counts(r)),
-            self.meta(i),
+            "id=\"{}\" class=\"rec lv{}{}\" data-record=\"{}\" data-state=\"{}\" data-flags=\"{}\"",
+            esc(&self.anchors[i]),
+            level.min(8),
+            if parent { " p" } else { "" },
+            esc(&r.record_type),
+            state_key(r.view.state),
+            flags.join(" ")
+        )
+    }
+
+    /// Whether a child row is worth seeing without a tap: under way, ready,
+    /// or waiting.
+    fn is_active(&self, i: usize) -> bool {
+        let v = &self.record(i).view;
+        v.state == StateCategory::UnderWay
+            || v.ready
+            || (v.state.is_open() && !v.waiting_on.is_empty())
+    }
+
+    /// One record as a row. A parent holds its children (`kids`) and starts
+    /// open only when one of them is active.
+    fn entry(&self, i: usize, level: usize, kids: &str) -> String {
+        let r = self.record(i);
+        let parent = !r.view.children.is_empty();
+        let open = parent
+            && r.view
+                .children
+                .iter()
+                .filter_map(|c| self.by_id.get(c.as_str()))
+                .any(|&c| self.is_active(c));
+        format!(
+            "<li {}><details{}>{}{kids}{}</details></li>",
+            self.attrs(i, level, parent),
+            if open { " open" } else { "" },
+            self.summary(i, parent),
             self.more(i)
         )
     }
 
-    /// Any other record: one line, its detail on demand.
-    fn compact_entry(&self, i: usize) -> String {
-        let r = self.record(i);
-        let referrers: usize = r.view.referred_by.values().map(Vec::len).sum();
-        let extra = if referrers > 0 {
-            format!("<span class=\"counts\">{referrers} refer to it</span>")
-        } else {
-            String::new()
+    /// A muted row that opens in place to the finished and dropped records it
+    /// stands for.
+    fn fold(&self, ids: &[usize], level: usize) -> String {
+        if ids.is_empty() {
+            return String::new();
+        }
+        let count = |state| {
+            ids.iter()
+                .filter(|&&i| self.record(i).view.state == state)
+                .count()
         };
+        let parts: Vec<String> = [
+            (count(StateCategory::Finished), "finished"),
+            (count(StateCategory::Dropped), "dropped"),
+        ]
+        .into_iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, word)| format!("{n} {word}"))
+        .collect();
+        let rows: String = ids.iter().map(|&i| self.entry(i, level + 1, "")).collect();
         format!(
-            "<li {}><details><summary>{}</summary>{}{}</details></li>",
-            self.attrs(i),
-            self.row(i, &extra),
-            self.meta(i),
-            self.more(i)
+            "<li class=\"fold lv{}\"><details><summary><span class=\"ch\"></span>{}, collapsed</summary><ul class=\"kids\">{rows}</ul></details></li>",
+            level.min(8),
+            parts.join(", ")
         )
     }
+}
+
+/// The dot of a record: its state, or ready where nothing says more. The
+/// word is its title, and the status text beside it carries the rest.
+fn dot(r: &ExportedRecord) -> String {
+    let v = &r.view;
+    let (class, word) = match v.state {
+        StateCategory::Finished => ("g", "finished".to_string()),
+        StateCategory::Dropped => ("r", "dropped".to_string()),
+        StateCategory::UnderWay => ("o", "under way".to_string()),
+        _ if v.ready => ("b", format!("ready ({})", state_word(v.state))),
+        state => ("n", state_word(state).to_string()),
+    };
+    format!("<span class=\"d {class}\" title=\"{}\"></span>", esc(&word))
+}
+
+/// The dot and the status exactly as written.
+fn status_cell(r: &ExportedRecord) -> String {
+    let status = r.view.status.as_deref().unwrap_or_default();
+    format!("{}<span class=\"st\">{}</span>", dot(r), esc(status))
 }
 
 fn field_text(value: &urzua_core::view_model::FieldValue) -> String {
@@ -418,16 +494,11 @@ fn field_text(value: &urzua_core::view_model::FieldValue) -> String {
     }
 }
 
-/// "3 of 5 items resolved" for a record with a declared checklist.
-fn checklist_line(r: &ExportedRecord) -> Option<String> {
+/// The checklist items resolved, and how many there are, for a record with a
+/// declared checklist.
+fn checklist_ratio(r: &ExportedRecord) -> Option<(usize, usize)> {
     let items = r.sections.as_ref()?.iter().find_map(|s| s.items.as_ref())?;
-    let resolved = items.iter().filter(|i| i.resolved).count();
-    let waived = items.iter().filter(|i| i.waived).count();
-    let mut line = format!("checklist: {resolved} of {} items resolved", items.len());
-    if waived > 0 {
-        let _ = write!(line, ", {waived} waived");
-    }
-    Some(line)
+    Some((items.iter().filter(|i| i.resolved).count(), items.len()))
 }
 
 fn head(csp_style: &str, csp_script: &str) -> String {
@@ -439,79 +510,147 @@ fn head(csp_style: &str, csp_script: &str) -> String {
     )
 }
 
-fn stamp(page: &Page<'_>, check: &CheckNote<'_>) -> String {
+/// `2026-11-18T06:16:35Z` as `2026-11-18 06:16 UTC`.
+fn short_time(time: &str) -> String {
+    match (time.get(..10), time.get(11..16)) {
+        (Some(date), Some(clock)) => format!("{date} {clock} UTC"),
+        _ => time.to_string(),
+    }
+}
+
+/// The header: the name, the read stamp, the check summary.
+fn header(page: &Page<'_>, check: &CheckNote<'_>) -> String {
     let read = &page.e.read;
     let commit = read
         .commit
         .as_deref()
-        .map_or("no commit", |c| &c[..c.len().min(12)]);
-    let branch = read
-        .branch
-        .as_deref()
-        .unwrap_or("no branch (detached head)");
+        .map_or("no commit", |c| &c[..c.len().min(7)]);
+    let branch = read.branch.as_deref().unwrap_or("detached head");
     let changes = if read.uncommitted_record_changes {
-        "record files have uncommitted changes"
+        ", uncommitted record changes"
     } else {
-        "no record file has uncommitted changes"
+        ""
     };
     let mut out = format!(
-        "<p class=\"stamp\">Read <strong>{}</strong> from commit <code>{}</code> on branch <code>{}</code>; {}. This page shows the working tree.</p>\n",
-        esc(&read.time),
-        esc(commit),
+        "<div class=\"top\"><b>urzua board</b><span class=\"meta\">{} · {} · read {} · working tree{changes}</span></div>\n",
         esc(branch),
-        changes
+        esc(commit),
+        esc(&short_time(&read.time))
     );
     match check {
         CheckNote::Line(c) => {
-            let _ = writeln!(out, "<p class=\"check\">{}</p>", esc(&c.text()));
+            let _ = writeln!(out, "<p class=\"note\">{}</p>", esc(&c.text()));
         }
         CheckNote::Linked => out.push_str(
-            "<p class=\"check\">urzua check: not run for this page, because it takes as long as <code>urzua check</code> does. <a href=\"check\">Run it</a> for the summary.</p>\n",
+            "<p class=\"note\">urzua check is not run for this page, because it takes as long as <code>urzua check</code> does. <a href=\"check\">Run it</a> for the summary.</p>\n",
         ),
-        CheckNote::Unavailable => out.push_str("<p class=\"check\">urzua check: could not be run.</p>\n"),
+        CheckNote::Unavailable => out.push_str("<p class=\"note\">urzua check could not be run.</p>\n"),
+    }
+    match page.text {
+        Text::Inline => {}
+        Text::Linked => out.push_str("<p class=\"note\">The records hold too much text to put in the page; each row links its own.</p>\n"),
+        Text::LeftOut => out.push_str("<p class=\"note\">The records hold too much text for a file: it is left out. Run <code>urzua board --serve</code> to read each record's text, or <code>urzua export --format json</code> for all of it.</p>\n"),
     }
     out
 }
 
-fn controls(total: usize) -> String {
+/// The search box and the state filter, with the count each filter selects.
+fn controls(page: &Page<'_>) -> String {
+    let readable: Vec<&ExportedRecord> = page.e.records.iter().collect();
+    let count =
+        |keep: &dyn Fn(&ExportedRecord) -> bool| readable.iter().filter(|r| keep(r)).count();
+    let state = |s: StateCategory| move |r: &ExportedRecord| r.view.state == s;
+    let filters: Vec<(&str, &str, usize)> = vec![
+        ("", "All", readable.len()),
+        (
+            "needs",
+            "Needs you",
+            count(&|r| !r.view.gated_moves.is_empty()),
+        ),
+        (
+            "under-way",
+            "Under way",
+            count(&state(StateCategory::UnderWay)),
+        ),
+        ("ready", "Ready", count(&|r| r.view.ready)),
+        (
+            "finished",
+            "Finished",
+            count(&state(StateCategory::Finished)),
+        ),
+        ("dropped", "Dropped", count(&state(StateCategory::Dropped))),
+        (
+            "not-started",
+            "Not started",
+            count(&state(StateCategory::NotStarted)),
+        ),
+        ("open", "Open", count(&state(StateCategory::Open))),
+    ];
+    let buttons: String = filters
+        .iter()
+        .filter(|(key, _, n)| {
+            key.is_empty() || ["needs", "under-way", "ready"].contains(key) || *n > 0
+        })
+        .map(|(key, label, n)| {
+            format!(
+                "<button type=\"button\" data-f=\"{key}\"{}>{label} {n}</button>",
+                if key.is_empty() { " class=\"on\"" } else { "" }
+            )
+        })
+        .collect();
     format!(
-        "<div class=\"controls\"><input id=\"q\" type=\"search\" placeholder=\"Search id and title\" aria-label=\"Search id and title\">\
-<select id=\"s\" aria-label=\"Filter by state\"><option value=\"\">Any state</option>\
-<option value=\"finished\">finished</option><option value=\"under-way\">under way</option>\
-<option value=\"not-started\">not started</option><option value=\"open\">open</option><option value=\"dropped\">dropped</option>\
-<option value=\"none\">no status</option></select><span id=\"shown\" class=\"note\">{total} of {total} records shown</span></div>\n"
+        "<div class=\"bar\"><input id=\"q\" type=\"search\" placeholder=\"Search id or title\" aria-label=\"Search id or title\"><div class=\"seg\" role=\"group\" aria-label=\"Filter by state\">{buttons}</div></div>\n<p id=\"shown\" class=\"note\" hidden></p>\n"
     )
 }
 
-/// A brief list of links: open when short, collapsed under its count when long.
-fn brief(
-    page: &Page<'_>,
-    title: &str,
-    ids: &[usize],
-    note: impl Fn(&ExportedRecord) -> String,
+/// A section label with its count, then its list.
+fn section(
+    label: &str,
+    count: &str,
+    type_name: bool,
+    note: &str,
+    rows: &str,
+    group: &str,
 ) -> String {
-    let mut out = format!("<h3>{} ({})</h3>\n", esc(title), ids.len());
-    if ids.is_empty() {
-        out.push_str("<p class=\"note\">None.</p>\n");
-        return out;
-    }
-    let open = if ids.len() <= 12 { " open" } else { "" };
-    let _ = write!(
-        out,
-        "<details class=\"group\"{open}><summary>{} records</summary><ul class=\"brief\">",
-        ids.len()
-    );
-    for &i in ids {
+    let note = if note.is_empty() {
+        String::new()
+    } else {
+        format!("<p class=\"note\">{}</p>", esc(note))
+    };
+    let attr = if group.is_empty() {
+        String::new()
+    } else {
+        format!(" data-sec=\"{group}\"")
+    };
+    format!(
+        "<section{attr}><h3{}>{}<i>{}</i></h3>{note}<ul class=\"list\">{rows}</ul></section>\n",
+        if type_name { " class=\"ty\"" } else { "" },
+        esc(label),
+        esc(count)
+    )
+}
+
+/// A short list of one-line rows: the first few, then the rest under "N more".
+fn brief_rows(page: &Page<'_>, ids: &[usize], right: &dyn Fn(&ExportedRecord) -> String) -> String {
+    const SHOWN: usize = 8;
+    let row = |&i: &usize| {
         let r = page.record(i);
-        let _ = write!(
-            out,
-            "<li>{} {} {}</li>",
+        format!(
+            "<li class=\"br\"><span class=\"id\">{}</span><span class=\"t\">{}</span><span class=\"s\">{}</span></li>",
             page.link(r.id.as_deref().unwrap_or_default()),
             esc(&r.view.title),
-            note(r)
+            right(r)
+        )
+    };
+    let mut out: String = ids.iter().take(SHOWN).map(row).collect();
+    if ids.len() > SHOWN {
+        let rest: String = ids.iter().skip(SHOWN).map(row).collect();
+        let _ = write!(
+            out,
+            "<li class=\"fold\"><details><summary><span class=\"ch\"></span>{} more</summary><ul class=\"kids\">{rest}</ul></details></li>",
+            ids.len() - SHOWN
         );
     }
-    out.push_str("</ul></details>\n");
     out
 }
 
@@ -524,35 +663,38 @@ fn attention(page: &Page<'_>) -> String {
         .filter(|&i| page.record(i).view.state == StateCategory::UnderWay)
         .collect();
     let ready: Vec<usize> = all().filter(|&i| page.record(i).view.ready).collect();
-    let mut out = String::from("<h2 id=\"attention\">What needs attention</h2>\n");
-    out.push_str(&brief(page, "Waiting on a person", &gated, |r| {
-        let moves: Vec<String> = r
-            .view
-            .gated_moves
-            .iter()
-            .map(|m| format!("to {} by {}", m.to, m.by))
-            .collect();
-        format!(
-            "<span class=\"status\">{} &rarr; {}</span>",
-            esc(r.view.status.as_deref().unwrap_or_default()),
-            esc(&moves.join("; "))
-        )
-    }));
+    let mut out = String::new();
+    let mut notes = String::new();
     for (name, role) in &page.e.type_roles {
         if role.gated_without_transitions {
-            let _ = writeln!(
-                out,
-                "<p class=\"note\">The type {} declares a gate but no transitions, so the next move of its records cannot be read.</p>",
+            let _ = write!(
+                notes,
+                "The type {} declares a gate but no transitions, so the next move of its records cannot be read. ",
                 esc(name)
             );
         }
     }
-    out.push_str(&brief(page, "Under way", &under_way, |r| {
+    let needs_right = |r: &ExportedRecord| {
+        let moves: Vec<&str> = r.view.gated_moves.iter().map(|m| m.to.as_str()).collect();
+        let mut groups: Vec<&str> = r.view.gated_moves.iter().map(|m| m.by.as_str()).collect();
+        groups.dedup();
         format!(
-            "<span class=\"status\">{}</span>",
-            esc(r.view.status.as_deref().unwrap_or_default())
+            "<span>{} → {}</span><span class=\"x k\">{}</span>",
+            esc(r.view.status.as_deref().unwrap_or_default()),
+            esc(&moves.join(", ")),
+            esc(&groups.join(", "))
         )
-    }));
+    };
+    if !gated.is_empty() || !notes.is_empty() {
+        out.push_str(&section(
+            "Needs you",
+            &gated.len().to_string(),
+            false,
+            notes.trim(),
+            &brief_rows(page, &gated, &needs_right),
+            "needs",
+        ));
+    }
     let without_progress: Vec<&str> = page
         .e
         .type_roles
@@ -560,23 +702,37 @@ fn attention(page: &Page<'_>) -> String {
         .filter(|(_, role)| role.statuses_declared && !role.progress_declared)
         .map(|(name, _)| name.as_str())
         .collect();
-    if !without_progress.is_empty() {
-        let _ = writeln!(
-            out,
-            "<p class=\"note\">Nothing can be listed as under way for {}: no <code>statuses.progress</code> is declared for {}. Add it to the type's <code>statuses</code> in the configuration to name the statuses that mean work has begun; their records are shown as open until then.</p>",
-            esc(&without_progress.join(", ")),
+    let progress_note = if without_progress.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "Nothing can be listed as under way for {}: no statuses.progress is declared for {}. Add it to the type's statuses in the configuration to name the statuses that mean work has begun; their records are shown as open until then.",
+            without_progress.join(", "),
             if without_progress.len() == 1 { "it" } else { "them" }
-        );
-    }
-    out.push_str(&brief(page, "Ready", &ready, |r| {
-        format!("<span class=\"status\">{}</span>", esc(&r.record_type))
-    }));
+        )
+    };
+    let by_status = |r: &ExportedRecord| status_cell(r);
+    out.push_str(&section(
+        "Under way",
+        &under_way.len().to_string(),
+        false,
+        &progress_note,
+        &brief_rows(page, &under_way, &by_status),
+        "under-way",
+    ));
+    out.push_str(&section(
+        "Ready",
+        &ready.len().to_string(),
+        false,
+        "",
+        &brief_rows(page, &ready, &by_status),
+        "ready",
+    ));
     out
 }
 
-/// The open, readable work records a tree is drawn from, and what places each.
+/// The open, readable work records a tree is drawn from.
 struct Tree {
-    /// Work records in the tree: open, readable, of a work type.
     in_tree: Vec<bool>,
 }
 
@@ -599,11 +755,24 @@ impl Tree {
             .and_then(|p| page.by_id.get(p))
             .is_some_and(|&p| self.in_tree[p])
     }
+
+    /// A finished or dropped work record: collapsed, never in the tree.
+    fn is_closed_work(&self, page: &Page<'_>, i: usize) -> bool {
+        let r = page.record(i);
+        r.header_readable && page.is_work(r) && !r.view.state.is_open()
+    }
 }
 
-/// A work record's entry with its open children inside it. A record already
-/// drawn is not drawn again, so a loop in the declarations ends where it closes.
-fn draw(page: &Page<'_>, tree: &Tree, i: usize, seen: &mut HashSet<usize>) -> Option<String> {
+/// A work record's row with its open children inside it and its finished and
+/// dropped children folded. A record already drawn is not drawn again, so a
+/// loop in the declarations ends where it closes.
+fn draw(
+    page: &Page<'_>,
+    tree: &Tree,
+    i: usize,
+    level: usize,
+    seen: &mut HashSet<usize>,
+) -> Option<String> {
     if !seen.insert(i) {
         return None;
     }
@@ -613,35 +782,25 @@ fn draw(page: &Page<'_>, tree: &Tree, i: usize, seen: &mut HashSet<usize>) -> Op
         .children
         .iter()
         .filter_map(|c| page.by_id.get(c.as_str()).copied())
-        .filter(|&c| tree.in_tree[c])
         .collect();
     let mut inner = String::new();
+    let mut closed = Vec::new();
     for c in children {
-        if let Some(entry) = draw(page, tree, c, seen) {
-            inner.push_str(&entry);
+        if tree.in_tree[c] {
+            if let Some(entry) = draw(page, tree, c, level + 1, seen) {
+                inner.push_str(&entry);
+            }
+        } else if tree.is_closed_work(page, c) && seen.insert(c) {
+            closed.push(c);
         }
     }
+    inner.push_str(&page.fold(&closed, level + 1));
     let kids = if inner.is_empty() {
         String::new()
     } else {
         format!("<ul class=\"kids\">{inner}</ul>")
     };
-    Some(page.work_entry(i, &kids))
-}
-
-fn group(title: &str, note: &str, entries: String, count: usize) -> String {
-    if count == 0 {
-        return String::new();
-    }
-    let note = if note.is_empty() {
-        String::new()
-    } else {
-        format!("<p class=\"note\">{}</p>", esc(note))
-    };
-    format!(
-        "<h3>{} ({count})</h3>{note}<ul>{entries}</ul>\n",
-        esc(title)
-    )
+    Some(page.entry(i, level, &kids))
 }
 
 /// Whether following `part_of` from `i` comes back to it.
@@ -663,34 +822,60 @@ fn in_loop(page: &Page<'_>, i: usize) -> bool {
     false
 }
 
+/// Work without containment: one list per type, its finished and dropped
+/// records folded at the end.
+fn work_by_type(page: &Page<'_>, tree: &Tree, seen: &mut HashSet<usize>) -> String {
+    let n = page.e.records.len();
+    let mut out = String::from("<p class=\"note\">The configuration declares no containment, so work is grouped by type.</p>\n");
+    for name in page.e.type_roles.keys() {
+        let of_type = |i: &usize| page.record(*i).record_type == *name;
+        let open: Vec<usize> = (0..n)
+            .filter(|&i| tree.in_tree[i])
+            .filter(of_type)
+            .collect();
+        let closed: Vec<usize> = (0..n)
+            .filter(|&i| tree.is_closed_work(page, i))
+            .filter(of_type)
+            .collect();
+        if open.is_empty() && closed.is_empty() {
+            continue;
+        }
+        let mut rows: String = open
+            .iter()
+            .filter_map(|&i| draw(page, tree, i, 0, seen))
+            .collect();
+        rows.push_str(&page.fold(&closed, 0));
+        out.push_str(&section(
+            name,
+            &(open.len() + closed.len()).to_string(),
+            true,
+            "",
+            &rows,
+            "",
+        ));
+    }
+    out
+}
+
 fn work_section(page: &Page<'_>) -> String {
     let tree = Tree::of(page);
+    let n = page.e.records.len();
     let contained = page
         .e
         .type_roles
         .values()
         .any(|t| t.work && t.part_of.is_some());
-    let mut out = String::from("<h2 id=\"work\">Work</h2>\n");
-    if !tree.in_tree.iter().any(|&b| b) {
-        out.push_str("<p class=\"note\">No open work record.</p>\n");
-        return out;
+    let total = (0..n)
+        .filter(|&i| tree.in_tree[i] || tree.is_closed_work(page, i))
+        .count();
+    if total == 0 {
+        return section("Work", "0", false, "No work record.", "", "");
     }
     let mut seen = HashSet::new();
     if !contained {
-        out.push_str("<p class=\"note\">The configuration declares no containment, so records are grouped by type.</p>\n");
-        for name in page.e.type_roles.keys() {
-            let ids: Vec<usize> = (0..page.e.records.len())
-                .filter(|&i| tree.in_tree[i] && page.record(i).record_type == *name)
-                .collect();
-            let entries: String = ids
-                .iter()
-                .filter_map(|&i| draw(page, &tree, i, &mut seen))
-                .collect();
-            out.push_str(&group(name, "", entries, ids.len()));
-        }
-        return out;
+        return work_by_type(page, &tree, &mut seen);
     }
-    let roots: Vec<usize> = (0..page.e.records.len())
+    let roots: Vec<usize> = (0..n)
         .filter(|&i| tree.in_tree[i] && (!tree.parent_in_tree(page, i) || in_loop(page, i)))
         .collect();
     let (parents, leaves): (Vec<usize>, Vec<usize>) = roots
@@ -699,74 +884,97 @@ fn work_section(page: &Page<'_>) -> String {
     let (no_parent, elsewhere): (Vec<usize>, Vec<usize>) = leaves
         .into_iter()
         .partition(|&i| page.record(i).view.parent.is_none());
-    let mut render = |ids: &[usize]| -> (String, usize) {
-        let drawn: Vec<String> = ids
-            .iter()
-            .filter_map(|&i| draw(page, &tree, i, &mut seen))
-            .collect();
-        (drawn.concat(), drawn.len())
+    let mut render = |ids: &[usize]| -> String {
+        ids.iter()
+            .filter_map(|&i| draw(page, &tree, i, 0, &mut seen))
+            .collect()
     };
-    let (entries, n) = render(&parents);
-    out.push_str(&group("Parents", "", entries, n));
-    let (entries, n) = render(&no_parent);
-    out.push_str(&group(
-        "No parent",
-        "Records that are not part of another record.",
-        entries,
-        n,
+    let mut out = String::new();
+    let rows = render(&parents);
+    out.push_str(&section(
+        "Work",
+        &format!("{} parents · {total} records", parents.len()),
+        false,
+        "",
+        &rows,
+        "",
     ));
-    let (entries, n) = render(&elsewhere);
-    out.push_str(&group(
-        "Part of a record shown elsewhere",
-        "The record each is part of is finished, dropped, of another kind or unreadable; its entry says which.",
-        entries,
-        n,
-    ));
+    if !no_parent.is_empty() {
+        let rows = render(&no_parent);
+        out.push_str(&section(
+            "No parent",
+            &no_parent.len().to_string(),
+            false,
+            "Records that are not part of another record.",
+            &rows,
+            "",
+        ));
+    }
+    if !elsewhere.is_empty() {
+        let rows = render(&elsewhere);
+        out.push_str(&section(
+            "Part of a record shown elsewhere",
+            &elsewhere.len().to_string(),
+            false,
+            "The record each is part of is finished, dropped, of another kind or unreadable; its row says which.",
+            &rows,
+            "",
+        ));
+    }
+    let closed: Vec<usize> = (0..n)
+        .filter(|&i| tree.is_closed_work(page, i) && !seen.contains(&i))
+        .collect();
+    if !closed.is_empty() {
+        let rows = page.fold(&closed, 0);
+        out.push_str(&section(
+            "Finished and dropped",
+            &closed.len().to_string(),
+            false,
+            "",
+            &rows,
+            "",
+        ));
+    }
     out
 }
+
+/// A title longer than this carries its full text as a tooltip, for when the row cuts it short.
+const TITLE_HOVER: usize = 40;
+
+/// More than this many records in a type, and its finished and dropped ones fold.
+const FOLD_OVER: usize = 10;
 
 fn other_section(page: &Page<'_>) -> String {
-    let tree = Tree::of(page);
-    let mut out = String::from("<h2 id=\"other\">Other records</h2>\n");
-    let mut any = false;
+    let n = page.e.records.len();
+    let mut out = String::new();
     for name in page.e.type_roles.keys() {
-        let ids: Vec<usize> = (0..page.e.records.len())
+        let of_type: Vec<usize> = (0..n)
             .filter(|&i| {
                 let r = page.record(i);
-                r.record_type == *name
-                    && r.header_readable
-                    && !tree.in_tree[i]
-                    && r.view.state.is_open()
+                r.record_type == *name && r.header_readable && !page.is_work(r)
             })
             .collect();
-        let entries: String = ids.iter().map(|&i| page.compact_entry(i)).collect();
-        any |= !ids.is_empty();
-        out.push_str(&group(name, "", entries, ids.len()));
+        if of_type.is_empty() {
+            continue;
+        }
+        let (open, closed): (Vec<usize>, Vec<usize>) = if of_type.len() > FOLD_OVER {
+            of_type
+                .iter()
+                .partition(|&&i| page.record(i).view.state.is_open())
+        } else {
+            (of_type.clone(), Vec::new())
+        };
+        let mut rows: String = open.iter().map(|&i| page.entry(i, 0, "")).collect();
+        rows.push_str(&page.fold(&closed, 0));
+        out.push_str(&section(
+            name,
+            &of_type.len().to_string(),
+            true,
+            "",
+            &rows,
+            "",
+        ));
     }
-    if !any {
-        out.push_str("<p class=\"note\">None.</p>\n");
-    }
-    out
-}
-
-fn closed_section(page: &Page<'_>) -> String {
-    let ids: Vec<usize> = (0..page.e.records.len())
-        .filter(|&i| page.record(i).header_readable && !page.record(i).view.state.is_open())
-        .collect();
-    let mut out = format!(
-        "<h2 id=\"closed\">Finished and dropped</h2>\n<details class=\"group\" id=\"closed-records\"><summary>{} records finished or dropped</summary>",
-        ids.len()
-    );
-    for name in page.e.type_roles.keys() {
-        let of_type: Vec<usize> = ids
-            .iter()
-            .copied()
-            .filter(|&i| page.record(i).record_type == *name)
-            .collect();
-        let entries: String = of_type.iter().map(|&i| page.compact_entry(i)).collect();
-        out.push_str(&group(name, "", entries, of_type.len()));
-    }
-    out.push_str("</details>\n");
     out
 }
 
@@ -774,40 +982,31 @@ fn unreadable_section(page: &Page<'_>) -> String {
     let ids: Vec<usize> = (0..page.e.records.len())
         .filter(|&i| !page.record(i).header_readable)
         .collect();
-    let mut out = String::from("<h2 id=\"unreadable\">Headers that could not be read</h2>\n");
     if ids.is_empty() {
-        out.push_str("<p class=\"note\">Every record's header was read.</p>\n");
-        return out;
+        return String::new();
     }
-    out.push_str("<p class=\"note\">These records are listed with their text; their state and links are unknown.</p><ul>");
-    for i in ids {
-        out.push_str(&page.compact_entry(i));
-    }
-    out.push_str("</ul>\n");
-    out
+    let rows: String = ids.iter().map(|&i| page.entry(i, 0, "")).collect();
+    section(
+        "Headers that could not be read",
+        &ids.len().to_string(),
+        false,
+        "These records are listed with their text; their state and links are unknown.",
+        &rows,
+        "",
+    )
 }
 
 /// The whole page.
 pub(crate) fn render(export: &ExportReport, check: &CheckNote<'_>, serving: bool) -> String {
     let page = Page::new(export, serving);
     let mut out = head(&csp_hash(STYLE), &csp_hash(SCRIPT));
-    out.push_str("<body>\n<header class=\"top\"><h1>urzua board</h1>\n");
-    out.push_str(&stamp(&page, check));
-    match page.text {
-        Text::Inline => {}
-        Text::Linked => out.push_str("<p class=\"note\">The records hold too much text to put in the page; each entry links its own.</p>\n"),
-        Text::LeftOut => out.push_str("<p class=\"note\">The records hold too much text for a file: it is left out. Run <code>urzua board --serve</code> to read each record's text, or <code>urzua export --format json</code> for all of it.</p>\n"),
-    }
-    out.push_str(&controls(export.records.len()));
-    out.push_str("</header>\n<main>\n");
+    out.push_str("<body>\n<div class=\"wrap\">\n");
+    out.push_str(&header(&page, check));
+    out.push_str(&controls(&page));
     out.push_str(&attention(&page));
     out.push_str(&work_section(&page));
     out.push_str(&other_section(&page));
-    out.push_str(&closed_section(&page));
     out.push_str(&unreadable_section(&page));
-    let _ = write!(
-        out,
-        "</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n"
-    );
+    let _ = write!(out, "</div>\n<script>{SCRIPT}</script>\n</body>\n</html>\n");
     out
 }

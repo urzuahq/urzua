@@ -408,11 +408,11 @@ fn without_a_progress_set_a_record_that_is_neither_finished_nor_dropped_is_open(
         .iter()
         .all(|r| r["state"] != "under-way" && r["state"] != "not-started"));
     let (html, _) = board_page(&dir);
-    assert!(html.contains("Under way (0)"));
+    assert!(html.contains("<h3>Under way<i>0</i></h3>"));
     assert!(
         html.contains("Nothing can be listed as under way for charter, programme, stage, step"),
         "{}",
-        html.split("Under way (0)")
+        html.split("<h3>Under way")
             .nth(1)
             .unwrap()
             .chars()
@@ -974,7 +974,7 @@ fn the_page_holds_every_record_and_is_a_self_contained_well_formed_document() {
         assert_eq!(answer["status"], "ok");
         assert!(answer["bytes"].as_u64().unwrap() as usize == html.len());
         assert!(answer["read"]["commit"].is_string());
-        assert!(html.contains("This page shows the working tree"));
+        assert!(html.contains("working tree"));
         assert!(html.contains("urzua check:"));
     }
 }
@@ -991,84 +991,263 @@ fn the_page_writes_to_the_cache_by_default_and_stdout_stays_json() {
     assert!(dir.join(".urzua/cache/board.html").is_file());
 }
 
+fn section_of<'a>(html: &'a str, group: &str) -> &'a str {
+    html.split(&format!("data-sec=\"{group}\""))
+        .nth(1)
+        .unwrap_or_else(|| panic!("no section {group}"))
+        .split("</section>")
+        .next()
+        .unwrap()
+}
+
 #[test]
-fn what_waits_on_a_person_is_the_gated_moves_the_transitions_allow() {
+fn what_needs_a_person_is_the_gated_moves_the_transitions_allow() {
     let dir = chain("person");
     let (html, _) = board_page(&dir);
-    let section = html
-        .split("Waiting on a person (")
-        .nth(1)
-        .unwrap()
-        .split("<h3>Under way")
-        .next()
-        .unwrap();
-    assert!(section.starts_with("2)"), "{section}");
+    let needs = section_of(&html, "needs");
+    assert!(needs.contains("<h3>Needs you<i>2</i></h3>"), "{needs}");
     for id in ["STG-2", "STG-4"] {
-        assert!(section.contains(&format!(">{id}</a>")), "{id}");
+        assert!(needs.contains(&format!(">{id}</a>")), "{id}");
     }
-    assert!(!section.contains(">STG-1</a>") && !section.contains(">STG-3</a>"));
+    assert!(!needs.contains(">STG-1</a>") && !needs.contains(">STG-3</a>"));
+    assert!(needs.contains("Rolling → Shipped"), "From → To: {needs}");
     assert!(
-        section.contains("The type charter declares a gate but no transitions"),
-        "{section}"
+        needs.contains("<span class=\"x k\">leads</span>"),
+        "the group is a chip: {needs}"
+    );
+    assert!(
+        needs.contains("The type charter declares a gate but no transitions"),
+        "{needs}"
+    );
+    let under_way = section_of(&html, "under-way");
+    assert!(
+        under_way.contains("Nothing can be listed as under way for charter:"),
+        "{under_way}"
+    );
+    assert!(
+        !under_way.contains("programme"),
+        "a type with a progress set is not named: {under_way}"
     );
     let flat = flat("person-flat");
     let (html, _) = board_page(&flat);
-    assert!(html.contains("Waiting on a person (0)"));
+    assert!(!html.contains("data-sec=\"needs\""), "no gate, no section");
     assert!(!html.contains("declares a gate but no transitions"));
 }
 
 #[test]
-fn work_is_a_tree_with_parents_counts_marks_and_a_group_for_records_with_no_parent() {
+fn work_is_a_tree_of_one_line_rows_with_progress_folds_and_a_group_for_records_with_no_parent() {
     let dir = chain("tree-page");
     let (html, _) = board_page(&dir);
-    assert!(html.contains("<h3>Parents ("));
-    assert!(html.contains("<h3>No parent ("));
+    assert!(html.contains("<h3>Work<i>2 parents · "));
+    assert!(html.contains("<h3>No parent<i>"));
+    let prg1 = entry(&html, "r-PRG-1");
+    assert!(prg1.contains("1 of 3 done"), "{prg1}");
     assert!(
-        html.contains("1 finished, 1 dropped, 1 under way, 1 not started"),
-        "counts beside the parent"
+        prg1.contains("<details open>"),
+        "a parent with an active child starts open: {prg1}"
     );
-    assert_eq!(count(&html, "status and children disagree"), 2);
-    assert!(html.contains("<option value=\"open\">open</option>"));
-    // PRG-1's section holds STG-2's, which holds STP-1.
+    assert!(
+        prg1.contains("<span class=\"ch tri\">"),
+        "a parent has a disclosure triangle"
+    );
+    assert!(entry(&html, "r-STG-2").contains("1 of 4 done"));
+    assert_eq!(count(&html, " · disagrees"), 2);
+    assert!(html.contains("data-f=\"open\""));
+    // PRG-1's row holds STG-2's, which holds STP-1.
     let prg1 = html.find("id=\"r-PRG-1\"").unwrap();
     let stg2 = html.find("id=\"r-STG-2\"").unwrap();
     let stp1 = html.find("id=\"r-STP-1\"").unwrap();
     assert!(prg1 < stg2 && stg2 < stp1);
-    // Finished and dropped records are under their own count, collapsed.
-    let closed = html.split("id=\"closed-records\"").nth(1).unwrap();
-    assert!(closed.contains("records finished or dropped"));
-    assert!(closed.contains("id=\"r-PRG-3\"") && closed.contains("id=\"r-STP-3\""));
-    assert!(!html.contains("<details class=\"group\" id=\"closed-records\" open"));
+    // STG-2's finished and dropped children are one muted row, opening in place.
+    let fold = html
+        .find("1 finished, 1 dropped, collapsed")
+        .expect("the children's fold");
+    assert!(fold > stp1);
+    assert!(html[fold..].contains("id=\"r-STP-3\"") && html[fold..].contains("id=\"r-STP-2\""));
+    // A finished parent is in the work that is finished and dropped.
+    let closed = html.split("<h3>Finished and dropped<i>").nth(1).unwrap();
+    assert!(closed.contains("id=\"r-PRG-3\""));
     // The unreadable header is shown, not skipped.
-    let unreadable = html.split("id=\"unreadable\"").nth(1).unwrap();
+    let unreadable = html
+        .split("<h3>Headers that could not be read<i>1</i></h3>")
+        .nth(1)
+        .unwrap();
     assert!(unreadable.contains("id=\"r-STG-7\""));
 }
 
 #[test]
-fn without_containment_work_is_grouped_by_type_and_other_types_are_compact_rows() {
+fn a_row_is_one_line_with_the_status_as_written_beside_a_dot_that_says_its_state() {
+    let dir = chain("row");
+    let (html, _) = board_page(&dir);
+    let alpha = entry(&html, "r-PRG-1");
+    assert!(alpha.contains("<span class=\"id\">PRG-1</span>"), "{alpha}");
+    assert!(alpha.contains("<span class=\"t\">Alpha</span>"));
+    assert!(
+        alpha.contains(
+            "<span class=\"d o\" title=\"under way\"></span><span class=\"st\">Rolling</span>"
+        ),
+        "{alpha}"
+    );
+    assert!(
+        alpha.contains("title=\"Lane\">north</span>"),
+        "a declared-value field is a chip: {alpha}"
+    );
+    let finished = entry(&html, "r-STP-2");
+    assert!(finished.contains(
+        "<span class=\"d g\" title=\"finished\"></span><span class=\"st\">Shipped</span>"
+    ));
+    let dropped = entry(&html, "r-STP-3");
+    assert!(dropped.contains("<span class=\"d r\" title=\"dropped\"></span>"));
+    let ready = entry(&html, "r-STP-11");
+    assert!(ready.contains("<span class=\"d b\" title=\"ready (not started)\"></span><span class=\"st\">Idea</span>"), "{ready}");
+    let open = entry(&html, "r-CHR-1");
+    assert!(
+        open.contains("<span class=\"d n\" title=\"open\"></span>")
+            || open.contains("<span class=\"d b\" title=\"ready (open)\"></span>"),
+        "{open}"
+    );
+    let waiting = entry(&html, "r-STP-10");
+    assert!(
+        waiting.contains("<span class=\"x w\">waits on <a href=\"#r-STP-1\">STP-1</a></span>"),
+        "{waiting}"
+    );
+    // Colour is a dot and the waits-on text: no badge, no filled mark.
+    for gone in [
+        "class=\"mark",
+        "m-waiting",
+        "m-ready",
+        "box-shadow",
+        "gradient",
+    ] {
+        assert!(!html.contains(gone), "{gone}");
+    }
+}
+
+#[test]
+fn without_containment_work_is_grouped_by_type_and_other_types_are_rows_under_their_own_name() {
     let dir = flat("flat-page");
     let (html, _) = board_page(&dir);
     assert!(html.contains("declares no containment"));
-    assert!(!html.contains("<h3>Parents"));
-    assert!(html.contains("<h3>ticket ("));
-    let other = html
-        .split("id=\"other\"")
-        .nth(1)
-        .unwrap()
-        .split("id=\"closed\"")
-        .next()
-        .unwrap();
-    assert!(other.contains("<h3>memo (2)</h3>"));
+    assert!(!html.contains("<h3>Work<i>"));
     assert!(
-        other.contains("1 refer to it"),
-        "a row says how many records refer to it: {other}"
+        html.contains("<h3 class=\"ty\">ticket<i>"),
+        "the type name as declared"
     );
-    assert!(html.contains("waits on: <a href=\"#r-TCK-2\">TCK-2</a>"));
+    assert!(html.contains("<h3 class=\"ty\">memo<i>2</i></h3>"));
     assert!(
-        html.contains("Area: web, cli"),
-        "a declared-value field shows"
+        entry(&html, "r-MEM-1").contains("1 refer"),
+        "a row says how many records refer to it"
+    );
+    assert!(html.contains("waits on <a href=\"#r-TCK-2\">TCK-2</a>"));
+    let ticket = entry(&html, "r-TCK-4");
+    assert!(
+        ticket.contains("title=\"Area\">web, cli</span>"),
+        "a declared-value field is a chip: {ticket}"
     );
     assert!(html.contains("Related: <a href=\"#r-TCK-4\">TCK-4</a>"));
+    // Finished tickets are one muted row; the type has fewer than eleven memos, so they stay rows.
+    assert!(
+        html.contains("2 finished, collapsed") || html.contains("1 finished, 1 dropped, collapsed")
+    );
+}
+
+#[test]
+fn a_type_with_more_than_ten_records_folds_its_finished_ones() {
+    let dir = repo("many", FLAT_CONFIG, |dir| {
+        for n in 1..=12 {
+            let status = if n <= 5 { "Done" } else { "Todo" };
+            write(
+                dir,
+                &format!("docs/memos/MEM-{n}-m.md"),
+                &record("Topic: x", "", &format!("# {n} — Memo {n}")),
+            );
+            write(
+                dir,
+                &format!("docs/tickets/TCK-{n}-t.md"),
+                &record(
+                    &format!("Status: {status}"),
+                    "",
+                    &format!("# {n} — Ticket {n}"),
+                ),
+            );
+        }
+    });
+    let (html, _) = board_page(&dir);
+    let memos = html
+        .split("<h3 class=\"ty\">memo<i>12</i></h3>")
+        .nth(1)
+        .unwrap()
+        .split("</section>")
+        .next()
+        .unwrap();
+    assert_eq!(count(memos, " data-record=\""), 12);
+    // Memos declare no statuses, so none is finished; tickets are work and always fold.
+    assert!(!memos.contains("collapsed"));
+    let tickets = html
+        .split("<h3 class=\"ty\">ticket<i>12</i></h3>")
+        .nth(1)
+        .unwrap()
+        .split("</section>")
+        .next()
+        .unwrap();
+    assert!(tickets.contains("5 finished, collapsed"), "{tickets}");
+}
+
+#[test]
+fn a_declared_checklist_shows_its_count_in_the_row_and_its_items_in_the_opened_row() {
+    let config = "schema_version: 2
+record_types:
+  job:
+    dir: docs/jobs
+    prefix: JOB
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Embodiment, Realized-by]
+    pointer_fields: []
+    narrative_fields: []
+    sections:
+      from: headings
+      depth: 2
+      required:
+        - {name: Checks}
+    statuses:
+      values: [Todo, Doing, Done]
+      success: [Done]
+      progress: [Doing]
+      delivery:
+        delivered_tiers: [Implemented]
+        unevidenced_tiers: [Not started]
+        not_done: [Todo, Doing]
+        set_status: Done
+        items:
+          section: Checks
+          clause_separator: \" — \"
+          evidence_marker: \"evidence:\"
+          waiver_marker: \"waived:\"
+          partial_status: Doing
+";
+    let dir = repo("checklist", config, |dir| {
+        write(dir, "src/a.rs", "fn a() {}\n");
+        write(
+            dir,
+            "docs/jobs/JOB-1-j.md",
+            "---\nStatus: Doing\n---\n# 1 — Job\n\n## Checks\n\n- First item — evidence: code:src/a.rs\n- Second item\n- Third item\n",
+        );
+    });
+    let (html, _) = board_page(&dir);
+    let job = entry(&html, "r-JOB-1");
+    assert!(
+        job.contains("title=\"checklist items resolved\">1/3</span>"),
+        "{job}"
+    );
+    assert!(
+        job.contains("<code>[x]</code> First item — code:src/a.rs"),
+        "{job}"
+    );
+    assert!(
+        job.contains("<code>[ ]</code> Second item") && job.contains("<code>[ ]</code> Third item"),
+        "{job}"
+    );
 }
 
 fn entry<'a>(html: &'a str, anchor: &str) -> &'a str {
@@ -1083,11 +1262,11 @@ fn the_containment_field_and_the_waiting_pairs_field_are_shown_once() {
     let (html, _) = board_page(&chain("once"));
     let step = entry(&html, "r-STP-10");
     assert!(
-        step.contains("part of: <a href=\"#r-STG-2\">STG-2</a>"),
+        step.contains("<div>part of <a href=\"#r-STG-2\">STG-2</a></div>"),
         "{step}"
     );
     assert!(
-        step.contains("waits on: <a href=\"#r-STP-1\">STP-1</a>"),
+        step.contains("<div class=\"w\">waits on <a href=\"#r-STP-1\">STP-1</a></div>"),
         "{step}"
     );
     assert!(
@@ -1101,14 +1280,13 @@ fn the_containment_field_and_the_waiting_pairs_field_are_shown_once() {
     let (html, _) = board_page(&flat("once-flat"));
     let ticket = entry(&html, "r-TCK-3");
     assert!(
-        ticket.contains("waits on: <a href=\"#r-TCK-2\">TCK-2</a>")
+        ticket.contains("waits on <a href=\"#r-TCK-2\">TCK-2</a>")
             && !ticket.contains("<div>Needs:"),
         "{ticket}"
     );
     // A finished record shows no wait, so its field is the one place its dependencies appear.
     let (html, _) = board_page(&chain("once-finished"));
-    let closed = html.split("id=\"closed-records\"").nth(1).unwrap();
-    assert!(!entry(closed, "r-STP-2").contains("waits on"));
+    assert!(!entry(&html, "r-STP-2").contains("waits on"));
 }
 
 #[test]
@@ -1549,7 +1727,7 @@ fn this_repositorys_export_without_the_new_keys_equals_the_released_builds() {
 }
 
 /// Writes the pages the phone-width check measures into `URZUA_BOARD_REVIEW_DIR`:
-/// both fixtures, the chain one with a record that waits on many and one with
+/// the three-level fixture as it is, both fixtures, the chain one with a record that waits on many and one with
 /// long ids. Run with `--ignored`; it asserts nothing.
 #[test]
 #[ignore]
@@ -1558,6 +1736,12 @@ fn write_pages_for_the_phone_width_check() {
         return;
     };
     let out = PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(
+        out.join("fixture.html"),
+        board_page(&chain("review-plain")).0,
+    )
+    .unwrap();
     let chain_dir = chain("review-chain");
     let many: Vec<String> = (1..=14).map(|n| format!("STP-{}", n + 1000)).collect();
     for n in 1..=14 {
