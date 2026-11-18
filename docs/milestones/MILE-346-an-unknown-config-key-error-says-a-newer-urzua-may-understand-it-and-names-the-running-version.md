@@ -17,8 +17,8 @@ Today the error is only `unknown field <key>` with the list of expected fields. 
 
 ## Done means
 
-- Loading a config with an unknown top-level key or an unknown key inside a known section reports the key, its line, the running version, and a sentence that a newer urzua may understand it; shown by a test on the error text and on the JSON error object.
-- The error carries a suggested action that names how to see the installed version and where releases are listed, covered by `suggested_action_integration`.
+- Loading a config with an unknown top-level key or an unknown key inside a known section reports the key, the running version, and a sentence that a newer urzua may understand it; shown by a test on the error text and on the JSON error object. Where the YAML reader gives a line for the key the error carries it; the record does not promise a line the reader cannot give.
+- The error says how to see the installed version and where releases are listed. A config error is not a finding and carries no suggested action today, so this is either a sentence in the message or a field added to the error object, and a test shows whichever it is.
 - A misspelt key that is close to a known one still gets the existing expected-fields help, shown by a test.
 - The hook command's output for a config the binary cannot load carries the same sentence, shown by a harness hook test.
 

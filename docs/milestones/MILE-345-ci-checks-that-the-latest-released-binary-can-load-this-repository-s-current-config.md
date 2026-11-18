@@ -13,11 +13,11 @@ Continuous integration runs the latest released urzua binary against this reposi
 
 ## Why
 
-On 2026-11-18 a pull request added two config keys that only the code on its own branch understood (`export` and `part_of`) to this repository's config. All 17 checks passed. The released 0.4.10 binary refused the config with `unknown field export`, so every command and every hook in this repository would have failed for anyone on the release until the next one shipped. It was caught by hand before the merge and the config change was reverted. The same thing happened earlier with `hooks.path`. The `gate (pinned release)` job does not cover this: it runs the pinned release against the records as they were at that release's tag, not against the config on the pull request.
+On 2026-11-18 a pull request added two config keys that only the code on its own branch understood (`export` and `part_of`) to this repository's config. All 17 checks passed. The released 0.4.10 binary refused the config with `unknown field export`, so every command and every hook in this repository would have failed for anyone on the release until the next one shipped. It was caught by hand before the merge and the config change was reverted. The same thing happened earlier with `hooks.path`. The `gate (pinned release)` job does not cover this: it runs one pinned release (v0.4.7 on that day, with its checksum written in the workflow) against the records as they were at that release's tag, not against the config on the pull request.
 
 ## Done means
 
-- A CI job installs the latest published release the way an adopter does and runs a config-loading command (for example `urzua check`) against the pull request's `.urzua/config.yaml`; the job fails when the binary reports a config error.
+- A CI job installs the latest published release the way an adopter does and runs a config-loading command (for example `urzua check`) against the pull request's `.urzua/config.yaml`; the job fails when the binary reports a config error. The version and its checksum are written in the repository and verified as the pinned gate verifies its own, and the release process moves them to each new release, so the job does not resolve a moving target at run time.
 - A test or a recorded CI run shows the job failing on a config that carries a top-level key the latest release does not know, and passing on the config at the current main.
 - The job's failure message names the release version it ran and the key it refused.
 - `CONTRIBUTING.md` or the release documentation says a new config key enters this repository's own config only after a release that understands it.
