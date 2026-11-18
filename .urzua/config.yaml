@@ -639,7 +639,9 @@ harness:
   adapters: [claude-code]
   instructions_file: AGENTS.md
   guardrails:
-    acceptance: {enabled: true}
+    # ADR-102 amendments of 2026-11-17 and 2026-11-18: an agent's gated move is put to the person through the
+    # agent host's prompt, with a receipt row, and refused where the person cannot be asked (SPEC-3).
+    acceptance: {enabled: true, in_session: ask}
     protected-paths: {enabled: true}
     editor-hook: {enabled: true}
     post-command: {enabled: true}
