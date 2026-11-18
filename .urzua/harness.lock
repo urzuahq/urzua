@@ -23,20 +23,20 @@
       "event": "PostToolUse",
       "matcher": "Bash",
       "handler": "post-command",
-      "hash": "sha256:a472169e394ab8f78b30f33e459183f053695cdca4f6ecf85b28c9b46031eda3"
+      "hash": "sha256:9b8d110499be7c8d5bc1a2cbe9067c1e48c4e933ca64683c8c644ef70532b036"
     },
     {
       "file": ".claude/settings.json",
       "event": "PreToolUse",
       "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
       "handler": "edit",
-      "hash": "sha256:e373382c0bbbbfa4a36ca75ca2496f304b272eacb78504db95cf695d9c06c95c"
+      "hash": "sha256:a173dc96853f0b05958d8cf60ca7c3ffd2b20230b2fd0c6a1260166a606b2b30"
     },
     {
       "file": ".claude/settings.json",
       "event": "SessionStart",
       "handler": "session-start",
-      "hash": "sha256:96d750cabbd78b310d03f69cb462c9ea001d98a267a59b8d4cf08f587b109dd3"
+      "hash": "sha256:ca08347b217809146284abce9e3d2e7921d17abf8b60a3f3d0d86cf39a17b7e7"
     }
   ],
   "blocks": [

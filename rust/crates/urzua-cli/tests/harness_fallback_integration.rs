@@ -348,19 +348,27 @@ fn ordinary_payload(dir: &Path) -> String {
     serde_json::json!({"tool_name": "Write", "cwd": dir.to_string_lossy(), "tool_input": {"file_path": dir.join("notes.txt").to_string_lossy(), "content": "x"}}).to_string()
 }
 
-/// How strictly the real engine treats `payload`: a refusal, a notice, silence.
-fn engine_rank(dir: &Path, payload: &str) -> u8 {
-    let out = common::run_hook(dir, "edit", payload, None, Some(dir), &[]);
-    let o = String::from_utf8(out.stdout).unwrap();
-    if denied(&o) {
-        2
-    } else {
-        u8::from(!o.trim().is_empty())
-    }
+/// What a shape must give: the binary's own unjudged decision, and the
+/// fallback's.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Want {
+    /// Both let the call through, the fallback with its notice.
+    Open,
+    /// Both refuse.
+    Closed,
+    /// The binary lets it through and the fallback refuses: a documented limit
+    /// of reading YAML with awk, never the other way round.
+    Stricter,
 }
 
-fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, bool)> {
+const OPEN_TAIL: &str = "harness:\n  guardrails:\n    editor-hook: {enabled: true}\n";
+const CLOSED_TAIL: &str = "harness:\n  guardrails:\n    protected-paths: {enabled: true}\n";
+
+fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, Want)> {
+    use Want::*;
     let g = |body: &str| format!("{TYPES}harness:\n  guardrails:\n{body}{GATE}").into_bytes();
+    let o = |before: &str| format!("{before}{OPEN_TAIL}").into_bytes();
+    let b = |s: &[&[u8]]| s.concat();
     let utf16: Vec<u8> = String::from_utf8(g("    protected-paths: {enabled: false}\n"))
         .unwrap()
         .encode_utf16()
@@ -368,49 +376,153 @@ fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, bool)> {
         .collect();
     let mut nul = g("    protected-paths: {enabled: false}\n");
     nul.insert(10, 0);
-    // (name, config, the engine reads it as open)
+    let long_line = o(&format!(
+        "x: [{}]\n",
+        (0..22_000)
+            .map(|n| format!("'p{n} (a: b) ; c'"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
+    let deep_block: String = (0..150)
+        .map(|n| format!("{}k{n}:\n", "  ".repeat(n)))
+        .collect::<String>()
+        + &"  ".repeat(150)
+        + "x: 1\n";
+    let placeholders: Vec<String> = (0..40)
+        .map(|n| {
+            format!("'Describe step {n} (e.g.: `run it`) \u{2014} then; check {{x}} [y], z #{n}'")
+        })
+        .collect();
     vec![
-        ("an escaped key", Some(g("    \"protected\\x2dpaths\":\n      enabled: true\n")), false),
-        ("a quoted key", Some(g("    \"protected-paths\":\n      enabled: true\n")), false),
-        ("broken YAML", Some(format!("{TYPES}schema_version: [\nharness:\n  guardrails:\n    protected-paths: {{enabled: false}}\n{GATE}").into_bytes()), false),
-        ("UTF-16", Some(utf16), false),
-        ("a NUL byte", Some(nul), false),
-        ("a tab in indentation", Some(format!("{TYPES}harness:\n\tguardrails:\n\t\tprotected-paths: {{enabled: false}}\n{GATE}").into_bytes()), false),
-        ("a repeated key", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: deny\n      on_unjudged: allow\n")), false),
-        ("a child deeper than its siblings", Some(g("    protected-paths:\n      enabled: false\n        on_unjudged: allow\n")), false),
-        ("the configuration a directory", None, false),
-        ("editor-hook with pending_pair, one line", Some(g("    editor-hook: {enabled: true, on_unjudged: allow, pending_pair: allow}\n")), true),
-        ("editor-hook with pending_pair, block", Some(g("    editor-hook:\n      enabled: true\n      on_unjudged: allow\n      pending_pair: allow\n")), true),
-        ("a double-quoted allow", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: \"allow\"\n")), true),
-        ("a single-quoted allow", Some(g("    protected-paths: {enabled: true, on_unjudged: 'allow'}\n")), true),
-        ("a guardrail's name in a value", Some(format!("description: Records the acceptance of a decision\n{TYPES}harness:\n  guardrails:\n    session-start: {{enabled: true}}\n{GATE}").into_bytes()), true),
+        // Refusals the earlier reviews established.
+        ("an escaped key", Some(g("    \"protected\\x2dpaths\":\n      enabled: true\n")), Closed),
+        ("a quoted key", Some(g("    \"protected-paths\":\n      enabled: true\n")), Closed),
+        ("broken YAML", Some(format!("{TYPES}schema_version: [\nharness:\n  guardrails:\n    protected-paths: {{enabled: false}}\n{GATE}").into_bytes()), Closed),
+        ("UTF-16", Some(utf16), Closed),
+        ("a NUL byte", Some(nul), Closed),
+        ("a tab in indentation", Some(format!("{TYPES}harness:\n\tguardrails:\n\t\tprotected-paths: {{enabled: false}}\n{GATE}").into_bytes()), Closed),
+        ("a repeated key", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: deny\n      on_unjudged: allow\n")), Closed),
+        ("a child deeper than its siblings", Some(g("    protected-paths:\n      enabled: false\n        on_unjudged: allow\n")), Closed),
+        ("the configuration a directory", None, Closed),
+        ("a second document", Some(format!("{TYPES}{OPEN_TAIL}---\n{CLOSED_TAIL}{GATE}").into_bytes()), Closed),
+        ("a quoted scalar left open", Some(o("x: 'abc\n")), Closed),
+        ("a quoted harness key", Some(format!("{TYPES}\"harness\":\n  guardrails:\n    protected-paths: {{enabled: true}}\n{GATE}").into_bytes()), Closed),
+        ("the whole document a flow map", Some(b"{schema_version: 2, harness: {guardrails: {protected-paths: {enabled: true}}}}\n".to_vec()), Closed),
+        ("a list item among the guardrails", Some(g("    - protected-paths: {enabled: true}\n")), Closed),
+        ("an anchor inside harness", Some(g("    editor-hook: &e {enabled: true}\n")), Stricter),
+        ("a complex harness key", Some(format!("{TYPES}? harness\n: guardrails: {{protected-paths: {{enabled: true}}}}\n{GATE}").into_bytes()), Closed),
+        ("harness a list", Some(format!("{TYPES}harness:\n- guardrails\n{GATE}").into_bytes()), Closed),
+        // A key with a blank before its colon is the same key.
+        ("a space before the colon, closed", Some(b"harness :\n  guardrails :\n    protected-paths : {enabled: true}\n".to_vec()), Closed),
+        ("a tab before the colon, closed", Some(b"harness:\n  guardrails:\n    protected-paths\t: {enabled: true}\n".to_vec()), Closed),
+        ("a space before the colon, block form, closed", Some(b"harness:\n  guardrails:\n    protected-paths :\n      enabled: true\n".to_vec()), Closed),
+        ("a space before the colon, open", Some(b"harness :\n  guardrails :\n    editor-hook : {enabled: true}\n".to_vec()), Open),
+        // The root indentation is the first content line's.
+        ("a whole document indented, closed", Some(b"  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n".to_vec()), Closed),
+        ("an indented document after ---, closed", Some(b"---\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n".to_vec()), Closed),
+        ("a whole document indented, open", Some(b"  harness:\n    guardrails:\n      editor-hook: {enabled: true}\n".to_vec()), Open),
+        // Line breaks awk does not see.
+        ("a lone carriage return", Some(b"a: 1\rharness:\r  guardrails:\r    protected-paths: {enabled: true}\r".to_vec()), Closed),
+        ("a next-line character", Some(b(&[b"a: 1\xc2\x85", CLOSED_TAIL.as_bytes()])), Closed),
+        ("a line separator", Some(b(&[b"a: 1\xe2\x80\xa8", CLOSED_TAIL.as_bytes()])), Closed),
+        ("a paragraph separator", Some(b(&[b"a: 1\xe2\x80\xa9", CLOSED_TAIL.as_bytes()])), Closed),
+        ("a byte order mark on a later line", Some(b(&[b"a: 1\n\xef\xbb\xbf", OPEN_TAIL.as_bytes()])), Closed),
+        ("a doubled byte order mark", Some(b(&[b"\xef\xbb\xbf\xef\xbb\xbf", OPEN_TAIL.as_bytes()])), Stricter),
+        // A tab in leading whitespace on a line the reader would skip.
+        ("a tab before a comment", Some(o("a: 1\n\t# c\n")), Closed),
+        ("a tab-only line", Some(o("a: 1\n\t\n")), Closed),
+        ("a tab in block scalar indentation", Some(o("a: |\n  x\n\t y\n")), Closed),
+        // A line under a one-line guardrail entry.
+        ("a deeper line under a one-line guardrail", Some(b"harness:\n  guardrails:\n    editor-hook: {enabled: true}\n        protected-paths: {enabled: true}\n".to_vec()), Closed),
+        // Files the engine cannot load, with guardrails that read as open.
+        ("a byte that is not UTF-8", Some(b(&[b"a: \xff\n", OPEN_TAIL.as_bytes()])), Closed),
+        ("a form feed", Some(o("a: x\x0cy\n")), Closed),
+        ("a vertical tab", Some(o("a: x\x0by\n")), Closed),
+        ("a delete character", Some(o("a: x\x7fy\n")), Closed),
+        ("a start-of-heading character", Some(o("a: x\x01y\n")), Closed),
+        ("a duplicate top-level key", Some(o("a: 1\na: 2\n")), Closed),
+        ("a mapping value inside a plain value", Some(o("a: b: c\n")), Closed),
+        ("a list item as a plain value", Some(o("a: - b\n")), Closed),
+        ("a value running into the next key", Some(b"a: 1harness:\n  guardrails:\n    editor-hook: {enabled: true}\n".to_vec()), Closed),
+        ("flow nested 200 deep", Some(o(&format!("a: {}{}\n", "[".repeat(200), "]".repeat(200)))), Closed),
+        ("blocks nested 150 deep", Some(o(&deep_block)), Closed),
+        ("guardrails indented past a sibling", Some(b"harness:\n  adapters: claude-code\n    guardrails:\n      editor-hook: {enabled: true}\n".to_vec()), Closed),
+        ("a directive with no document start", Some(o("%YAML 1.2\n")), Closed),
+        // The binary's own reading does not resolve merge keys, so it lets
+        // this through; the fallback refuses any merge key at the root.
+        ("a merge key at the root carrying harness", Some(b"base: &b\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n<<: *b\n".to_vec()), Stricter),
+        ("a 400 KB line", Some(long_line), Stricter),
+        // Ordinary YAML that must stay open.
+        ("acceptance asking in session, open", Some(g("    acceptance: {enabled: true, on_unjudged: allow, in_session: ask}\n")), Open),
+        ("acceptance asking in session, block, open", Some(g("    acceptance:\n      enabled: true\n      on_unjudged: allow\n      in_session: refuse\n")), Open),
+        ("acceptance asking in session, closed", Some(g("    acceptance: {enabled: true, in_session: ask}\n")), Closed),
+        ("an in-session value it does not know", Some(g("    acceptance: {enabled: true, on_unjudged: allow, in_session: maybe}\n")), Stricter),
+        ("in_session under another guardrail", Some(g("    protected-paths: {enabled: true, on_unjudged: allow, in_session: ask}\n")), Stricter),
+        ("editor-hook with pending_pair, one line", Some(g("    editor-hook: {enabled: true, on_unjudged: allow, pending_pair: allow}\n")), Open),
+        ("editor-hook with pending_pair, block", Some(g("    editor-hook:\n      enabled: true\n      on_unjudged: allow\n      pending_pair: allow\n")), Open),
+        ("a double-quoted allow", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: \"allow\"\n")), Open),
+        ("a single-quoted allow", Some(g("    protected-paths: {enabled: true, on_unjudged: 'allow'}\n")), Open),
+        ("a guardrail's name in a value", Some(format!("description: Records the acceptance of a decision\n{TYPES}harness:\n  guardrails:\n    session-start: {{enabled: true}}\n{GATE}").into_bytes()), Open),
+        ("a flow map with a single-quoted value in a list item", Some(o("x:\n  - {a: 'b', c: d}\n")), Open),
+        ("a flow map with one single-quoted value in a list item", Some(o("x:\n  - {name: 'a'}\n")), Open),
+        ("a section list item with a quoted name", Some(o("x:\n  - {name: 'TL;DR', shape: y-statement}\n")), Open),
+        ("a flow map in a list item", Some(o("x:\n  - {a: b, c: d}\n")), Open),
+        ("a flow map with a single-quoted value", Some(o("x: {a: 'b'}\n")), Open),
+        ("a block list item with a quoted value", Some(o("x:\n  - name: 'TL;DR'\n")), Open),
+        ("flow maps with double-quoted and unquoted values, nested in lists", Some(o("a:\n  b:\n    - c:\n        - {d: \"e\", f: g}\n        - {h: 'i', j: \"k\"}\n    - [l, 'm', \"n\"]\n")), Open),
+        ("quoted strings holding punctuation", Some(o("a: 'x;y#z: {w} [v], u'\nb: \"x;y#z: {w} [v], u\"\nc: 'it''s'\nd: [ '}', \"]\", '{[' ]\n")), Open),
+        ("a multi-line flow list", Some(o("a: [one,\n    'two: 2',\n    \"three, 3\"]\nb: {c: d,\n    e: 'f'}\n")), Open),
+        ("a long inline list of quoted placeholders", Some(o(&format!("placeholders: [{}]\n", placeholders.join(", ")))), Open),
+        ("a literal block scalar with guardrail-looking lines", Some(o("notes: |\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n  it's [ { '\n")), Open),
+        ("a folded block scalar with guardrail-looking lines", Some(o("notes: >-\n  acceptance: {enabled: true}\n  editor-hook:\n    on_unjudged: deny\n")), Open),
+        ("comments holding quotes and brackets", Some(o("# it's a \"comment\" [with {brackets}\na: b # don't [ {\n")), Open),
+        ("a plain scalar with an apostrophe", Some(o("a: it's plain\nb: x [y\n")), Open),
+        ("a closing bracket aligned with its key", Some(o("placeholders: [\n  'a',\n]\n")), Open),
+        ("a flow continued left of its key", Some(o("a:\n  b: [1,\n 2]\n")), Open),
+        ("a multi-line quoted scalar", Some(o("description: \"one\n  two\"\n")), Open),
+        ("an anchor and alias outside harness", Some(o("a: &x [1]\nb: *x\nc:\n  <<: {d: 1}\n")), Open),
+        ("harness null", Some(b"harness: ~\n".to_vec()), Open),
+        ("a document end", Some(o("a: 1\n").into_iter().chain(b"...\n".iter().copied()).collect()), Open),
+        ("a YAML directive before ---", Some(b(&[b"%YAML 1.2\n---\n", OPEN_TAIL.as_bytes()])), Open),
+        ("a quoted top-level key", Some(o("\"x\": 1\n'y': 2\n")), Open),
+        ("a doubled quote before a colon", Some(o("a: 'x'' b: c'\n")), Open),
+        ("an escaped double quote before a colon", Some(o("a: \"x\\\" b: c\"\n")), Open),
+        ("a multi-line flow inside harness", Some(b"harness:\n  adapters: [claude-code,\n    codex]\n  guardrails:\n    editor-hook: {enabled: true}\n".to_vec()), Open),
     ]
 }
 
+fn seam_rank(dir: &Path) -> u8 {
+    let out = common::run_hook(
+        dir,
+        "edit",
+        &ordinary_payload(dir),
+        Some(&["false"]),
+        Some(dir),
+        &[],
+    );
+    fallback_rank(&String::from_utf8(out.stdout).unwrap())
+}
+
 #[test]
-fn without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused_and_an_open_one_is_open(
-) {
+fn without_urzua_every_shape_is_read_as_the_binary_reads_it_or_more_strictly() {
     let cmds = commands();
-    for (name, config, open) in shapes() {
-        let dir = repo_with(&name.replace(' ', "-"), config.as_deref());
-        // An open shape: the engine lets an ordinary edit through, and the
-        // fallback must too (with its notice). Any other: the engine refuses a
-        // write to a protected file where it can read the configuration, and
-        // the fallback refuses it in every case.
-        let payload = if open {
-            ordinary_payload(&dir)
-        } else {
-            write_payload(&dir)
+    let mut wrong = Vec::new();
+    for (name, config, want) in shapes() {
+        let dir = repo_with(&name.replace([' ', ',', '\''], "-"), config.as_deref());
+        let binary = seam_rank(&dir);
+        let (eb, ef) = match want {
+            Want::Open => (1, 1),
+            Want::Closed => (2, 2),
+            Want::Stricter => (1, 2),
         };
-        let engine = engine_rank(&dir, &payload);
-        if open {
-            assert!(
-                engine < 2,
-                "{name}: the engine lets an ordinary edit through"
-            );
+        if binary != eb {
+            wrong.push(format!(
+                "{name}: the binary gives {binary}, the shape says {want:?}"
+            ));
         }
         for combo in combos() {
-            let (out, _) = run(
+            let payload = ordinary_payload(&dir);
+            let (out, took) = run(
                 &cmds["PreToolUse"],
                 &combo,
                 &dir.to_string_lossy(),
@@ -418,17 +530,23 @@ fn without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused
                 &payload,
                 false,
             );
-            let what = format!(
-                "{name} {:?} {:?}: engine {engine}, fallback {out}",
-                combo.shell, combo.awk
-            );
-            if open {
-                assert!(!denied(&out) && out.contains("could NOT run"), "{what}");
-            } else {
-                assert!(denied(&out), "{what}");
+            let fallback = fallback_rank(&out);
+            assert!(fallback >= binary, "{name} {:?} {:?}: the fallback ({fallback}) is more permissive than the binary ({binary})", combo.shell, combo.awk);
+            if fallback != ef {
+                wrong.push(format!(
+                    "{name} {:?} {:?}: fallback {fallback}, want {want:?}",
+                    combo.shell, combo.awk
+                ));
             }
+            assert!(
+                took < std::time::Duration::from_secs(5),
+                "{name} {:?} {:?}: took {took:?}",
+                combo.shell,
+                combo.awk
+            );
         }
     }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 #[test]
@@ -544,4 +662,199 @@ fn without_urzua_silence_is_stdout_and_stderr_and_post_command_says_one_short_li
             "{out}"
         );
     }
+}
+
+/// Every configuration people actually write that this repository holds: its
+/// own, the acceptance corpora and fixtures, what `urzua init` writes for each
+/// profile and in adopt mode, and the YAML examples in the reference docs that
+/// load. On each, the fallback must give the binary's own unjudged answer.
+fn real_configs() -> Vec<(String, Vec<u8>)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let mut out = vec![(
+        ".urzua/config.yaml".to_string(),
+        std::fs::read(root.join(".urzua/config.yaml")).unwrap(),
+    )];
+    let mut stack = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("tests")];
+    let mut found = Vec::new();
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "yaml" || x == "yml") {
+                let text = std::fs::read_to_string(&p).unwrap_or_default();
+                let config = text
+                    .lines()
+                    .any(|l| l.starts_with("schema_version:") || l.starts_with("record_types:"));
+                if config {
+                    found.push(p);
+                }
+            }
+        }
+    }
+    found.sort();
+    for p in found {
+        let name = p
+            .strip_prefix(&root)
+            .unwrap_or(&p)
+            .to_string_lossy()
+            .to_string();
+        out.push((name, std::fs::read(&p).unwrap()));
+    }
+    let help = common::urzua().args(["init", "--help"]).output().unwrap();
+    let help = String::from_utf8_lossy(&help.stdout).to_string();
+    let profiles: Vec<String> = help
+        .split("built-in profiles:")
+        .nth(1)
+        .and_then(|r| r.lines().next())
+        .unwrap_or("")
+        .split(',')
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
+    assert!(
+        !profiles.is_empty(),
+        "the profiles `urzua init` offers: {help}"
+    );
+    let mut runs: Vec<(String, Vec<String>)> = profiles
+        .iter()
+        .map(|p| {
+            (
+                format!("init --types {p}"),
+                vec!["--types".to_string(), p.clone()],
+            )
+        })
+        .collect();
+    runs.push((
+        format!("init --types {}", profiles.join(",")),
+        vec!["--types".to_string(), profiles.join(",")],
+    ));
+    runs.push(("init (adopt)".to_string(), Vec::new()));
+    for (name, args) in runs {
+        let dir = common::TempDir::new("urzua-fallback-init");
+        git(&dir, &["init", "-q"]);
+        if args.is_empty() {
+            std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+            std::fs::write(
+                dir.join("docs/adr/ADR-1-use-postgres.md"),
+                "---\nStatus: Accepted\nDate: 2026-01-01\n---\n# ADR-1: Use postgres\n",
+            )
+            .unwrap();
+            git(&dir, &["add", "-A"]);
+        }
+        let res = common::urzua()
+            .arg("init")
+            .args(&args)
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        let config = std::fs::read(dir.join(".urzua/config.yaml"))
+            .unwrap_or_else(|_| panic!("{name} wrote a configuration: {res:?}"));
+        out.push((name, config));
+    }
+    let mut docs: Vec<PathBuf> = std::fs::read_dir(root.join("docs/reference"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "md"))
+        .collect();
+    docs.push(root.join("README.md"));
+    docs.sort();
+    for doc in docs {
+        let text = std::fs::read_to_string(&doc).unwrap();
+        let mut block: Option<String> = None;
+        let mut indent = 0;
+        let mut n = 0;
+        for line in text.lines() {
+            let t = line.trim_start();
+            match &mut block {
+                None if t == "```yaml" || t == "```yml" => {
+                    indent = line.len() - t.len();
+                    block = Some(String::new());
+                }
+                Some(b) if t.starts_with("```") => {
+                    n += 1;
+                    let parsed = yaml_serde::from_str::<yaml_serde::Value>(b);
+                    if parsed.is_ok_and(|v| v.is_mapping()) {
+                        let name = format!(
+                            "{} yaml block {n}",
+                            doc.file_name().unwrap().to_string_lossy()
+                        );
+                        out.push((name, b.clone().into_bytes()));
+                    }
+                    block = None;
+                }
+                Some(b) => {
+                    b.push_str(line.get(indent..).unwrap_or(t));
+                    b.push('\n');
+                }
+                None => {}
+            }
+        }
+    }
+    out
+}
+
+/// The fallback's answer for one configuration: 2 refuses, 1 lets the call
+/// through with its notice, 0 is silent.
+fn fallback_rank(out: &str) -> u8 {
+    if denied(out) {
+        2
+    } else {
+        u8::from(!out.trim().is_empty())
+    }
+}
+
+/// Real configurations on which the fallback may refuse where the binary
+/// would not, each with why. Empty: on valid configurations people write,
+/// "not certain" is a bug.
+const LEGITIMATELY_UNCERTAIN: &[(&str, &str)] = &[];
+
+#[test]
+fn without_urzua_every_real_configuration_is_read_as_the_binary_reads_it() {
+    let cmds = commands();
+    let configs = real_configs();
+    assert!(
+        configs.len() > 30,
+        "the corpus found the configurations: {}",
+        configs.len()
+    );
+    let mut disagreements = Vec::new();
+    for (name, config) in &configs {
+        let dir = repo_with("real", Some(config));
+        let payload = ordinary_payload(&dir);
+        // The binary's own decision where the engine gives no verdict.
+        let out = common::run_hook(&dir, "edit", &payload, Some(&["false"]), Some(&dir), &[]);
+        let binary = fallback_rank(&String::from_utf8(out.stdout).unwrap());
+        for combo in combos() {
+            let (out, _) = run(
+                &cmds["PreToolUse"],
+                &combo,
+                &dir.to_string_lossy(),
+                &dir,
+                &payload,
+                false,
+            );
+            let fallback = fallback_rank(&out);
+            assert!(
+                fallback >= binary,
+                "{name} {:?} {:?}: the fallback ({fallback}) is more permissive than the binary ({binary})",
+                combo.shell, combo.awk
+            );
+            let excused = LEGITIMATELY_UNCERTAIN.iter().any(|(n, _)| n == name);
+            if fallback != binary && !excused {
+                disagreements.push(format!(
+                    "{name} {:?} {:?}: binary {binary}, fallback {fallback}",
+                    combo.shell, combo.awk
+                ));
+            }
+        }
+    }
+    assert!(
+        disagreements.is_empty(),
+        "{} configurations read: {}",
+        configs.len(),
+        disagreements.join("\n")
+    );
+    eprintln!("{} real configurations read alike", configs.len());
 }

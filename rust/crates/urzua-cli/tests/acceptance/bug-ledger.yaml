@@ -82,3 +82,5 @@
   reason: "five specs marked Draft though built; this repository's own record statuses, not a behaviour of check"
 - bug: BUG-146
   reason: "an init serialization error swallowed into an empty config body; no input makes the serialization fail, so no corpus can reach it"
+- bug: BUG-201
+  reason: "the installed hook command's shell fallback misreading a configuration when urzua cannot run; it is shell and awk in the agent harness's hook entry, which no urzua command run over a corpus executes, and harness_fallback_integration runs it over every real configuration instead"

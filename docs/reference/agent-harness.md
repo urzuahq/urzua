@@ -71,9 +71,33 @@ with certainty as open, it lets the call through with a notice. With any other, 
 until urzua is installed or upgraded, because without the binary it cannot tell a protected file from another.
 Read with certainty means: guardrails only at a key position under `harness.guardrails`, in the block form or the
 one-line `{...}` form, with only the keys a guardrail carries (`enabled: true|false`, `on_unjudged: allow|deny`,
-`pending_pair: allow|refuse`), values plain or quoted. A quoted key, an anchor, alias or tag, unbalanced brackets, a
-tab in indentation, a repeated key, a child indented unlike its siblings, `on_unjudged:` with its value on the next
-line, or a file that is not plain text is not certain, and is refused. So with the binary missing the hook closes
+`pending_pair: allow|refuse`, `in_session: refuse|ask`), values plain or quoted; any other key or value in a guardrail is not certain. The rest
+of the file is read as YAML reads it: quoted scalars (on one line or several), comments, flow maps and lists (their
+continuation lines at any indentation) and block scalars are ordinary, and so are anchors, aliases, tags and merge
+keys outside `harness`. A key is compared with blanks before its colon trimmed, and the root indentation is the first
+content line's. Not certain, and refused:
+
+- a line longer than 64 KiB; a byte that is not valid UTF-8; a control character other than tab, line feed and a
+  line-final carriage return (so a lone carriage return), a C1 control (so U+0085), U+2028, U+2029, U+FFFE, U+FFFF,
+  or a byte order mark after the first three bytes;
+- a tab in the leading whitespace of any line, comment, blank and block scalar lines included;
+- a second document, content after `...`, or a directive other than one `%YAML` line before `---`;
+- a quote or flow left open at the end of the file, a quoted scalar continued at or left of its key's indentation,
+  flow nested more than 32 deep, blocks nested more than 64 deep, a plain value holding `: ` or opening with `- `, a
+  line left of the root indentation;
+- at the root: a duplicate key, a merge key, a complex, flow, anchored, aliased or tagged key, a key it cannot read, a
+  quoted `harness` key, a list item not under a key with an empty value, a `harness` value other than a block mapping
+  or null;
+- in `harness`: an anchor, alias, tag or merge key, a quoted, complex, flow or list-item key, a line under a key that
+  already has a value, the guardrails written inline, a guardrail repeated;
+- in a guardrail: a repeated key, a child indented unlike its siblings, `on_unjudged:` with its value on the next
+  line, a deeper line under a one-line entry; and a file that is not plain text.
+
+The fallback does not validate the file: one the engine cannot load but whose guardrails read as open is allowed with
+the notice, and installing urzua closes that. It is stricter than the engine on some valid files: an anchor inside
+`harness`, a guardrail written as a flow map over several lines, a root that is a list, a complex key, a guardrail
+value the engine reads as false or null (`'~'`, `'False'`), a doubled byte order mark, a quoted scalar continued at its
+key's indentation. So with the binary missing the hook closes
 the gate in a governed session, and it cannot see beyond the session's directory.
 
 With urzua missing or too old, the hook decides from the session's directory only. A session rooted in a
