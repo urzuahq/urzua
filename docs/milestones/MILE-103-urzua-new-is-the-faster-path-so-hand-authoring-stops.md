@@ -57,7 +57,7 @@ front of the tool.
 ## Done means
 
 - Records in this repository are created through `urzua new` and not by hand: `urzua new` is measurably the faster path (a recorded comparison of time or steps against hand-authoring).
-- The agent commands of `MILE-177` route through `urzua new`. — evidence: test:rust/crates/urzua-cli/tests/drafting_commands_integration.rs#each_command_drafts_a_record_that_check_examined_and_passes@sha256:cc8b6be8e02f7d3f70bf60e503be3fa691cecc2769d77eb4eab9ada2be8c503a, code:rust/crates/urzua-cli/src/harness/record.rs@sha256:a799262142482a674681680994b4450f5348d38865f43e835300e4fa7f8caf85
+- The agent commands of `MILE-177` route through `urzua new`. — evidence: test:rust/crates/urzua-cli/tests/drafting_commands_integration.rs#each_command_drafts_a_record_that_check_examined_and_passes@sha256:cc8b6be8e02f7d3f70bf60e503be3fa691cecc2769d77eb4eab9ada2be8c503a, code:rust/crates/urzua-cli/src/harness/record.rs@sha256:261d50fc9724b6d8595b52a5753938f94127930c0dda676c1be89af34740b150
 - Over a stated window of at least 30 calendar days and at least 50 new records, no record is merged whose header differs from the scaffold `urzua new` would have written and that a header rule rejected at a pull-request head; the count is taken with `scripts/replay-header-comparator.py` (the opt-in `header.scaffold-mismatch` rule over the commits of each merged pull request), and the window, the number of records and the count are recorded here when it is met (`SPEC-1` Phase 1 exit criterion).
 
 > **Revision log**
