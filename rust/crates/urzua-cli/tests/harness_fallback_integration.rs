@@ -413,7 +413,7 @@ fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, Want)> {
         ("a complex harness key", Some(format!("{TYPES}? harness\n: guardrails: {{protected-paths: {{enabled: true}}}}\n{GATE}").into_bytes()), Closed),
         ("harness a list", Some(format!("{TYPES}harness:\n- guardrails\n{GATE}").into_bytes()), Closed),
         // A key with a blank before its colon is the same key.
-        ("a space before the colon, closed", Some(format!("harness :\n  guardrails :\n    protected-paths : {{enabled: true}}\n").into_bytes()), Closed),
+        ("a space before the colon, closed", Some(b"harness :\n  guardrails :\n    protected-paths : {enabled: true}\n".to_vec()), Closed),
         ("a tab before the colon, closed", Some(b"harness:\n  guardrails:\n    protected-paths\t: {enabled: true}\n".to_vec()), Closed),
         ("a space before the colon, block form, closed", Some(b"harness:\n  guardrails:\n    protected-paths :\n      enabled: true\n".to_vec()), Closed),
         ("a space before the colon, open", Some(b"harness :\n  guardrails :\n    editor-hook : {enabled: true}\n".to_vec()), Open),
