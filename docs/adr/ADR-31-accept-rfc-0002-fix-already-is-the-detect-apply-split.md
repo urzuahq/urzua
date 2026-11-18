@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4K2QQFBGS4V1FDFGWW
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:0397b84e8bd90266c6cfe2f2ce8f4bb8c4d2284f9dfd7bdf362548ac443538e0, test:rust/crates/urzua-io/src/lib.rs@sha256:0397b84e8bd90266c6cfe2f2ce8f4bb8c4d2284f9dfd7bdf362548ac443538e0
+Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:7e45d49e772743bd052763874429f7f95cd9af207ccfed59e73240fd8f5e6374, test:rust/crates/urzua-io/src/lib.rs@sha256:7e45d49e772743bd052763874429f7f95cd9af207ccfed59e73240fd8f5e6374
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -152,3 +152,4 @@ surface.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` edc9d94cd4dc -> 8468c598351f. Reason: urzua-io/src/lib.rs: adds real_elapsed_since, which reads real time through the one wall-clock reader for a file's age between processes; system_clock and the evaluation date are unchanged, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` edc9d94cd4dc -> ec0dc8d7d230. Reason: in rust/crates/urzua-io/src/lib.rs only a doc comment on a date test changed; no code changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-io/src/lib.rs` (Realized-by) 8468c598351f and ec0dc8d7d230 -> 0397b84e8bd9, `rust/crates/urzua-io/src/lib.rs` (Realized-by, occurrence 2) 8468c598351f and ec0dc8d7d230 -> 0397b84e8bd9; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 0397b84e8bd9 -> 7e45d49e7727. Reason: urzua-io lib.rs: read_instant is added, a fresh UTC instant; nothing existing changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

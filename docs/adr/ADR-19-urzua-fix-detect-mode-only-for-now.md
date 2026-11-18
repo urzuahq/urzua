@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK48R3KZZ3SZE3FYKSXA
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:75776e5768fbc3bfa28593dec85cf31d885854cdbe8d0a43227a456ad92fb4af, test:rust/crates/urzua-core/src/fix.rs@sha256:75776e5768fbc3bfa28593dec85cf31d885854cdbe8d0a43227a456ad92fb4af
+Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:d9398b0c5717d5c112dbce643258fb172607713cb7ab1eaceb4f11436f32082c, test:rust/crates/urzua-core/src/fix.rs@sha256:d9398b0c5717d5c112dbce643258fb172607713cb7ab1eaceb4f11436f32082c
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -92,3 +92,4 @@ when they land.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` a2c71a99c6e3 -> e67d97a794d2. Reason: fix.rs: a test fixture's RecordTypeConfig literal gains field_values: None; no behaviour changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/fix.rs` (Realized-by) 9cc05b2200bb and e67d97a794d2 -> 5677e6488e07, `rust/crates/urzua-core/src/fix.rs` (Realized-by, occurrence 2) 9cc05b2200bb and e67d97a794d2 -> 5677e6488e07; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 5677e6488e07 -> 75776e5768fb. Reason: rust/crates/urzua-core/src/fix.rs: a test fixture that builds a Config gains the new declared_status_entries field; no production code changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 75776e5768fb -> d9398b0c5717. Reason: fix.rs: test and fixture Config literals gain the part_of and export fields; no production behavior changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
