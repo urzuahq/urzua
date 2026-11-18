@@ -379,6 +379,7 @@ fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, bool)> {
         ("a repeated key", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: deny\n      on_unjudged: allow\n")), false),
         ("a child deeper than its siblings", Some(g("    protected-paths:\n      enabled: false\n        on_unjudged: allow\n")), false),
         ("the configuration a directory", None, false),
+        ("a second document", Some(format!("{TYPES}harness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n---\nharness:\n  guardrails:\n    protected-paths: {{enabled: true}}\n{GATE}").into_bytes()), false),
         ("an anchor outside the guardrails", Some(format!("{TYPES}x: &a [1]\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
         ("a merge key outside the guardrails", Some(format!("{TYPES}base: {{a: 1}}\nx:\n  <<: {{a: 1}}\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
         ("a quoted scalar left open", Some(format!("{TYPES}x: 'abc\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
