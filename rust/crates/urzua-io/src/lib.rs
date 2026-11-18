@@ -1799,9 +1799,8 @@ mod tests {
         }
     }
 
-    /// `Ok((date, end-of-day Unix time))` or the error's kind, recorded from
-    /// chrono 0.4.45 running the previous implementation of `parse_as_of`
-    /// and `date_of_unix`.
+    /// `Ok` carries the date and its end-of-day Unix time; `Err(true)` is a
+    /// shape error and `Err(false)` a calendar error.
     #[test]
     fn as_of_parsing_matches_the_recorded_table() {
         let shape = |s| (s, Err(true));
