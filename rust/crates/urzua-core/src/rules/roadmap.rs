@@ -778,7 +778,14 @@ impl<'a> Order<'a> {
     fn groups(&self, config: &Config, notes: &mut Vec<RoadmapNote>) -> Vec<RoadmapGroup> {
         let fields = &config.roadmap.group_by;
         let value_of = |id: &RecordId, field: &str| -> Option<String> {
-            present(self.index[id].header.get(field)).map(str::to_string)
+            let record = self.index[id];
+            present(record.header.get(field))
+                .or_else(|| {
+                    crate::view_model::ancestors(config, self.index, record)
+                        .into_iter()
+                        .find_map(|a| present(a.header.get(field)))
+                })
+                .map(str::to_string)
         };
         let all: Vec<&RecordId> = self.open_work.iter().collect();
         let groups = if fields.is_empty() {
@@ -925,6 +932,37 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     roadmap.notes = notes;
     roadmap.waiting_on = order.waiting_on(&dependents);
     roadmap
+}
+
+/// For every record the sequencing pairs `roadmap.pairs` name can say
+/// something about: the records it directly depends on that are not finished
+/// (not in their own type's `success`), in natural order. Keyed and valued by
+/// normalized id. A dependency outside the corpus is not a record to wait on.
+/// Empty when no pair is named.
+pub fn unfinished_dependencies(
+    records: &[Record],
+    config: &Config,
+) -> BTreeMap<String, Vec<String>> {
+    let pairs = &config.roadmap.pairs;
+    if pairs.is_empty() {
+        return BTreeMap::new();
+    }
+    let index = build_normalized_index(records);
+    let declared = statuses_by_type(config);
+    let slots = pair_slots(records, config, |p| pairs.contains(&p.name));
+    let SequenceGraphs { graphs, .. } = sequence_graphs(&slots, &index);
+    let depends = merged_graph(graphs.values());
+    let mut waits = BTreeMap::new();
+    for (id, deps) in &depends {
+        if !index.contains_key(id) {
+            continue;
+        }
+        let open = deps.iter().filter(|d| {
+            index.contains_key(*d) && standing_of(config, &index, &declared, d).1 != Standing::Success
+        });
+        waits.insert(id.as_str().to_string(), names(open.map(RecordId::as_str)));
+    }
+    waits
 }
 
 /// `None` sorts first.

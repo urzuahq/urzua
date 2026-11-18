@@ -1,9 +1,11 @@
 //! Declared target types of reference fields (`MILE-259`): which record types
 //! a pointer field, or the forward field of a relation pair, may name.
 //!
-//! A `pointer_fields` entry is either a field name or `{name, targets}`; the
-//! typed parse keeps only the names (so every reader of `pointer_fields` is
-//! unchanged) and `collect` reads the `targets` from the raw document.
+//! A `pointer_fields` entry is either a field name or `{name, targets}`, and
+//! may add `part_of: true`, which declares the field as containment: a record
+//! naming another through it is part of that record. The typed parse keeps only
+//! the names (so every reader of `pointer_fields` is unchanged) and `collect`
+//! reads the `targets` and `part_of` from the raw document.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -14,19 +16,26 @@ use crate::config::{Config, ConfigError};
 /// Declared target types: record type, then field, then the allowed types.
 pub type PointerTargets = BTreeMap<String, BTreeMap<String, Vec<String>>>;
 
+/// The field each record type declares as containment (`part_of: true`).
+pub type PartOf = BTreeMap<String, String>;
+
 /// One `pointer_fields` entry: a bare name, or `{name, targets}`. A bare
 /// plain scalar reads as text, as the typed parse of a name always has, so a
 /// numeric field name still loads.
 struct Entry {
     name: String,
     targets: Option<Vec<String>>,
+    part_of: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Constrained {
     name: String,
-    targets: Vec<String>,
+    #[serde(default)]
+    targets: Option<Vec<String>>,
+    #[serde(default)]
+    part_of: bool,
 }
 
 impl<'de> Deserialize<'de> for Entry {
@@ -41,6 +50,7 @@ impl<'de> Deserialize<'de> for Entry {
                 Ok(Entry {
                     name: v.to_string(),
                     targets: None,
+                    part_of: false,
                 })
             }
             fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Entry, E> {
@@ -64,9 +74,13 @@ impl<'de> Deserialize<'de> for Entry {
             fn visit_map<A: serde::de::MapAccess<'de>>(self, map: A) -> Result<Entry, A::Error> {
                 let c =
                     Constrained::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+                if c.targets.is_none() && !c.part_of {
+                    return Err(serde::de::Error::missing_field("targets"));
+                }
                 Ok(Entry {
                     name: c.name,
-                    targets: Some(c.targets),
+                    targets: c.targets,
+                    part_of: c.part_of,
                 })
             }
         }
@@ -80,9 +94,10 @@ pub(crate) fn names<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<String
     Ok(entries.map(|v| v.into_iter().map(|e| e.name).collect()))
 }
 
-/// The `targets` of every `{name, targets}` entry, read by a second, narrow
-/// parse that ignores every other key, so it accepts whatever the typed parse did.
-pub(crate) fn collect(content: &str) -> Result<PointerTargets, ConfigError> {
+/// The `targets` of every `{name, targets}` entry and the `part_of` field of
+/// every type, read by a second, narrow parse that ignores every other key, so
+/// it accepts whatever the typed parse did.
+pub(crate) fn collect(content: &str) -> Result<(PointerTargets, PartOf), ConfigError> {
     #[derive(Deserialize)]
     struct Doc {
         #[serde(default)]
@@ -95,8 +110,10 @@ pub(crate) fn collect(content: &str) -> Result<PointerTargets, ConfigError> {
     }
     let doc: Doc = yaml_serde::from_str(crate::config::strip_bom(content))?;
     let mut out = PointerTargets::new();
+    let mut part_of = PartOf::new();
     for (type_name, decl) in doc.record_types {
         let entries = decl.pointer_fields.unwrap_or_default();
+        read_part_of(&type_name, &entries, &mut part_of)?;
         if let Some(name) = repeated_constrained(&entries) {
             return Err(ConfigError::InvalidPointerTargets {
                 reason: format!(
@@ -112,7 +129,34 @@ pub(crate) fn collect(content: &str) -> Result<PointerTargets, ConfigError> {
             }
         }
     }
-    Ok(out)
+    Ok((out, part_of))
+}
+
+/// The one `part_of` field of a type. A containment field names the record a
+/// record is part of, so it needs `targets` (a reference alone does not say
+/// "is part of"), and a record has one parent, so a type declares one.
+fn read_part_of(
+    type_name: &str,
+    entries: &[Entry],
+    part_of: &mut PartOf,
+) -> Result<(), ConfigError> {
+    let marked: Vec<&Entry> = entries.iter().filter(|e| e.part_of).collect();
+    if let Some(entry) = marked.iter().find(|e| e.targets.is_none()) {
+        return bad(format!(
+            "record type '{type_name}' pointer field '{}' declares part_of: true without targets; containment needs the types it may name",
+            entry.name
+        ));
+    }
+    if marked.len() > 1 {
+        return bad(format!(
+            "record type '{type_name}' declares part_of on more than one pointer field ('{}' and '{}'); a record has one parent",
+            marked[0].name, marked[1].name
+        ));
+    }
+    if let Some(entry) = marked.first() {
+        part_of.insert(type_name.to_string(), entry.name.clone());
+    }
+    Ok(())
 }
 
 /// A field listed more than once where any listing carries `targets`: which

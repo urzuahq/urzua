@@ -1538,14 +1538,20 @@ pub struct ExportedRecord {
     pub header_readable: bool,
     pub header: Vec<ExportedField>,
     /// The file's complete text, unmodified, header included. No record type
-    /// declares sections yet (`MILE-98`), so this is the one body field.
-    pub raw_text: String,
+    /// declares sections yet (`MILE-98`), so this is the one body field. Absent
+    /// when the export was asked to leave the text out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_text: Option<String>,
     /// The record's sections, for a type that declares `sections`; `null` (not
     /// absent) for a type that declares none, so "no declaration" differs from
     /// "declared, none present" (`[]`).
     pub sections: Option<Vec<ExportedSectionEntry>>,
     /// Text between the header and the first section; `null` as `sections`.
     pub preamble: Option<String>,
+    /// What a view of the record needs: title, fields, state, waits, parent and
+    /// children, references, link.
+    #[serde(flatten)]
+    pub view: crate::view_model::RecordView,
 }
 
 /// One section in `urzua export --format json` (SPEC-1, "Export contract").
@@ -1560,6 +1566,45 @@ pub struct ExportedSectionEntry {
     pub end_line: usize,
     /// The lines after the heading through `end_line`.
     pub content: String,
+    /// Checkbox lines (`- [x]`) in the section that are ticked.
+    pub ticked: usize,
+    /// Checkbox lines (`- [ ]`) in the section that are not.
+    pub unticked: usize,
+    /// For the section the type declares as its checklist
+    /// (`statuses.delivery.items`): each item as the delivery rule reads it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<ChecklistItem>>,
+}
+
+/// One item of a declared checklist section, as the delivery rule judges it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChecklistItem {
+    pub n: usize,
+    /// 1-based file line of the item.
+    pub line: usize,
+    pub text: String,
+    /// Its evidence resolves.
+    pub resolved: bool,
+    /// The evidence locators it names, as written; `null` for an item with no
+    /// evidence clause.
+    pub evidence: Option<String>,
+    /// It is excused by a waiver while it does not resolve.
+    pub waived: bool,
+}
+
+/// What the export read, and when: the commit and branch of the repository,
+/// whether any record file differs from the commit, and the time.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ReadStamp {
+    /// The commit the working tree is on; `null` outside a repository with one.
+    pub commit: Option<String>,
+    /// The branch; `null` on a detached head.
+    pub branch: Option<String>,
+    /// Any record file has uncommitted changes (modified, staged, or new and
+    /// not committed). The records read are the working tree's.
+    pub uncommitted_record_changes: bool,
+    /// UTC, `YYYY-MM-DDTHH:MM:SSZ`.
+    pub time: String,
 }
 
 /// How many records `export` emitted for one configured type; a type with
@@ -1579,6 +1624,10 @@ pub struct ExportReport {
     pub status: ReportStatus,
     pub record_count: usize,
     pub types: Vec<ExportTypeCount>,
+    /// What each type means to a view of the records: whether it is work, the
+    /// field it declares as containment, the fields with declared values.
+    pub type_roles: std::collections::BTreeMap<String, crate::view_model::TypeRole>,
+    pub read: ReadStamp,
     pub records: Vec<ExportedRecord>,
     /// The computed roadmap (`ADR-82`), present only when `roadmap.pairs` is
     /// declared: a repository that has not opted in sees no new key.

@@ -63,6 +63,15 @@ pub struct Config {
     /// raw document at load; the typed parse keeps only the names.
     #[serde(skip)]
     pub pointer_targets: crate::pointer_targets::PointerTargets,
+    /// The pointer field each type declares as containment (`part_of: true`),
+    /// read from the raw document beside `pointer_targets`. A type absent here
+    /// has no containment: its records are flat.
+    #[serde(skip)]
+    pub part_of: crate::pointer_targets::PartOf,
+    /// What `urzua export` adds beyond the records themselves (`link_prefix`).
+    /// Absent adds nothing.
+    #[serde(default, skip_serializing_if = "ExportDecl::is_empty")]
+    pub export: ExportDecl,
     /// Which status entries some type declares, read once at load so a rule
     /// that is on by declaration does not parse every type's `statuses` again
     /// each time it is asked whether it applies.
@@ -506,6 +515,52 @@ pub struct RoadmapDecl {
 impl RoadmapDecl {
     fn is_empty(&self) -> bool {
         self.pairs.is_empty() && self.group_by.is_empty() && self.work_types.is_none()
+    }
+}
+
+/// The `export` key: what `urzua export` adds to a record beyond what the
+/// record holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportDecl {
+    /// Text put before a record's repository-relative path, with `/` separators,
+    /// to make the `link` each exported record carries: the address of a hosted
+    /// view of the file. Absent means no record carries a `link`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_prefix: Option<String>,
+}
+
+impl ExportDecl {
+    fn is_empty(&self) -> bool {
+        self.link_prefix.is_none()
+    }
+
+    /// `prefix` joined to `path`, or `None` when no prefix is declared.
+    pub fn link_for(&self, path: &std::path::Path) -> Option<String> {
+        let prefix = self.link_prefix.as_deref()?;
+        let path = path.to_string_lossy().replace('\\', "/");
+        Some(format!("{prefix}{path}"))
+    }
+}
+
+/// A link prefix is an address a viewer can open: an absolute `http(s)` URL or
+/// a path from the host's root, with no whitespace or control character.
+fn validate_export(config: &Config) -> Result<(), ConfigError> {
+    let Some(prefix) = config.export.link_prefix.as_deref() else {
+        return Ok(());
+    };
+    let well_formed = (prefix.starts_with("https://")
+        || prefix.starts_with("http://")
+        || prefix.starts_with('/'))
+        && !prefix.chars().any(|c| c.is_whitespace() || c.is_control());
+    if well_formed {
+        Ok(())
+    } else {
+        Err(ConfigError::InvalidExport {
+            reason: format!(
+                "export.link_prefix '{prefix}' must start with https://, http:// or / and hold no whitespace"
+            ),
+        })
     }
 }
 
@@ -2113,6 +2168,8 @@ pub enum ConfigError {
     InvalidRelationPair { reason: String },
     #[error("pointer target types: {reason}")]
     InvalidPointerTargets { reason: String },
+    #[error("export: {reason}")]
+    InvalidExport { reason: String },
     #[error("roadmap: {reason}")]
     InvalidRoadmap { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -3304,7 +3361,7 @@ pub fn parse_with_document_models(
     content: &str,
 ) -> Result<(Config, BTreeMap<String, DocumentModel>), ConfigError> {
     let mut config = read_in_window(content)?;
-    config.pointer_targets = crate::pointer_targets::collect(content)?;
+    (config.pointer_targets, config.part_of) = crate::pointer_targets::collect(content)?;
     let models = crate::document_model::validate_declarations(&config.record_types)?;
     config
         .embodiment
@@ -3318,6 +3375,7 @@ pub fn parse_with_document_models(
     crate::status_model::validate_items_rule(&config.record_types, &status_decls, &config.rules)?;
     validate_relation_pairs(&config)?;
     crate::pointer_targets::validate(&config)?;
+    validate_export(&config)?;
     validate_roadmap(&config)?;
     validate_companion_fields(&config)?;
     validate_record_types(&config)?;

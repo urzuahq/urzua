@@ -178,7 +178,12 @@ fn match_entry<'a>(line: &'a str, segments: &'a [FormatSegment]) -> Option<Entry
 /// compared by value so padding does not matter) is dropped along with the
 /// separator after it. `None` when the record has no H1.
 fn record_title(record: &Record, full_text: &HashMap<PathBuf, String>) -> Option<String> {
-    let text = full_text.get(&record.path)?;
+    title_in_text(record, full_text.get(&record.path)?)
+}
+
+/// [`record_title`] for text the caller already holds: the one rule the index
+/// and every view of a record's title read.
+pub fn title_in_text(record: &Record, text: &str) -> Option<String> {
     let h1 = first_h1(text, record.header.region)?;
     let numbered = !h1.first_token.is_empty() && h1.first_token.chars().all(|c| c.is_ascii_digit());
     let own_id = record_id(record).is_some_and(|id| {

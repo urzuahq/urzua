@@ -295,6 +295,10 @@ enum Command {
     Export {
         #[arg(long, value_enum, required = true)]
         format: ExportFormat,
+        /// Leave each record's `raw_text` out. The header, sections and every
+        /// derived key stay; the text is most of a large export.
+        #[arg(long)]
+        no_raw_text: bool,
     },
 
     /// Read records from another format. Not implemented yet. The format must
@@ -778,7 +782,10 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
         Command::Waive(args) => commands::waive::run(config, args),
         Command::Audit => commands::audit::run(config),
         Command::Migrate { target } => dispatch_migrate(config, target),
-        Command::Export { format } => dispatch_export(config, format),
+        Command::Export {
+            format,
+            no_raw_text,
+        } => dispatch_export(config, format, no_raw_text),
         Command::Import { .. } => not_implemented("import"),
         init @ Command::Init { .. } => dispatch_init(config, init),
         Command::Harness { target } => dispatch_harness(config, target),
@@ -824,9 +831,14 @@ fn panic_if_requested() {
 #[cfg(not(debug_assertions))]
 fn panic_if_requested() {}
 
-fn dispatch_export(config: Option<PathBuf>, format: ExportFormat) -> ExitCode {
+fn dispatch_export(config: Option<PathBuf>, format: ExportFormat, no_raw_text: bool) -> ExitCode {
     match format {
-        ExportFormat::Json => commands::export::run(config),
+        ExportFormat::Json => commands::export::run(
+            config,
+            &commands::export::ExportOptions {
+                raw_text: !no_raw_text,
+            },
+        ),
         ExportFormat::Agdr => not_implemented("export"),
     }
 }
