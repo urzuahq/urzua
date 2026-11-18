@@ -396,20 +396,11 @@ impl<'a> Context<'a> {
     }
 }
 
-/// The actors file's identities, else the changed records carrying a receipt
-/// row, which a run with an actors file never reads (`ADR-102`).
-fn attach_actors(
-    session: &crate::session::Session,
-    context: &mut Context<'_>,
-    actors: Option<urzua_core::authority::Actors>,
-) {
-    if actors.is_none() {
-        context.session_receipts = crate::harness::receipt::for_check(
-            &session.repo_root,
-            &session.config,
-            &session.records,
-            context.changed_paths.as_deref(),
-        );
+/// The actors file's identities; a run with one never reads the receipt rows
+/// (`ADR-102`).
+fn attach_actors(context: &mut Context<'_>, actors: Option<urzua_core::authority::Actors>) {
+    if actors.is_some() {
+        context.session_receipts = None;
     }
     context.actors = actors;
 }
@@ -654,7 +645,7 @@ pub(crate) fn execute(
         &scope,
         (&mut context, &mut notices),
     );
-    attach_actors(session, &mut context, actors);
+    attach_actors(&mut context, actors);
     notices.extend(session_notices(
         session,
         &scope,
@@ -1880,6 +1871,8 @@ fn index_with_disclosures<'a>(
 /// What a diff run judges a change against: the committed copies, the added and
 /// changed paths, the fetched pull-request claims and the templates.
 struct DiffInputs {
+    /// The changed records whose gated move carries a receipt row (`ADR-102`).
+    receipts: Option<HashSet<PathBuf>>,
     base_text: HashMap<PathBuf, String>,
     base_drift: HashMap<PathBuf, HashSet<String>>,
     added_row_days: HashMap<PathBuf, rules::RowWindows>,
@@ -2145,6 +2138,7 @@ fn read_diff_inputs(
         )
     });
     Ok(DiffInputs {
+        receipts: crate::harness::receipt::for_check(session, changes),
         base_text,
         base_drift,
         added_row_days,
@@ -2563,7 +2557,7 @@ fn load_context<'a>(
             committed_statuses: diff.committed_statuses,
             deleted_records: diff.deleted_records,
             actors: None,
-            session_receipts: None,
+            session_receipts: diff.receipts,
             base_authority: diff.base_authority,
             gate_config: diff.gate_config,
             fail_on: diff.fail_on,

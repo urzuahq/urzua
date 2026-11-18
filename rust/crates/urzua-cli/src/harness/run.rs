@@ -214,6 +214,35 @@ fn raw_policy(config_path: Option<&Path>, root_hint: &Path, guardrail: &str) -> 
     (enabled, on)
 }
 
+/// An agent's write inside a git directory outside the working tree (a
+/// separate git directory, a symlinked `.git`, a submodule's, a bare
+/// repository's), refused before anything else is tried, so no route that
+/// cannot place or judge the edit lets it through. A git directory inside the
+/// working tree is the engine-owned `.git` entry, refused by the gates.
+fn git_dir_first(config: Option<&Path>, request: &Request) -> Option<Verdict> {
+    let cwd = std::env::current_dir().ok()?;
+    let root = request
+        .project_dir
+        .as_deref()
+        .map(PathBuf::from)
+        .filter(|d| d.join(".urzua/config.yaml").is_file())
+        .or_else(|| nearest_governed_root(&cwd))?;
+    if !raw_policy(config, &root, "protected-paths").0 {
+        return None;
+    }
+    request.paths.iter().find_map(|p| {
+        let in_tree =
+            crate::discovery::relative_to_root(&root, &absolute(&cwd, p)).is_ok_and(|rel| {
+                rel.components()
+                    .any(|c| gate::fold_path(&c.as_os_str().to_string_lossy()) == ".git")
+            });
+        if in_tree {
+            return None;
+        }
+        gate::git_dir_refusal(Path::new(p)).map(|d| denied(&d, p, request))
+    })
+}
+
 /// What the editor hook does with an edit it cannot read a request for, or
 /// whose request names a directory that cannot be entered: the declaration is
 /// read from the process's own directory, so a denying guardrail stays denying.
@@ -720,6 +749,11 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
         config.clone(),
         request.project_dir.as_deref().map(Path::new),
     ));
+    if actor == Actor::Agent {
+        if let Some(v) = git_dir_first(config.as_deref(), &request) {
+            return v;
+        }
+    }
     let Ok(cwd) = std::env::current_dir() else {
         return judge_edit_in(config, request);
     };

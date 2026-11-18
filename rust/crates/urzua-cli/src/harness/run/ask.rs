@@ -43,7 +43,16 @@ pub(super) fn ask_or_refuse(j: &Judging<'_>, request: &Request, refused: Verdict
         .harness
         .as_ref()
         .is_some_and(|h| h.in_session() == InSession::Ask);
-    if !asks {
+    // Where the mode asks about nothing, the call is answered exactly as
+    // without it: a record filed straight at a gated status, an override named
+    // for the call, or a path spelled other than the record it is folded to.
+    let overridden = request
+        .override_request
+        .as_ref()
+        .and_then(|o| o.name.clone())
+        .or_else(|| std::env::var("URZUA_HOOK_OVERRIDE").ok())
+        .is_some_and(|n| !n.trim().is_empty());
+    if !asks || mv.from.is_none() || overridden {
         return refused;
     }
     let [path] = request.paths.as_slice() else {
@@ -53,6 +62,18 @@ pub(super) fn ask_or_refuse(j: &Judging<'_>, request: &Request, refused: Verdict
         None => return refuse(refused, "This agent's adapter cannot ask the person at the keyboard about an edit, so the move stays refused; a person in the gate's group makes it outside the agent harness."),
         Some(a) if !a.available => return refuse(refused, &a.why_not),
         Some(_) => {}
+    }
+    let as_written = crate::discovery::relative_to_root(j.repo_root, Path::new(path)).ok();
+    if as_written.as_deref() != Some(mv.rel.as_path()) {
+        return refused;
+    }
+    let gates = j
+        .config
+        .authority
+        .as_ref()
+        .map_or(0, |a| a.status_gates(&mv.record_type, &mv.to).count());
+    if gates > 1 {
+        return refuse(refused, "More than one decider group must decide this move, so one person's answer here cannot make it; it goes through a pull request the groups' members approve.");
     }
     let content = request.content_at(0).unwrap_or("").to_string();
     match prepare(j, path, &mv, content) {
@@ -81,17 +102,34 @@ fn prepare(
         .next()
         .ok_or("the gate could not be found again")?;
     let (who, login) = decider(j, gate, mv)?;
-    let (id, to, from) = shown_move(j, gate, mv, &content)?;
+    let (id, to, from, title) = shown_move(j, gate, mv, &content)?;
     let (field, group, gate_text) = (shown(&mv.field), shown(&mv.group), shown(&mv.gate));
+    let left = mv.from.as_deref().unwrap_or_default();
     let narrative = format!(
-        "{}: {field} moved {from} to '{to}' ({gate_text}); by {login}, as the host session reported them (name read from {}); {}",
-        receipt::MARK,
+        "{} ({gate_text}); by {login}, as the host session reported them (name read from {}); {}",
+        receipt::move_phrase(&id, &mv.field, left, &to),
         who.source,
         receipt::END
     );
     let today = urzua_io::today();
-    let with = receipt::with_receipt(j.config, &mv.record_type, &content, &narrative, &to, &today)
-        .map_err(|e| format!("The receipt could not be written into the record ({e}); fix the record, then retry."))?;
+    let (with, filled) =
+        receipt::with_receipt(j.config, &mv.record_type, &content, &narrative, &to, &today)
+            .map_err(|e| {
+                format!(
+            "The receipt could not be written into the record ({e}); fix the record, then retry."
+        )
+            })?;
+    let fills = match filled.as_slice() {
+        [] => String::new(),
+        names => format!(
+            ", and fills {} with today's date",
+            names
+                .iter()
+                .map(|n| shown(n))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    };
     if let Some(v) = judge_receipt(j, path, &with) {
         return Ok(v);
     }
@@ -99,9 +137,9 @@ fn prepare(
     // values checked against the configuration; the record's own title, which
     // the agent wrote, follows, marked as such and sanitised.
     let reason = format!(
-        "urzua: approve a gated move? {id} moves {} to {field} '{to}'. {gate_text}: only the decider group '{group}' may decide. Approving writes the whole file as shown, including any change to its body, with a revision-log row recording that the move was approved in this agent session by {login}. Decline unless you are in '{group}' and mean to make this move. The record's own title, as the agent wrote it: {}",
+        "urzua: approve a gated move? {id} moves {} to {field} '{to}'. {gate_text}: only the decider group '{group}' may decide. Approving writes the whole file as shown, including any change to its body, with a revision-log row recording that the move was approved in this agent session by {login}. Approving also writes a row recording this as approved in an agent session, unverified{fills}. Decline unless you are in '{group}' and mean to make this move. The record's own title, as the agent wrote it: {}",
         from.replacen("from '", &format!("from {field} '"), 1),
-        receipt::sanitize(&receipt::title_of(&content), 80)
+        receipt::sanitize(&title, 80)
     );
     let mut v = Verdict::new("ask", Some(path), reason);
     v.extra = Some(Box::new(super::Extra::Ask { content: with }));
@@ -156,7 +194,7 @@ fn shown_move(
     gate: &urzua_core::authority::Gate,
     mv: &super::gate::GatedMove,
     content: &str,
-) -> Result<(String, String, String), String> {
+) -> Result<(String, String, String, String), String> {
     let record = crate::discovery::parse_prospective_record(j.config, &mv.rel, content)
         .map_err(|e| format!("The record could not be read ({e})."))?;
     let id = urzua_core::rules::record_id(&record)
@@ -185,7 +223,8 @@ fn shown_move(
         Some(_) => "from a status the type does not declare".to_string(),
         None => "as a new record".to_string(),
     };
-    Ok((id, shown(&to), from))
+    let title = urzua_core::rules::record_title(content, record.header.region).unwrap_or_default();
+    Ok((id, shown(&to), from, title))
 }
 
 /// The editor hook's judgement of the edit with its receipt, when it refuses:

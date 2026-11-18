@@ -101,6 +101,7 @@ fn run_hook(
     use std::io::Write;
     let mut child = cmd
         .args(["harness", "hook", "claude-code", event])
+        .env_remove("URZUA_HOOK_OVERRIDE")
         .env("CLAUDE_PROJECT_DIR", dir)
         .current_dir(dir)
         .stdin(std::process::Stdio::piped())
@@ -183,17 +184,13 @@ fn in_the_manual_mode_the_hook_asks_with_a_reason_it_wrote_and_the_edit_carries_
     let content = v["hookSpecificOutput"]["updatedInput"]["content"]
         .as_str()
         .unwrap();
-    let today = Command::new("date")
-        .args(["-u", "+%Y-%m-%d"])
-        .output()
-        .unwrap();
-    let today = String::from_utf8_lossy(&today.stdout).trim().to_string();
+    let today = common::date_days_ago(0)[..10].to_string();
     assert!(
         content.contains(&format!("Accepted-on: {today}")),
         "{content}"
     );
     assert!(
-        content.contains(&format!("| {} | Recorded as approved in an agent session: Status moved from 'Proposed' to 'Accepted' (gate: type adr to Accepted, Rejected, by 'maintainers'); by Alice, as the host session reported them (name read from gh); not verified; the pull request check does not rely on it. |", today)),
+        content.contains(&format!("| {} | Recorded as approved in an agent session, not verified: ADR-1 Status moved from 'Proposed' to 'Accepted' (gate: type adr to Accepted, Rejected, by 'maintainers'); by Alice, as the host session reported them (name read from gh); the pull request check does not rely on it. |", today)),
         "{content}"
     );
     assert!(
@@ -681,4 +678,291 @@ fn edit_tools_cannot_write_a_bare_repositorys_or_a_submodules_git_directory() {
         let v = hook(&sup, "edit", &write_payload(&sup, &sup.join(rel)), "Alice");
         assert_eq!(decision(&v).0, "deny", "submodule {rel}: {v}");
     }
+}
+
+/// The row the hook would write for ADR-1, with `edit` applied to the line.
+fn with_row(dir: &Path, edit: impl Fn(&str) -> String) -> String {
+    let v = hook(
+        dir,
+        "edit",
+        &payload(dir, "Write", Some("default"), serde_json::json!({})),
+        "Alice",
+    );
+    let content = v["hookSpecificOutput"]["updatedInput"]["content"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    content
+        .lines()
+        .map(|l| {
+            if l.contains("Recorded as approved") {
+                edit(l)
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
+fn strict_exit(dir: &Path, text: &str) -> (i32, String) {
+    std::fs::write(dir.join("docs/adr/ADR-1-a.md"), text).unwrap();
+    check_base(dir, &[])
+}
+
+#[test]
+fn a_row_for_another_status_left_does_not_match() {
+    let dir = repo("row-from", &strict(ASK));
+    let t = with_row(&dir, |l| l.replace("from 'Proposed'", "from 'Rejected'"));
+    assert_eq!(strict_exit(&dir, &t).0, 1);
+}
+
+#[test]
+fn a_row_dated_other_than_its_change_does_not_match() {
+    let dir = repo("row-1999", &strict(ASK));
+    let today = common::date_days_ago(0)[..10].to_string();
+    let t = with_row(&dir, |l| l.replace(&today, "1999-01-01"));
+    assert_eq!(strict_exit(&dir, &t).0, 1);
+}
+
+#[test]
+fn a_row_naming_another_record_does_not_match() {
+    let dir = repo("row-id", &strict(ASK));
+    let t = with_row(&dir, |l| l.replace("ADR-1 Status", "ADR-2 Status"));
+    assert_eq!(strict_exit(&dir, &t).0, 1);
+}
+
+#[test]
+fn a_row_outside_the_revision_log_does_not_match() {
+    for (name, place) in [("prose", "plain"), ("fence", "fence"), ("front", "front")] {
+        let dir = repo(&format!("row-{name}"), &strict(ASK));
+        let t = with_row(&dir, |l| l.to_string());
+        let row = t
+            .lines()
+            .find(|l| l.contains("Recorded as approved"))
+            .unwrap()
+            .to_string();
+        let without: String = t
+            .lines()
+            .filter(|l| !l.contains("Recorded as approved"))
+            .map(|l| format!("{l}\n"))
+            .collect();
+        let text = match place {
+            "plain" => without.replace("prose\n", &format!("prose\n\n{row}\n")),
+            "fence" => without.replace("prose\n", &format!("prose\n\n```\n{row}\n```\n")),
+            _ => without.replacen(
+                "Status: Accepted\n",
+                &format!("Status: Accepted\n# {row}\n"),
+                1,
+            ),
+        };
+        let (code, out) = strict_exit(&dir, &text);
+        assert_eq!(code, 1, "{name}: {out}");
+    }
+}
+
+#[test]
+fn an_old_row_left_from_an_earlier_move_does_not_match_a_new_one() {
+    let dir = repo("row-old", &strict(ASK));
+    let accepted_with_row = with_row(&dir, |l| l.to_string());
+    std::fs::write(dir.join("docs/adr/ADR-1-a.md"), &accepted_with_row).unwrap();
+    git(&dir, &["commit", "-q", "-am", "accepted"]);
+    let back = accepted_with_row
+        .replace("Status: Accepted", "Status: Proposed")
+        .replace(
+            &format!("Accepted-on: {}\n", &common::date_days_ago(0)[..10]),
+            "",
+        );
+    std::fs::write(dir.join("docs/adr/ADR-1-a.md"), &back).unwrap();
+    git(&dir, &["commit", "-q", "-am", "back to proposed"]);
+    let (code, out) = strict_exit(&dir, &accepted_with_row);
+    assert_eq!(code, 1, "{out}");
+}
+
+#[test]
+fn an_unplaceable_edit_inside_a_git_directory_is_refused_on_every_shape() {
+    let dir = repo("sep-unplaced", &config(ASK));
+    let gitdir = common::TempDir::new("urzua-ask-sepgit2");
+    std::fs::remove_dir_all(gitdir.path()).unwrap();
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir.path())
+        .args(["init", "-q", "--separate-git-dir"])
+        .arg(gitdir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let edit = |root: &Path, file: &Path| {
+        serde_json::json!({
+            "session_id": "s-1", "tool_use_id": "toolu_u", "cwd": root, "permission_mode": "default",
+            "hook_event_name": "PreToolUse", "tool_name": "Edit",
+            "tool_input": {"file_path": file, "old_string": "no such text", "new_string": "x"},
+        })
+    };
+    let v = hook(&dir, "edit", &edit(&dir, &gitdir.join("config")), "Alice");
+    assert_eq!(decision(&v).0, "deny", "separate: {v}");
+    let bare = common::TempDir::new("urzua-ask-bare2");
+    let src = repo("bare-src2", &config(ASK));
+    std::fs::remove_dir_all(bare.path()).unwrap();
+    git(
+        &src,
+        &["clone", "-q", "--bare", ".", bare.path().to_str().unwrap()],
+    );
+    let wt = bare.join("wt");
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(bare.path())
+        .args(["worktree", "add", "-q"])
+        .arg(&wt)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let v = hook(&wt, "edit", &edit(&wt, &bare.join("config")), "Alice");
+    assert_eq!(decision(&v).0, "deny", "bare: {v}");
+    let sup = repo("super2", &config(ASK));
+    let sub = repo("sub2", &config(ASK));
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(sup.path())
+        .args(["-c", "protocol.file.allow=always", "submodule", "add", "-q"])
+        .arg(sub.path())
+        .arg("m")
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let v = hook(
+        &sup,
+        "edit",
+        &edit(&sup, &sup.join(".git/modules/m/config")),
+        "Alice",
+    );
+    assert_eq!(decision(&v).0, "deny", "submodule: {v}");
+}
+
+#[test]
+fn a_path_spelled_in_another_case_is_refused_not_asked() {
+    let dir = repo("case", &config(ASK));
+    for rel in ["docs/ADR/ADR-1-a.md", "Docs/adr/ADR-1-a.md"] {
+        let mut p = payload(&dir, "Write", Some("default"), serde_json::json!({}));
+        p["tool_input"]["file_path"] = serde_json::json!(dir.join(rel));
+        let (d, r) = {
+            let v = hook(&dir, "edit", &p, "Alice");
+            let (d, r) = decision(&v);
+            (d.to_string(), r.to_string())
+        };
+        assert_ne!(d, "ask", "{rel}: {r}");
+    }
+}
+
+#[test]
+fn a_move_two_gates_reserve_is_refused_and_sent_to_a_pull_request() {
+    let cfg = config(ASK)
+        .replace("    maintainers: {logins: [Alice]}\n", "    maintainers: {logins: [Alice]}\n    leads: {logins: [Alice]}\n")
+        .replace("    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n", "    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n    - {type: adr, to: [Accepted], by: leads}\n");
+    let dir = repo("two-gates", &cfg);
+    let v = hook(
+        &dir,
+        "edit",
+        &payload(&dir, "Write", Some("default"), serde_json::json!({})),
+        "Alice",
+    );
+    let (d, r) = decision(&v);
+    assert_eq!(d, "deny", "{v}");
+    assert!(
+        r.contains("More than one decider group") && r.contains("pull request"),
+        "{r}"
+    );
+}
+
+#[test]
+fn a_record_filed_straight_at_a_gated_status_is_refused_as_without_the_mode() {
+    let on = repo("new-on", &config(ASK));
+    let off = repo("new-off", &config(""));
+    let reason = |dir: &Path| {
+        let mut p = payload(dir, "Write", Some("default"), serde_json::json!({}));
+        p["tool_input"]["file_path"] = serde_json::json!(dir.join("docs/adr/ADR-3-c.md"));
+        p["tool_input"]["content"] =
+            serde_json::json!(accepted(PROPOSED).replace("ADR-1: A title", "ADR-3: New"));
+        let v = hook(dir, "edit", &p, "Alice");
+        (
+            decision(&v).0.to_string(),
+            decision(&v).1.replace(dir.to_str().unwrap(), ""),
+        )
+    };
+    let (a, b) = (reason(&on), reason(&off));
+    assert_eq!(a.0, "deny");
+    assert_eq!(a, b);
+}
+
+#[test]
+fn a_named_override_means_the_person_is_not_asked() {
+    let dir = repo("override", &config(ASK));
+    let gh = common::gh_login_dir("Alice");
+    let mut cmd = common::urzua_as(&gh);
+    cmd.env("URZUA_HOOK_OVERRIDE", "x");
+    let mut child = cmd
+        .args(["harness", "hook", "claude-code", "edit"])
+        .env("CLAUDE_PROJECT_DIR", dir.path())
+        .current_dir(dir.path())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            payload(&dir, "Write", Some("default"), serde_json::json!({}))
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(decision(&v).0, "deny", "{v}");
+}
+
+#[test]
+fn the_reason_says_a_row_is_written_and_names_the_date_field() {
+    let dir = repo("reason-row", &config(ASK));
+    let v = hook(
+        &dir,
+        "edit",
+        &payload(&dir, "Write", Some("default"), serde_json::json!({})),
+        "Alice",
+    );
+    let r = decision(&v).1;
+    assert!(r.contains("Approving also writes a row recording this as approved in an agent session, unverified, and fills Accepted-on with today's date."), "{r}");
+}
+
+#[test]
+fn the_title_is_the_one_the_title_rules_read() {
+    let dir = repo("title-rule", &config(ASK));
+    let mut p = payload(&dir, "Write", Some("default"), serde_json::json!({}));
+    let text = accepted(PROPOSED).replace(
+        "---\n# ADR-1: A title",
+        "# Fake front\n---\n```\n# Fake fenced\n```\n# ADR-1: A title",
+    );
+    p["tool_input"]["content"] = serde_json::json!(text.replacen("---\nStatus", "---\nStatus", 1));
+    let v = hook(&dir, "edit", &p, "Alice");
+    let r = decision(&v).1;
+    assert!(r.ends_with("as the agent wrote it: ADR-1: A title"), "{r}");
+}
+
+#[test]
+fn a_crlf_record_keeps_its_line_endings() {
+    let dir = repo("crlf", &config(ASK));
+    let crlf = PROPOSED.replace('\n', "\r\n");
+    std::fs::write(dir.join("docs/adr/ADR-1-a.md"), &crlf).unwrap();
+    git(&dir, &["commit", "-q", "-am", "crlf"]);
+    let mut p = payload(&dir, "Write", Some("default"), serde_json::json!({}));
+    p["tool_input"]["content"] = serde_json::json!(accepted(&crlf));
+    let v = hook(&dir, "edit", &p, "Alice");
+    let c = v["hookSpecificOutput"]["updatedInput"]["content"]
+        .as_str()
+        .unwrap();
+    assert!(!c.replace("\r\n", "").contains('\n'), "{c:?}");
 }

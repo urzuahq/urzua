@@ -243,6 +243,12 @@ pub(super) fn git_dir_denial(config: &Config, path: &Path) -> Option<Denial> {
     if !config.harness.as_ref()?.enabled("protected-paths") {
         return None;
     }
+    git_dir_refusal(path)
+}
+
+/// [`git_dir_denial`] whatever the configuration says; the caller has read
+/// that `protected-paths` is on.
+pub(super) fn git_dir_refusal(path: &Path) -> Option<Denial> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {

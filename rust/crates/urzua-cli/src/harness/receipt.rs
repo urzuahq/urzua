@@ -12,26 +12,27 @@ use urzua_core::config::Config;
 
 /// How a receipt row begins, so a reader at a skim does not take it for a
 /// verification, and so the local check can find it.
-pub(crate) const MARK: &str = "Recorded as approved in an agent session";
+pub(crate) const MARK: &str = "Recorded as approved in an agent session, not verified";
 /// How a receipt row ends.
-pub(crate) const END: &str = "not verified; the pull request check does not rely on it.";
+pub(crate) const END: &str = "the pull request check does not rely on it.";
 
-/// The record's title: its first `# ` heading.
-pub(crate) fn title_of(content: &str) -> String {
-    content
-        .lines()
-        .find_map(|l| l.strip_prefix("# "))
-        .unwrap_or_default()
-        .to_string()
+/// What a receipt row says about the move, right after [`MARK`]: the record's
+/// id, then `<field> moved from '<from>' to '<to>'`.
+pub(crate) fn move_phrase(id: &str, field: &str, from: &str, to: &str) -> String {
+    format!("{MARK}: {id} {field} moved from '{from}' to '{to}'")
 }
 
-/// Characters that change how text displays without showing themselves:
-/// bidirectional controls, zero-width and joiner characters, invisible
-/// operators, the soft hyphen, the Mongolian vowel separator, the tag block and
-/// the interlinear annotation controls.
+/// Characters that change how text displays without showing themselves, or
+/// render blank: bidirectional controls, zero-width and joiner characters,
+/// invisible operators, the soft hyphen, the combining grapheme joiner, the
+/// Mongolian variation selectors and vowel separator, the Hangul and Braille
+/// blank letters, the variation selectors, the tag block and the interlinear
+/// annotation controls.
 fn invisible(c: char) -> bool {
     matches!(c,
-        '\u{00AD}' | '\u{061C}' | '\u{180E}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
+        '\u{00AD}' | '\u{034F}' | '\u{061C}' | '\u{115F}' | '\u{1160}' | '\u{17B4}' | '\u{17B5}'
+        | '\u{180B}'..='\u{180F}' | '\u{2800}' | '\u{3164}' | '\u{FE00}'..='\u{FE0F}' | '\u{FFA0}'
+        | '\u{E0100}'..='\u{E01EF}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
         | '\u{2028}' | '\u{2029}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}'
         | '\u{FEFF}' | '\u{FFF9}'..='\u{FFFB}' | '\u{E0000}'..='\u{E007F}')
 }
@@ -92,57 +93,116 @@ fn clean(text: &str, max: usize, drop_quotes: bool) -> String {
     }
 }
 
-/// Whether `text` holds a receipt row for a move into `status`, dated no later
-/// than `today`: the row begins with [`MARK`] and names the status entered.
-/// It is text in the record, so this says only that the row is there.
-pub(crate) fn carries_receipt(text: &str, status: &str, today: &str) -> bool {
-    text.lines().any(|line| {
-        let Some(at) = line.find(MARK) else {
-            return false;
-        };
-        let date = line[..at]
-            .split('|')
-            .map(str::trim)
-            .find(|c| c.len() == 10 && c.as_bytes()[4] == b'-' && c.as_bytes()[7] == b'-');
-        date.is_some_and(|d| d <= today)
-            && line[at..].contains(&format!(" to '{status}'"))
-            && line.contains(END)
-    })
+/// Whether the record carries a receipt row for its gated move from `from` to
+/// `to`. A receipt row for a move is a row of the record's declared revision
+/// log, read as that log with its date and class columns, that is in the head
+/// copy and not in the base copy the check compares against, whose narrative
+/// begins with "Recorded as approved in an agent session, not verified" and
+/// then names this record's id, the status the move leaves and the status it
+/// enters, and whose date is
+/// the date the check reads for that row's change (`day_of`, by its line). The
+/// row is text and unverified: the name in it is not checked.
+pub(crate) fn carries_receipt(
+    config: &Config,
+    (record_type, id): (&str, &str),
+    field: &str,
+    (from, to): (&str, &str),
+    (head, base): (&str, &str),
+    day_of: &dyn Fn(usize) -> Option<String>,
+) -> bool {
+    let (log_id, shape) = (
+        config.revision_log_id(record_type),
+        config.revision_log_shape(record_type),
+    );
+    let before: std::collections::HashSet<String> =
+        urzua_core::rules::revision_log_rows(base, &log_id, &shape)
+            .into_iter()
+            .map(|r| r.row)
+            .collect();
+    let phrase = move_phrase(id, field, from, to);
+    urzua_core::rules::revision_log_rows(head, &log_id, &shape)
+        .into_iter()
+        .filter(|r| !before.contains(&r.row))
+        .any(|r| {
+            r.row
+                .split('|')
+                .map(str::trim)
+                .any(|cell| cell.starts_with(&phrase))
+                && day_of(r.line).is_some_and(|d| d == r.date)
+        })
 }
 
-/// The changed records that carry a receipt row for the gated move they make,
-/// only with `acceptance.in_session: ask`. The caller asks only on a run with
-/// no actors file.
+/// The changed records whose gated move carries a receipt row, only with
+/// `acceptance.in_session: ask`. The base copy is the record at the merge
+/// base; a row's date is its commit's day (the later of author and committer),
+/// or the evaluation date while it is uncommitted.
 pub(crate) fn for_check(
-    repo_root: &Path,
-    config: &Config,
-    records: &[urzua_core::record::Record],
-    changed: Option<&[std::path::PathBuf]>,
+    session: &crate::session::Session,
+    changes: Option<&urzua_io::GitChanges>,
 ) -> Option<std::collections::HashSet<std::path::PathBuf>> {
+    let config = &session.config;
     let harness = config.harness.as_ref()?;
     if !harness.enabled("acceptance") || harness.in_session() != urzua_core::harness::InSession::Ask
     {
         return None;
     }
-    let changed = changed?;
-    let today = urzua_io::today();
-    let found = records
+    let changes = changes?;
+    let root = &session.repo_root;
+    let cache = urzua_io::BlameCache::new(root);
+    let mut found = std::collections::HashSet::new();
+    for record in session
+        .records
         .iter()
-        .filter(|r| changed.contains(&r.path))
-        .filter(|r| {
-            let field = urzua_core::rules::relation_field_name(
-                config,
-                &r.record_type,
-                urzua_core::config::RelationRole::Status,
-            );
-            let Some(status) = urzua_core::authority::gate_status(&r.header, field) else {
-                return false;
-            };
-            std::fs::read_to_string(repo_root.join(&r.path))
-                .is_ok_and(|t| carries_receipt(&t, status, &today))
-        })
-        .map(|r| r.path.clone())
-        .collect();
+        .filter(|r| changes.changed.contains(&r.path))
+    {
+        let field = urzua_core::rules::relation_field_name(
+            config,
+            &record.record_type,
+            urzua_core::config::RelationRole::Status,
+        );
+        let Some(to) = urzua_core::authority::gate_status(&record.header, field) else {
+            continue;
+        };
+        let Ok(Some(base)) =
+            urzua_io::read_at_commit_if_present(root, &changes.merge_base, &record.path)
+        else {
+            continue;
+        };
+        let Some(from) = crate::discovery::parse_prospective_record(config, &record.path, &base)
+            .ok()
+            .and_then(|b| urzua_core::authority::gate_status(&b.header, field).map(str::to_string))
+        else {
+            continue;
+        };
+        let Ok(head) = std::fs::read_to_string(root.join(&record.path)) else {
+            continue;
+        };
+        let day_of = |line: usize| -> Option<String> {
+            let commit = cache.commit_for_line(&record.path, line, None).ok()??;
+            if commit.chars().all(|c| c == '0') {
+                return Some(urzua_io::today());
+            }
+            let t = cache
+                .commit_author_unix_time(&commit)
+                .into_iter()
+                .chain(cache.commit_unix_time(&commit))
+                .max()?;
+            urzua_io::date_of_unix(t)
+        };
+        let Some(id) = urzua_core::rules::record_id(record) else {
+            continue;
+        };
+        if carries_receipt(
+            config,
+            (&record.record_type, &id),
+            field,
+            (&from, to),
+            (&head, &base),
+            &day_of,
+        ) {
+            found.insert(record.path.clone());
+        }
+    }
     Some(found)
 }
 
@@ -186,13 +246,16 @@ pub(crate) fn with_receipt(
     narrative: &str,
     to: &str,
     today: &str,
-) -> Result<String, String> {
-    let mut text = content.to_string();
+) -> Result<(String, Vec<String>), String> {
+    // Worked on with bare line feeds and written back in the file's own ending.
+    let crlf = content.contains("\r\n") && !content.replace("\r\n", "").contains('\n');
+    let mut text = content.replace("\r\n", "\n");
     let date_fields: Vec<String> = config
         .rules
         .get(urzua_core::rules::RULE_DATE_FIELD_VALID)
         .and_then(|s| s.date_fields.clone())
         .unwrap_or_default();
+    let mut filled = Vec::new();
     if let Some(decl) = config
         .record_types
         .get(record_type)
@@ -201,20 +264,28 @@ pub(crate) fn with_receipt(
         let header = header_values(&text);
         let value = |f: &str| header.iter().find(|(k, _)| k == f).map(|(_, v)| v.clone());
         let blank = |v: &str| matches!(v.trim(), "" | "null" | "~");
-        let missing: Vec<String> = decl
+        filled = decl
             .required_for(to, &value)
             .into_iter()
             .filter(|t| t.on_status && date_fields.iter().any(|d| d == t.field))
             .filter(|t| value(t.field).is_none_or(|v| blank(&v)))
             .map(|t| t.field.to_string())
             .collect();
-        for field in missing {
-            text = set_header_field(&text, &field, today)?;
+        for field in &filled {
+            text = set_header_field(&text, field, today)?;
         }
     }
     let log_id = config.revision_log_id(record_type);
     let shape = config.revision_log_shape(record_type);
-    urzua_core::fix::append_revision_row(&text, &log_id, &shape, today, narrative)
+    let text = urzua_core::fix::append_revision_row(&text, &log_id, &shape, today, narrative)?;
+    Ok((
+        if crlf {
+            text.replace('\n', "\r\n")
+        } else {
+            text
+        },
+        filled,
+    ))
 }
 
 /// The `key: value` lines of the front matter, as written.
@@ -277,6 +348,12 @@ mod tests {
     }
 
     #[test]
+    fn blank_rendering_characters_are_dropped_from_a_title() {
+        let raw = "A\u{3164}B\u{115F}C\u{2800}D\u{034F}E\u{FE0F}F\u{E0100}G\u{180B}H\u{180F}I";
+        assert_eq!(sanitize(raw, 80), "ABCDEFGHI");
+    }
+
+    #[test]
     fn a_title_loses_controls_invisibles_quotes_and_breaks_and_is_capped() {
         let raw = "ADR-1: Fix \"typo\"\r\u{1b}[2J\u{202E}mo\u{2060}v\u{AD}e\u{180E}s\u{E0041}\u{2062}\u{2063}\u{FFF9}\nStatus 'x'"
             .to_string()
@@ -293,27 +370,5 @@ mod tests {
             t.starts_with("ADR-1: Fix typo [2Jmoves Status xa\u{301}\u{301}a\u{301}\u{301}a"),
             "{t:?}"
         );
-    }
-
-    #[test]
-    fn a_receipt_row_is_found_only_for_its_status_and_not_after_today() {
-        let row = |d: &str, s: &str| {
-            format!("> | {d} | {MARK}: Status moved from 'Proposed' to '{s}' (gate); by A, as the host session reported them (name read from gh); {END} | **structural** |\n")
-        };
-        assert!(carries_receipt(
-            &row("2026-11-17", "Accepted"),
-            "Accepted",
-            "2026-11-17"
-        ));
-        assert!(!carries_receipt(
-            &row("2026-11-17", "Rejected"),
-            "Accepted",
-            "2026-11-17"
-        ));
-        assert!(!carries_receipt(
-            &row("2026-11-18", "Accepted"),
-            "Accepted",
-            "2026-11-17"
-        ));
     }
 }
