@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml#record_types@sha256:94d447fbb1132e7e1ccf6e34cc7c83cf49b82337c683af3907e4eb4065cc83cf, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
+Realized-by: code:.urzua/config.yaml#record_types@sha256:23dce4f3f8270fcfd414db5f61dbc51c540a30f4af2ce0c76b8a8f1446625d81, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
 ---
 # 3 — Convert this repo's own docs to yaml-frontmatter
 
@@ -21,7 +21,7 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 
 ## Done means
 
-- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml#record_types@sha256:94d447fbb1132e7e1ccf6e34cc7c83cf49b82337c683af3907e4eb4065cc83cf
+- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml#record_types@sha256:23dce4f3f8270fcfd414db5f61dbc51c540a30f4af2ce0c76b8a8f1446625d81
 - Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
 - The conversion was a one-time pass that shipped no tool, and nothing below the header changed. — waived: process-outcome -- a property of the one-time conversion of 2026-09-08, verified at the time by a before/after field-set comparison against every file (see the revision log); the scratch tool was never committed, so no file can evidence it now
 
@@ -57,4 +57,3 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#record_types@sha256:eb1050f41079 Reason: Narrowed to record_types: the claim is that every configured record type declares header_shape yaml-frontmatter, which lives only under record_types. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml#record_types` (lines 69-583) eb1050f41079 -> 23dce4f3f827. Reason: config.yaml: every record type's revision_log gains the class evidence and evidence_class: evidence, so a re-pin row no longer bumps a version, and the rule embodiment.back-pointer-resolution declares its two markers at their default values; neither changes what this record claims **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
-> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml#record_types` (lines 72-588) 23dce4f3f827 -> 94d447fbb113. Reason: in .urzua/config.yaml an export link prefix is declared and the Parent reference of a spec is marked part_of; nothing this record relies on changed (applied by the orchestrator through the shell) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

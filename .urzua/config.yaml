@@ -7,9 +7,6 @@ fail_on: warning
 # identity.open-pr-collision. Plain git: no gh, no API.
 new:
   check_open_prs: true
-# What `urzua export` adds to a record: the address of a hosted view of its file.
-export:
-  link_prefix: "https://github.com/urzuahq/urzua/blob/main/"
 # Govern the records an author has written and not yet staged (ADR-92, MILE-206):
 # discovery includes untracked, non-ignored files directly under a declared
 # record directory, so a plain `check` and the gate read a draft before `git add`.
@@ -286,9 +283,7 @@ record_types:
     pointer_fields:
       - "Derives-from"
       - "Implements"
-      # A spec is part of the spec it names as its Parent: containment, read by
-      # `urzua export` (parent, children) and drawn by `urzua board`.
-      - {name: "Parent", targets: ["spec"], part_of: true}
+      - "Parent"
     narrative_fields: []
     sections:
       from: headings

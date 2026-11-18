@@ -4,7 +4,7 @@ Version: '0.32'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml#record_types::spec@sha256:9a51521856a144a1fdc335f2d88b7c34956cd9961810a226b5378f58216f7e0c, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
+Realized-by: code:.urzua/config.yaml#record_types::spec@sha256:de227f13cc15380e1b8a38e013653a08617e96a6493646cd5ff28d4722f25c7d, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
 Author: beauwilliams
 Subject: 'The `spec` record type -- schema, required fields (including this one, `Subject`), and lifecycle.'
 Parent: —
@@ -159,4 +159,3 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-11-16 | Bumped to `0.30`. A pinned evidence file (`.urzua/config.yaml`) was re-baselined in this change; this spec's text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#record_types::spec@sha256:485bee151ece Reason: Narrowed to record_types::spec: this spec's shipped shape is the spec type's declaration. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml#record_types::spec` (lines 222-295) 485bee151ece -> de227f13cc15. Reason: config.yaml: every record type's revision_log gains the class evidence and evidence_class: evidence, so a re-pin row no longer bumps a version, and the rule embodiment.back-pointer-resolution declares its two markers at their default values; neither changes what this record claims **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
-> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml#record_types::spec` (lines 225-300) de227f13cc15 -> 9a51521856a1. Reason: in .urzua/config.yaml an export link prefix is declared and the Parent reference of a spec is marked part_of; nothing this record relies on changed (applied by the orchestrator through the shell) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
