@@ -410,7 +410,7 @@ fn without_a_progress_set_a_record_that_is_neither_finished_nor_dropped_is_open(
     let (html, _) = board_page(&dir);
     assert!(html.contains("<h3>Under way<i>0</i></h3>"));
     assert!(
-        html.contains("Nothing can be listed as under way for charter, programme, stage, step"),
+        html.contains("Nothing is under way. charter, programme, stage and step declare no <code>statuses.progress</code>, so their records show as open."),
         "{}",
         html.split("<h3>Under way")
             .nth(1)
@@ -1044,12 +1044,14 @@ fn what_needs_a_person_is_the_gated_moves_the_transitions_allow() {
         "the group is a chip: {needs}"
     );
     assert!(
-        needs.contains("The type charter declares a gate but no transitions"),
+        needs.contains("charter declares a gate but no transitions, so the next move of its records cannot be read."),
         "{needs}"
     );
     let under_way = section_of(&html, "under-way");
     assert!(
-        under_way.contains("Nothing can be listed as under way for charter:"),
+        under_way.contains(
+            "charter declares no <code>statuses.progress</code>, so its records show as open."
+        ),
         "{under_way}"
     );
     assert!(
@@ -1071,7 +1073,7 @@ fn work_is_a_tree_of_one_line_rows_with_progress_folds_and_a_group_for_records_w
     let prg1 = entry(&html, "r-PRG-1");
     assert!(prg1.contains("1 of 3 done"), "{prg1}");
     assert!(
-        prg1.contains("<details open>"),
+        prg1.contains("<details class=\"kd\" open>"),
         "a parent with an active child starts open: {prg1}"
     );
     assert!(
@@ -1472,7 +1474,7 @@ fn the_server_answers_get_only_re_reads_every_request_and_stops_on_interrupt() {
     );
 
     assert!(
-        body.contains("<a href=\"check\">Run it</a>"),
+        body.contains("check summary: <a href=\"check\">/check</a>"),
         "the served page links the check instead of running it"
     );
     assert!(!body.contains("urzua check: findings-present") && !body.contains("urzua check: ok"));
@@ -1682,6 +1684,213 @@ fn a_served_page_updates_itself_and_a_file_does_not() {
     assert!(page.contains(".warn") && page.contains("id=\"board\""));
     // The swap replaces the main element's children with nodes of the fetched document.
     assert!(script.contains("replaceChildren") && script.contains("importNode"));
+}
+
+/// The tags of `html` in order, as `(name, is_closing, attributes)`; text and
+/// the contents of `script` and `style` are skipped.
+fn tags(html: &str) -> Vec<(String, bool, String)> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while let Some(open) = html[at..].find('<') {
+        let start = at + open;
+        let rest = &html[start..];
+        if rest.starts_with("<!") {
+            at = start + rest.find('>').unwrap() + 1;
+            continue;
+        }
+        let closing = rest.starts_with("</");
+        let body = &rest[if closing { 2 } else { 1 }..];
+        let name: String = body
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric())
+            .collect();
+        let mut end = 0;
+        let mut quote = false;
+        for (i, c) in body.char_indices() {
+            match c {
+                '"' => quote = !quote,
+                '>' if !quote => {
+                    end = i;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let attrs = body[name.len()..end].to_string();
+        at = start + (if closing { 2 } else { 1 }) + end + 1;
+        if !closing && (name == "script" || name == "style") {
+            at += html[at..].find(&format!("</{name}>")).unwrap();
+        }
+        out.push((name, closing, attrs));
+    }
+    out
+}
+
+/// For each element whose open tag has `class="<class>"`, whether it is shown
+/// by default: every `details` around it is open.
+fn shown_by_default(html: &str, class: &str) -> Vec<bool> {
+    const VOID: [&str; 6] = ["meta", "br", "input", "link", "img", "hr"];
+    let mut stack: Vec<(String, bool)> = Vec::new();
+    let mut found = Vec::new();
+    for (name, closing, attrs) in tags(html) {
+        if closing {
+            stack.pop();
+            continue;
+        }
+        if attrs.contains(&format!("class=\"{class}\"")) {
+            found.push(
+                stack
+                    .iter()
+                    .filter(|(n, _)| n == "details")
+                    .all(|(_, open)| *open),
+            );
+        }
+        if !VOID.contains(&name.as_str()) {
+            let open = name == "details" && attrs.split_whitespace().any(|a| a == "open");
+            stack.push((name, open));
+        }
+    }
+    found
+}
+
+#[test]
+fn a_records_own_detail_is_closed_by_default_and_apart_from_its_children() {
+    let dir = chain("detail");
+    let (html, _) = board_page(&dir);
+    let records = count(&html, " data-record=\"");
+    // Every record has its own detail disclosure, and none of them starts open.
+    assert_eq!(count(&html, "<details class=\"det\">"), records);
+    assert!(!html.contains("<details class=\"det\" open"));
+    // No record's text or reference lines are inside anything that is open by default.
+    let more = shown_by_default(&html, "more");
+    assert_eq!(more.len(), records, "one detail area per record");
+    assert!(
+        more.iter().all(|open| !open),
+        "a record's detail area is shown by default"
+    );
+    assert!(
+        html.contains("Text of the record."),
+        "the text is on the page, behind the detail"
+    );
+    // A parent's children are a separate disclosure, open only for an active child.
+    assert!(html.contains("<details class=\"kd\" open>"));
+    let prg1 = entry(&html, "r-PRG-1");
+    assert!(prg1.contains("<summary class=\"rs\">") && prg1.contains("<span class=\"ch tri\">"));
+    assert!(
+        !prg1.contains("class=\"more\""),
+        "the children list does not hold the parent's own detail"
+    );
+    // The control is a summary with an accessible name, and a word for wide screens.
+    assert!(html.contains("<summary aria-label=\"Details of PRG-1\" title=\"Details\">"));
+    assert!(html.contains("<span class=\"dw\">details</span><span class=\"dn\">›</span>"));
+}
+
+#[test]
+fn ready_lists_leaves_only_and_a_parent_stays_in_work_with_its_count() {
+    let dir = chain("ready");
+    let e = export(&dir);
+    assert_eq!(
+        by_id(&e, "PRG-2")["ready"],
+        true,
+        "the export's key is unchanged"
+    );
+    let (html, _) = board_page(&dir);
+    let ready = section_of(&html, "ready");
+    assert!(
+        !ready.contains(">PRG-2</a>") && !ready.contains(">STG-2</a>"),
+        "a parent is not listed as ready: {ready}"
+    );
+    assert!(ready.contains(">STP-11</a>"), "a leaf is");
+    let leaves = e["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| {
+            r["ready"] == true
+                && r["header_readable"] == true
+                && r["children"].as_array().unwrap().is_empty()
+        })
+        .count();
+    assert!(
+        ready.contains(&format!("<i>{leaves}</i>")),
+        "{leaves}: {}",
+        &ready[..120]
+    );
+    assert!(html.contains(&format!(">Ready {leaves}</button>")));
+    assert!(!entry(&html, "r-PRG-2").contains("data-flags=\"ready\""));
+    assert!(
+        entry(&html, "r-PRG-2").contains("1 of") || entry(&html, "r-PRG-2").contains("0 of 1 done")
+    );
+}
+
+#[test]
+fn the_three_lists_at_the_top_show_eight_rows_then_one_more_row_that_opens_in_place() {
+    let dir = repo("eight", &chain_config(), |dir| {
+        chain_records(dir);
+        for n in 20..30 {
+            write(
+                dir,
+                &format!("docs/stages/STG-{n}-g.md"),
+                &record("Status: Rolling", "", &format!("# {n} — Gated {n}")),
+            );
+        }
+    });
+    let (html, _) = board_page(&dir);
+    for group in ["needs", "under-way", "ready"] {
+        let list = section_of(&html, group);
+        assert_eq!(
+            count(list, "<li class=\"br\">")
+                - count(
+                    list.split("<li id=\"more-").nth(1).unwrap_or(""),
+                    "<li class=\"br\">"
+                ),
+            8,
+            "{group}: eight rows before the fold"
+        );
+        assert!(
+            list.contains(&format!("<li id=\"more-{group}\" class=\"fold\">")),
+            "{group}"
+        );
+        assert!(list.contains(" more</summary>"));
+    }
+    assert!(
+        section_of(&html, "needs").contains(">4 more<")
+            || section_of(&html, "needs").contains("4 more</summary>")
+    );
+}
+
+#[test]
+fn the_header_area_has_one_short_line_for_the_check_and_none_for_anything_else() {
+    let dir = chain("header");
+    let (file, _) = board_page(&dir);
+    let server = Server::start(&dir);
+    let (_, served) = server.get("/");
+    for (name, html) in [("file", &file), ("served", &served)] {
+        let top = html
+            .split("<main id=\"board\">")
+            .nth(1)
+            .unwrap()
+            .split("<div class=\"bar\">")
+            .next()
+            .unwrap();
+        let lines: Vec<&str> = top.lines().filter(|l| l.contains("<p")).collect();
+        assert!(!lines.is_empty() && lines.len() <= 2, "{name}: {lines:?}");
+        for line in lines {
+            assert!(
+                line.len() < 150 && line.matches(". ").count() == 0,
+                "{name}: one short line: {line}"
+            );
+        }
+    }
+    assert!(served.contains(
+        "check summary: <a href=\"check\">/check</a> (runs urzua check, which takes a while)"
+    ));
+    let _ = server.get("/check");
+    let (_, again) = server.get("/");
+    assert!(
+        again.contains("(runs urzua check, about "),
+        "after one run the page says how long it took"
+    );
 }
 
 // ---------------------------------------------------------------- this repository's records

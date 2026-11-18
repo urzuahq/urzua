@@ -69,19 +69,21 @@ finished green, under way amber, ready blue, dropped red, open or not started a 
 dot's tooltip, in the filter labels and in the status beside it. The details, in the order they give way for room, are
 *waits on* ids (amber, as in-page links), a chip for each field the type gives declared values (`field_values`),
 the checklist count (`2/3`), how many records refer to it, and a parent's *N of M done* (and *disagrees* where its status
-and its children's do not agree). Below 460 px only the dot and the status remain. Tapping a row opens it in place, with no script: its
-reference fields as links, what refers to it, its checklist items, what it waits on in full, and its text (a link to it
-on a served page).
+and its children's do not agree). Below 460 px only the dot and the status remain. A parent's row, and its triangle, opens and closes its children only. A record's own detail is a second, separate
+disclosure at the right of the row (the word *details*, or › on a phone), closed until asked for, for a parent and a leaf
+alike, and it works without script: its reference fields as links, what refers to it, its checklist items, what it
+waits on in full, and its text (a link to it on a served page). Nothing on the page shows a record's text until that
+record's own detail is opened.
 
 In this order:
 
 1. **Needs you**: records whose current status has a declared transition (`statuses.transitions`) to a status that an
    `authority.gates` entry for their type names, as *From → To* with the group as a chip. A type with a gate and no
    declared transitions lists nothing, and a line says its next move cannot be read.
-2. **Under way**, then **Ready**: short lists of links, with the rest under *N more*.
+2. **Under way**, then **Ready**: short lists of links. *Needs you*, *Under way* and *Ready* each show eight rows, then one muted *N more* row that opens in place. *Ready* lists leaves only: a parent at its starting status is ready in the export (its `ready` key is unchanged), but the board shows it in Work with its count, and the *Ready* count in the filter is the same leaves. A type that declares no `statuses.progress` is named in one muted line under *Under way*.
 3. **Work**: the records of the types in `roadmap.work_types` (every type when it is absent). Where a type declares a
    [`part_of` field](config.md#containment-part_of) they are a tree: a parent is a raised row with a disclosure triangle,
-   its children are indented 18 px a level, and a parent starts open only when a child is under way, ready or waiting. A
+   its children are indented 18 px a level, and a parent's children list starts open only when a child is under way, ready or waiting. A
    parent's finished and dropped children are one muted row, *N finished, collapsed*, that opens in place. Records with
    no parent are a list of their own; a record whose parent is shown elsewhere (finished, dropped, of another kind or
    unreadable) is another. Finished and dropped work whose parent is not in the tree is a last list. Without containment,

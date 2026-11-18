@@ -28,8 +28,9 @@ pub(crate) struct CheckLine {
 pub(crate) enum CheckNote<'a> {
     /// The summary, computed when the page was written.
     Line(&'a CheckLine),
-    /// A served page does not wait for a check: it links the path that runs one.
-    Linked,
+    /// A served page does not wait for a check: it links the path that runs one,
+    /// and says how long the last one took when it knows.
+    Linked(Option<u64>),
     Unavailable,
 }
 
@@ -270,9 +271,9 @@ impl<'a> Page<'a> {
         out
     }
 
-    /// The row: a disclosure slot, the id, the title (one line), and at the
-    /// right the details, the dot and the status.
-    fn summary(&self, i: usize, parent: bool) -> String {
+    /// The cells of a row: a disclosure slot, the id, the title (one line), and
+    /// at the right the details, the dot and the status.
+    fn row(&self, i: usize, parent: bool) -> String {
         let r = self.record(i);
         let id = esc(r.id.as_deref().unwrap_or(&r.path.to_string_lossy()));
         let title = if r.view.title_is_fallback {
@@ -286,7 +287,7 @@ impl<'a> Page<'a> {
             String::new()
         };
         format!(
-            "<summary><span class=\"ch{}\"></span><span class=\"id\">{id}</span><span class=\"t\"{hover}>{title}</span><span class=\"s\">{}{}</span></summary>",
+            "<span class=\"ch{}\"></span><span class=\"id\">{id}</span><span class=\"t\"{hover}>{title}</span><span class=\"s\">{}{}</span>",
             if parent { " tri" } else { "" },
             self.details(r),
             status_cell(r)
@@ -395,19 +396,24 @@ impl<'a> Page<'a> {
     fn attrs(&self, i: usize, level: usize, parent: bool) -> String {
         let r = self.record(i);
         let mut flags = Vec::new();
-        if !r.view.gated_moves.is_empty() {
+        if r.header_readable && !r.view.gated_moves.is_empty() {
             flags.push("needs");
         }
-        if r.view.ready {
+        if r.header_readable && ready_leaf(r) {
             flags.push("ready");
         }
+        let state = if r.header_readable {
+            state_key(r.view.state)
+        } else {
+            "unreadable"
+        };
         format!(
             "id=\"{}\" class=\"rec lv{}{}\" data-record=\"{}\" data-state=\"{}\" data-flags=\"{}\"",
             esc(&self.anchors[i]),
             level.min(8),
             if parent { " p" } else { "" },
             esc(&r.record_type),
-            state_key(r.view.state),
+            state,
             flags.join(" ")
         )
     }
@@ -417,12 +423,14 @@ impl<'a> Page<'a> {
     fn is_active(&self, i: usize) -> bool {
         let v = &self.record(i).view;
         v.state == StateCategory::UnderWay
-            || v.ready
+            || ready_leaf(self.record(i))
             || (v.state.is_open() && !v.waiting_on.is_empty())
     }
 
-    /// One record as a row. A parent holds its children (`kids`) and starts
-    /// open only when one of them is active.
+    /// One record as a row. A parent's row opens and closes its children
+    /// (`kids`), and starts open only when one of them is active. The record's
+    /// own detail is a second disclosure at the right of the row, closed
+    /// until it is asked for, for a parent and a leaf alike.
     fn entry(&self, i: usize, level: usize, kids: &str) -> String {
         let r = self.record(i);
         let parent = !r.view.children.is_empty();
@@ -432,13 +440,21 @@ impl<'a> Page<'a> {
                 .iter()
                 .filter_map(|c| self.by_id.get(c.as_str()))
                 .any(|&c| self.is_active(c));
-        format!(
-            "<li {}><details{}>{}{kids}{}</details></li>",
-            self.attrs(i, level, parent),
-            if open { " open" } else { "" },
-            self.summary(i, parent),
+        let id = esc(r.id.as_deref().unwrap_or(&r.path.to_string_lossy()));
+        let detail = format!(
+            "<details class=\"det\"><summary aria-label=\"Details of {id}\" title=\"Details\"><span class=\"dw\">details</span><span class=\"dn\">›</span></summary>{}</details>",
             self.more(i)
-        )
+        );
+        let row = self.row(i, parent);
+        let body = if parent {
+            format!(
+                "<details class=\"kd\"{}><summary class=\"rs\">{row}</summary>{kids}</details>",
+                if open { " open" } else { "" }
+            )
+        } else {
+            format!("<div class=\"rs\">{row}</div>")
+        };
+        format!("<li {}>{body}{detail}</li>", self.attrs(i, level, parent))
     }
 
     /// A muted row that opens in place to the finished and dropped records it
@@ -474,6 +490,13 @@ impl<'a> Page<'a> {
     }
 }
 
+/// Whether a record is work someone can pick up: ready, and not a parent. A
+/// parent at its starting status reads as ready in the export; the board lists
+/// it in Work with its count, not as something to start.
+fn ready_leaf(r: &ExportedRecord) -> bool {
+    r.view.ready && r.view.children.is_empty()
+}
+
 /// The dot of a record: its state, or ready where nothing says more. The
 /// word is its title, and the status text beside it carries the rest.
 fn dot(r: &ExportedRecord) -> String {
@@ -482,7 +505,7 @@ fn dot(r: &ExportedRecord) -> String {
         StateCategory::Finished => ("g", "finished".to_string()),
         StateCategory::Dropped => ("r", "dropped".to_string()),
         StateCategory::UnderWay => ("o", "under way".to_string()),
-        _ if v.ready => ("b", format!("ready ({})", state_word(v.state))),
+        _ if ready_leaf(r) => ("b", format!("ready ({})", state_word(v.state))),
         state => ("n", state_word(state).to_string()),
     };
     format!("<span class=\"d {class}\" title=\"{}\"></span>", esc(&word))
@@ -564,15 +587,24 @@ fn notes(page: &Page<'_>, check: &CheckNote<'_>) -> String {
         CheckNote::Line(c) => {
             let _ = writeln!(out, "<p class=\"note\">{}</p>", esc(&c.text()));
         }
-        CheckNote::Linked => out.push_str(
-            "<p class=\"note\">urzua check is not run for this page, because it takes as long as <code>urzua check</code> does. <a href=\"check\">Run it</a> for the summary.</p>\n",
-        ),
-        CheckNote::Unavailable => out.push_str("<p class=\"note\">urzua check could not be run.</p>\n"),
+        CheckNote::Linked(took) => {
+            let cost = match took {
+                Some(secs) => format!("runs urzua check, about {secs} s"),
+                None => "runs urzua check, which takes a while".to_string(),
+            };
+            let _ = writeln!(
+                out,
+                "<p class=\"note\">check summary: <a href=\"check\">/check</a> ({cost})</p>"
+            );
+        }
+        CheckNote::Unavailable => {
+            out.push_str("<p class=\"note\">check summary: could not be run</p>\n")
+        }
     }
     match page.text {
         Text::Inline => {}
-        Text::Linked => out.push_str("<p class=\"note\">The records hold too much text to put in the page; each row links its own.</p>\n"),
-        Text::LeftOut => out.push_str("<p class=\"note\">The records hold too much text for a file: it is left out. Run <code>urzua board --serve</code> to read each record's text, or <code>urzua export --format json</code> for all of it.</p>\n"),
+        Text::Linked => out.push_str("<p class=\"note\">Record text: each row's details link.</p>\n"),
+        Text::LeftOut => out.push_str("<p class=\"note\">Record text is not in this file; run <code>urzua board --serve</code> for it.</p>\n"),
     }
     out
 }
@@ -580,8 +612,13 @@ fn notes(page: &Page<'_>, check: &CheckNote<'_>) -> String {
 /// The search box and the state filter, with the count each filter selects.
 fn controls(page: &Page<'_>) -> String {
     let readable: Vec<&ExportedRecord> = page.e.records.iter().collect();
-    let count =
-        |keep: &dyn Fn(&ExportedRecord) -> bool| readable.iter().filter(|r| keep(r)).count();
+    // A record whose header could not be read has no state to count.
+    let count = |keep: &dyn Fn(&ExportedRecord) -> bool| {
+        readable
+            .iter()
+            .filter(|r| r.header_readable && keep(r))
+            .count()
+    };
     let state = |s: StateCategory| move |r: &ExportedRecord| r.view.state == s;
     let filters: Vec<(&str, &str, usize)> = vec![
         ("", "All", readable.len()),
@@ -595,7 +632,7 @@ fn controls(page: &Page<'_>) -> String {
             "Under way",
             count(&state(StateCategory::UnderWay)),
         ),
-        ("ready", "Ready", count(&|r| r.view.ready)),
+        ("ready", "Ready", count(&ready_leaf)),
         (
             "finished",
             "Finished",
@@ -626,6 +663,21 @@ fn controls(page: &Page<'_>) -> String {
     )
 }
 
+/// Escaped text in which a `backticked` word is code.
+fn with_code(text: &str) -> String {
+    esc(text)
+        .split('`')
+        .enumerate()
+        .map(|(n, part)| {
+            if n % 2 == 1 {
+                format!("<code>{part}</code>")
+            } else {
+                part.to_string()
+            }
+        })
+        .collect()
+}
+
 /// A section label with its count, then its list.
 fn section(
     label: &str,
@@ -638,7 +690,7 @@ fn section(
     let note = if note.is_empty() {
         String::new()
     } else {
-        format!("<p class=\"note\">{}</p>", esc(note))
+        format!("<p class=\"note\">{}</p>", with_code(note))
     };
     let attr = if group.is_empty() {
         String::new()
@@ -682,6 +734,15 @@ fn brief_rows(
     out
 }
 
+/// `a`, `a and b`, `a, b and c`.
+fn names_phrase(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [only] => (*only).to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 fn attention(page: &Page<'_>) -> String {
     let all = || (0..page.e.records.len()).filter(|&i| page.record(i).header_readable);
     let gated: Vec<usize> = all()
@@ -690,18 +751,33 @@ fn attention(page: &Page<'_>) -> String {
     let under_way: Vec<usize> = all()
         .filter(|&i| page.record(i).view.state == StateCategory::UnderWay)
         .collect();
-    let ready: Vec<usize> = all().filter(|&i| page.record(i).view.ready).collect();
+    let ready: Vec<usize> = all().filter(|&i| ready_leaf(page.record(i))).collect();
     let mut out = String::new();
-    let mut notes = String::new();
-    for (name, role) in &page.e.type_roles {
-        if role.gated_without_transitions {
-            let _ = write!(
-                notes,
-                "The type {} declares a gate but no transitions, so the next move of its records cannot be read. ",
-                esc(name)
-            );
-        }
-    }
+    let no_transitions: Vec<&str> = page
+        .e
+        .type_roles
+        .iter()
+        .filter(|(_, role)| role.gated_without_transitions)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    let notes = if no_transitions.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "{} {} a gate but no transitions, so the next move of {} records cannot be read.",
+            names_phrase(&no_transitions),
+            if no_transitions.len() == 1 {
+                "declares"
+            } else {
+                "declare"
+            },
+            if no_transitions.len() == 1 {
+                "its"
+            } else {
+                "their"
+            }
+        )
+    };
     let needs_right = |r: &ExportedRecord| {
         let moves: Vec<&str> = r.view.gated_moves.iter().map(|m| m.to.as_str()).collect();
         let mut groups: Vec<&str> = r.view.gated_moves.iter().map(|m| m.by.as_str()).collect();
@@ -734,9 +810,23 @@ fn attention(page: &Page<'_>) -> String {
         String::new()
     } else {
         format!(
-            "Nothing can be listed as under way for {}: no statuses.progress is declared for {}. Add it to the type's statuses in the configuration to name the statuses that mean work has begun; their records are shown as open until then.",
-            without_progress.join(", "),
-            if without_progress.len() == 1 { "it" } else { "them" }
+            "{}{} {} no `statuses.progress`, so {} records show as open.",
+            if under_way.is_empty() {
+                "Nothing is under way. "
+            } else {
+                ""
+            },
+            names_phrase(&without_progress),
+            if without_progress.len() == 1 {
+                "declares"
+            } else {
+                "declare"
+            },
+            if without_progress.len() == 1 {
+                "its"
+            } else {
+                "their"
+            }
         )
     };
     let by_status = |r: &ExportedRecord| status_cell(r);

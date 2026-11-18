@@ -55,18 +55,27 @@ ul { list-style: none; margin: 0; padding: 0; }
 .list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .list li { border-top: 1px solid var(--border); min-width: 0; }
 .list > li:first-child { border-top: 0; }
-summary, .br {
+summary, .br, .rs {
   display: flex; align-items: center; gap: 10px; padding: 7px 10px; min-width: 0;
   list-style: none; cursor: pointer;
 }
 .br { cursor: default; }
 summary::-webkit-details-marker { display: none; }
-summary > *, .br > * { min-width: 0; }
-.p > details > summary { background: var(--raised); }
-.p > details > summary .t { font-weight: 600; }
+summary > *, .br > *, .rs > * { min-width: 0; }
+.rs { cursor: default; padding-right: 76px; }
+details.kd > .rs { cursor: pointer; }
+li.rec { position: relative; }
+.p > details > .rs { background: var(--raised); }
+.p > details > .rs .t { font-weight: 600; }
+.det > summary {
+  position: absolute; top: 0; right: 0; padding: 7px 10px; color: var(--muted); font-size: 12px;
+  cursor: pointer; list-style: none;
+}
+.det[open] > summary { color: var(--fg); }
+.dn { display: none; }
 .ch { flex: none; width: 10px; color: var(--muted); font-size: 10px; }
 .tri::before { content: "\25B8"; }
-details[open] > summary > .tri::before { content: "\25BE"; }
+details[open] > .rs > .tri::before { content: "\25BE"; }
 .id { font: 12px var(--mono); color: var(--muted); flex: none; min-width: 8ch; }
 .t { flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .s { flex: none; max-width: 70%; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
@@ -90,11 +99,14 @@ details[open] > summary > .tri::before { content: "\25BE"; }
 .fold > details > summary { color: var(--muted); font-size: 12px; }
 .lv0 { --ind: 0px; } .lv1 { --ind: 18px; } .lv2 { --ind: 36px; } .lv3 { --ind: 54px; }
 .lv4 { --ind: 72px; } .lv5 { --ind: 90px; } .lv6 { --ind: 108px; } .lv7 { --ind: 126px; } .lv8 { --ind: 144px; }
-li[class*="lv"] > details > summary, li[class*="lv"] > details > .more { padding-left: calc(10px + var(--ind)); }
-li[class*="lv"] > details > .more { padding-left: calc(30px + var(--ind)); }
+li[class*="lv"] > .rs, li[class*="lv"] > details > .rs { padding-left: calc(10px + var(--ind)); }
+li[class*="lv"] > .det > .more { padding-left: calc(30px + var(--ind)); }
 [hidden] { display: none !important; }
 @media (max-width: 460px) {
   .s .x { display: none; }
+  .dw { display: none; }
+  .dn { display: inline; font-size: 16px; line-height: 1; }
+  .rs { padding-right: 36px; }
   .id { min-width: 7ch; }
   .st { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; }
   .s { max-width: 45%; }
@@ -200,6 +212,9 @@ pub(super) const LIVE: &str = r#"
         return r;
       });
     }
+    function key(d) {
+      return d.parentElement.id + (d.classList.contains('det') ? ':d' : '');
+    }
     function swap(text) {
       var doc = new DOMParser().parseFromString(text, 'text/html');
       var fresh = doc.getElementById('board');
@@ -208,13 +223,13 @@ pub(super) const LIVE: &str = r#"
       if (!fresh || !freshUpd || !freshMeta) { throw new Error('not a board page'); }
       var open = {};
       Array.prototype.forEach.call(board.querySelectorAll('li[id] > details'), function (d) {
-        open[d.parentElement.id] = d.open;
+        open[key(d)] = d.open;
       });
       var y = window.scrollY;
       var nodes = Array.prototype.map.call(fresh.childNodes, function (c) { return document.importNode(c, true); });
       board.replaceChildren.apply(board, nodes);
       Array.prototype.forEach.call(board.querySelectorAll('li[id] > details'), function (d) {
-        if (Object.prototype.hasOwnProperty.call(open, d.parentElement.id)) { d.open = open[d.parentElement.id]; }
+        if (Object.prototype.hasOwnProperty.call(open, key(d))) { d.open = open[key(d)]; }
       });
       wire();
       meta.textContent = freshMeta.textContent;

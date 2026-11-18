@@ -12,6 +12,7 @@ use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use urzua_core::report::{
@@ -23,6 +24,10 @@ use super::check::{self, CheckArgs};
 use super::export::{self, ExportOptions, RecordFilter};
 use crate::emit;
 use crate::session::{emit_or_not_run, Workspace};
+
+/// How long the last `GET /check` took, in seconds; 0 until one has run. The
+/// served page says so beside its link.
+static LAST_CHECK_SECS: AtomicU64 = AtomicU64::new(0);
 
 /// The file `urzua board` writes when `--out` is not given, under the
 /// repository's derived-state directory.
@@ -131,7 +136,10 @@ fn build_page(
     )?;
     let line = (!serving).then(|| check_line(config_path)).flatten();
     let note = match (&line, serving) {
-        (_, true) => CheckNote::Linked,
+        (_, true) => CheckNote::Linked(match LAST_CHECK_SECS.load(Ordering::Relaxed) {
+            0 => None,
+            secs => Some(secs),
+        }),
         (Some(line), false) => CheckNote::Line(line),
         (None, false) => CheckNote::Unavailable,
     };
@@ -211,6 +219,7 @@ fn check_text(config_path: &Option<PathBuf>) -> String {
     let started = Instant::now();
     let line = check_line(config_path);
     let seconds = started.elapsed().as_secs();
+    LAST_CHECK_SECS.store(seconds.max(1), Ordering::Relaxed);
     match line {
         Some(line) => format!(
             "{} (computed {}, took {seconds} s)\n",
