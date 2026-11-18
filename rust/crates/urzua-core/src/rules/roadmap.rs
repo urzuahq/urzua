@@ -958,7 +958,8 @@ pub fn unfinished_dependencies(
             continue;
         }
         let open = deps.iter().filter(|d| {
-            index.contains_key(*d) && standing_of(config, &index, &declared, d).1 != Standing::Success
+            index.contains_key(*d)
+                && standing_of(config, &index, &declared, d).1 != Standing::Success
         });
         waits.insert(id.as_str().to_string(), names(open.map(RecordId::as_str)));
     }

@@ -88,31 +88,94 @@ roadmap:
 
 fn chain_records(dir: &Path) {
     let r = |path: &str, status: &str, extra: &str, heading: &str| {
-        write(dir, path, &record(&format!("Status: {status}"), extra, heading));
+        write(
+            dir,
+            path,
+            &record(&format!("Status: {status}"), extra, heading),
+        );
     };
-    r("docs/programmes/PRG-1-alpha.md", "Rolling", "Owner: ann\nLane: north\n", "# 1 — Alpha");
-    r("docs/programmes/PRG-2-beta.md", "Idea", "Lane: south\n", "# PRG-2: Beta");
-    r("docs/programmes/PRG-3-gamma.md", "Shipped", "", "# 3 — Gamma");
+    r(
+        "docs/programmes/PRG-1-alpha.md",
+        "Rolling",
+        "Owner: ann\nLane: north\n",
+        "# 1 — Alpha",
+    );
+    r(
+        "docs/programmes/PRG-2-beta.md",
+        "Idea",
+        "Lane: south\n",
+        "# PRG-2: Beta",
+    );
+    r(
+        "docs/programmes/PRG-3-gamma.md",
+        "Shipped",
+        "",
+        "# 3 — Gamma",
+    );
     r(
         "docs/programmes/PRG-4-hostile.md",
         "Idea",
         "Owner: javascript:alert(1)\nLane: north\n",
         "# 4 — <script>alert(\"x\")</script> & 'quoted' \"double\"",
     );
-    r("docs/programmes/PRG-5-no-title.md", "Idea", "", "Plain words, no heading.");
-    r("docs/stages/STG-1-first.md", "Shipped", "In: PRG-1\n", "# 1 — First");
-    r("docs/stages/STG-2-second.md", "Rolling", "In: PRG-1\n", "# 2 — Second");
-    r("docs/stages/STG-3-third.md", "Idea", "In: PRG-1\nNeeds: STG-2\n", "# 3 — Third");
-    r("docs/stages/STG-4-fourth.md", "Rolling", "In: PRG-2\n", "# 4 — Fourth");
-    r("docs/stages/STG-5-fifth.md", "Idea", "In: PRG-3\n", "# 5 — Fifth");
+    r(
+        "docs/programmes/PRG-5-no-title.md",
+        "Idea",
+        "",
+        "Plain words, no heading.",
+    );
+    r(
+        "docs/stages/STG-1-first.md",
+        "Shipped",
+        "In: PRG-1\n",
+        "# 1 — First",
+    );
+    r(
+        "docs/stages/STG-2-second.md",
+        "Rolling",
+        "In: PRG-1\n",
+        "# 2 — Second",
+    );
+    r(
+        "docs/stages/STG-3-third.md",
+        "Idea",
+        "In: PRG-1\nNeeds: STG-2\n",
+        "# 3 — Third",
+    );
+    r(
+        "docs/stages/STG-4-fourth.md",
+        "Rolling",
+        "In: PRG-2\n",
+        "# 4 — Fourth",
+    );
+    r(
+        "docs/stages/STG-5-fifth.md",
+        "Idea",
+        "In: PRG-3\n",
+        "# 5 — Fifth",
+    );
     r("docs/stages/STG-6-loose.md", "Idea", "", "# 6 — Loose");
     r("docs/steps/STP-1-a.md", "Rolling", "In: STG-2\n", "# 1 — A");
     r("docs/steps/STP-2-b.md", "Shipped", "In: STG-2\n", "# 2 — B");
-    r("docs/steps/STP-3-c.md", "Cancelled", "In: STG-2\n", "# 3 — C");
-    r("docs/steps/STP-10-d.md", "Idea", "In: STG-2\nNeeds: STP-1, STP-2\n", "# 10 — D");
+    r(
+        "docs/steps/STP-3-c.md",
+        "Cancelled",
+        "In: STG-2\n",
+        "# 3 — C",
+    );
+    r(
+        "docs/steps/STP-10-d.md",
+        "Idea",
+        "In: STG-2\nNeeds: STP-1, STP-2\n",
+        "# 10 — D",
+    );
     r("docs/steps/STP-11-e.md", "Idea", "", "# 11 — E");
     r("docs/charters/CHR-1-terms.md", "Draft", "", "# 1 — Terms");
-    write(dir, "docs/stages/STG-7-unreadable.md", "no header here\n# 7 — Broken\n");
+    write(
+        dir,
+        "docs/stages/STG-7-unreadable.md",
+        "no header here\n# 7 — Broken\n",
+    );
 }
 
 fn repo(name: &str, config: &str, populate: impl FnOnce(&Path)) -> common::TempDir {
@@ -166,7 +229,11 @@ fn flat(name: &str) -> common::TempDir {
             write(
                 dir,
                 &format!("docs/tickets/TCK-{n}-t.md"),
-                &record(&format!("Status: {status}"), extra, &format!("# {n} — Ticket {n}")),
+                &record(
+                    &format!("Status: {status}"),
+                    extra,
+                    &format!("# {n} — Ticket {n}"),
+                ),
             );
         };
         t(1, "Done", "Area: web\n");
@@ -175,13 +242,25 @@ fn flat(name: &str) -> common::TempDir {
         t(4, "Todo", "Area: [web, cli]\n");
         t(5, "Dropped", "");
         t(6, "Todo", "Needs: TCK-5\n");
-        write(dir, "docs/memos/MEM-1-m.md", &record("Topic: x", "Related: TCK-4\n", "# 1 — Memo"));
-        write(dir, "docs/memos/MEM-2-n.md", &record("Topic: y", "Related: MEM-1\n", "# 2 — Other memo"));
+        write(
+            dir,
+            "docs/memos/MEM-1-m.md",
+            &record("Topic: x", "Related: TCK-4\n", "# 1 — Memo"),
+        );
+        write(
+            dir,
+            "docs/memos/MEM-2-n.md",
+            &record("Topic: y", "Related: MEM-1\n", "# 2 — Other memo"),
+        );
     })
 }
 
 fn run(dir: &Path, args: &[&str]) -> std::process::Output {
-    common::urzua().args(args).current_dir(dir).output().unwrap()
+    common::urzua()
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap()
 }
 
 fn json(out: &std::process::Output) -> Value {
@@ -191,7 +270,11 @@ fn json(out: &std::process::Output) -> Value {
 
 fn export(dir: &Path) -> Value {
     let out = run(dir, &["export", "--format", "json"]);
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     json(&out)
 }
 
@@ -216,7 +299,11 @@ fn ids(value: &Value) -> Vec<String> {
 fn board_page(dir: &Path) -> (String, Value) {
     let target = dir.join("out/board.html");
     let out = run(dir, &["board", "--out", target.to_str().unwrap()]);
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     (std::fs::read_to_string(&target).unwrap(), json(&out))
 }
 
@@ -239,21 +326,36 @@ fn a_state_is_decided_by_a_declared_list_and_says_which() {
     let dir = chain("state");
     let e = export(&dir);
     let expect = [
-        ("PRG-1", "under-way", "record_types.programme.statuses.progress"),
+        (
+            "PRG-1",
+            "under-way",
+            "record_types.programme.statuses.progress",
+        ),
         ("PRG-2", "not-started", "default"),
-        ("PRG-3", "finished", "record_types.programme.statuses.success"),
+        (
+            "PRG-3",
+            "finished",
+            "record_types.programme.statuses.success",
+        ),
         ("STP-3", "dropped", "record_types.step.statuses.failure"),
         ("STP-2", "finished", "record_types.step.statuses.success"),
         ("CHR-1", "not-started", "default"),
     ];
     for (id, state, by) in expect {
         let r = by_id(&e, id);
-        assert_eq!((r["state"].as_str(), r["state_decided_by"].as_str()), (Some(state), Some(by)), "{id}");
+        assert_eq!(
+            (r["state"].as_str(), r["state_decided_by"].as_str()),
+            (Some(state), Some(by)),
+            "{id}"
+        );
     }
     let flat = flat("state-flat");
     let e = export(&flat);
     assert_eq!(by_id(&e, "MEM-1")["state"], "none");
-    assert_eq!(by_id(&e, "MEM-1")["state_decided_by"], "no-statuses-declared");
+    assert_eq!(
+        by_id(&e, "MEM-1")["state_decided_by"],
+        "no-statuses-declared"
+    );
     assert_eq!(by_id(&e, "TCK-2")["state"], "under-way");
 }
 
@@ -282,10 +384,18 @@ fn waiting_and_ready_are_separate_and_a_record_can_be_under_way_and_waiting() {
     let flat = flat("waiting-flat");
     let e = export(&flat);
     assert_eq!(ids(&by_id(&e, "TCK-3")["waiting_on"]), ["TCK-2"]);
-    assert_eq!(ids(&by_id(&e, "TCK-6")["waiting_on"]), ["TCK-5"], "a dropped record is not finished");
+    assert_eq!(
+        ids(&by_id(&e, "TCK-6")["waiting_on"]),
+        ["TCK-5"],
+        "a dropped record is not finished"
+    );
     assert_eq!(by_id(&e, "TCK-6")["ready"], false);
     assert_eq!(by_id(&e, "TCK-4")["ready"], true);
-    assert_eq!(by_id(&e, "TCK-2")["ready"], true, "under way and waiting on nothing");
+    assert_eq!(
+        by_id(&e, "TCK-2")["ready"],
+        true,
+        "under way and waiting on nothing"
+    );
     assert_eq!(by_id(&e, "MEM-1")["ready"], false, "not a work type");
     assert_eq!(by_id(&e, "TCK-1")["ready"], false, "finished");
 }
@@ -297,7 +407,10 @@ fn containment_follows_only_the_declared_part_of_field_to_three_levels() {
     assert_eq!(by_id(&e, "STP-1")["parent"], "STG-2");
     assert_eq!(by_id(&e, "STG-2")["parent"], "PRG-1");
     assert_eq!(by_id(&e, "PRG-1")["parent"], Value::Null);
-    assert_eq!(ids(&by_id(&e, "PRG-1")["children"]), ["STG-1", "STG-2", "STG-3"]);
+    assert_eq!(
+        ids(&by_id(&e, "PRG-1")["children"]),
+        ["STG-1", "STG-2", "STG-3"]
+    );
     assert_eq!(
         ids(&by_id(&e, "STG-2")["children"]),
         ["STP-1", "STP-2", "STP-3", "STP-10"],
@@ -323,18 +436,33 @@ fn a_reference_with_targets_but_no_part_of_is_not_containment() {
         assert_eq!(r["parent"], Value::Null, "{}", r["id"]);
         assert_eq!(r["children"], serde_json::json!([]), "{}", r["id"]);
     }
-    assert_eq!(by_id(&e, "STP-1")["refers_to"]["In"], serde_json::json!(["STG-2"]));
+    assert_eq!(
+        by_id(&e, "STP-1")["refers_to"]["In"],
+        serde_json::json!(["STG-2"])
+    );
 }
 
 #[test]
 fn a_parent_and_its_children_disagree_when_one_contradicts_the_other() {
     let dir = chain("disagree");
     let e = export(&dir);
-    assert_eq!(by_id(&e, "PRG-2")["state_disagrees_with_children"], true, "not started, child under way");
-    assert_eq!(by_id(&e, "PRG-3")["state_disagrees_with_children"], true, "finished, child not finished");
+    assert_eq!(
+        by_id(&e, "PRG-2")["state_disagrees_with_children"],
+        true,
+        "not started, child under way"
+    );
+    assert_eq!(
+        by_id(&e, "PRG-3")["state_disagrees_with_children"],
+        true,
+        "finished, child not finished"
+    );
     assert_eq!(by_id(&e, "PRG-1")["state_disagrees_with_children"], false);
     assert_eq!(by_id(&e, "STG-2")["state_disagrees_with_children"], false);
-    assert_eq!(by_id(&e, "STP-1")["state_disagrees_with_children"], false, "no children");
+    assert_eq!(
+        by_id(&e, "STP-1")["state_disagrees_with_children"],
+        false,
+        "no children"
+    );
 }
 
 #[test]
@@ -345,10 +473,24 @@ fn a_gate_with_a_declared_transition_reserves_the_move_for_a_person() {
         by_id(&e, "STG-2")["gated_moves"],
         serde_json::json!([{"to": "Shipped", "by": "leads"}])
     );
-    assert_eq!(by_id(&e, "STG-4")["gated_moves"].as_array().unwrap().len(), 1);
-    assert_eq!(by_id(&e, "STG-3")["gated_moves"], serde_json::json!([]), "Idea moves to ungated statuses");
-    assert_eq!(by_id(&e, "STG-1")["gated_moves"], serde_json::json!([]), "finished");
-    assert_eq!(e["type_roles"]["charter"]["gated_without_transitions"], true);
+    assert_eq!(
+        by_id(&e, "STG-4")["gated_moves"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        by_id(&e, "STG-3")["gated_moves"],
+        serde_json::json!([]),
+        "Idea moves to ungated statuses"
+    );
+    assert_eq!(
+        by_id(&e, "STG-1")["gated_moves"],
+        serde_json::json!([]),
+        "finished"
+    );
+    assert_eq!(
+        e["type_roles"]["charter"]["gated_without_transitions"],
+        true
+    );
     assert_eq!(e["type_roles"]["stage"]["gated_without_transitions"], false);
 }
 
@@ -366,13 +508,17 @@ fn the_edges_are_the_ones_graph_prints_with_their_inverse() {
             "{edge} missing from refers_to"
         );
         assert!(
-            ids(&by_id(&e, to)["referred_by"][field]).contains(&edge["from"].as_str().unwrap().to_string()),
+            ids(&by_id(&e, to)["referred_by"][field])
+                .contains(&edge["from"].as_str().unwrap().to_string()),
             "{edge} missing from referred_by"
         );
     }
     let referred = ids(&by_id(&e, "STG-2")["referred_by"]["In"]);
     assert_eq!(referred, ["STP-1", "STP-2", "STP-3", "STP-10"]);
-    assert_eq!(by_id(&e, "STP-10")["refers_to"]["Needs"], serde_json::json!(["STP-1", "STP-2"]));
+    assert_eq!(
+        by_id(&e, "STP-10")["refers_to"]["Needs"],
+        serde_json::json!(["STP-1", "STP-2"])
+    );
 }
 
 #[test]
@@ -381,11 +527,21 @@ fn fields_are_a_map_and_a_list_valued_field_is_an_array() {
     let e = export(&dir);
     let alpha = &by_id(&e, "PRG-1")["fields"];
     assert_eq!(alpha["Owner"], "ann");
-    assert_eq!(alpha["Lane"], serde_json::json!(["north"]), "a declared vocabulary reads as a list");
-    assert_eq!(by_id(&e, "STP-10")["fields"]["Needs"], serde_json::json!(["STP-1", "STP-2"]));
+    assert_eq!(
+        alpha["Lane"],
+        serde_json::json!(["north"]),
+        "a declared vocabulary reads as a list"
+    );
+    assert_eq!(
+        by_id(&e, "STP-10")["fields"]["Needs"],
+        serde_json::json!(["STP-1", "STP-2"])
+    );
     let flat = flat("fields-flat");
     let e = export(&flat);
-    assert_eq!(by_id(&e, "TCK-4")["fields"]["Area"], serde_json::json!(["web", "cli"]));
+    assert_eq!(
+        by_id(&e, "TCK-4")["fields"]["Area"],
+        serde_json::json!(["web", "cli"])
+    );
     let header: Vec<&str> = by_id(&e, "TCK-4")["header"]
         .as_array()
         .unwrap()
@@ -410,13 +566,27 @@ fn a_link_exists_only_when_a_prefix_is_declared() {
 
 #[test]
 fn a_bad_link_prefix_or_part_of_declaration_is_refused_at_load() {
-    let dir = repo("bad-prefix", &chain_config().replace("https://example.test/blob/main/", "ftp://x/ y"), chain_records);
-    assert_eq!(run(&dir, &["export", "--format", "json"]).status.code(), Some(2));
-    let no_targets = chain_config().replace("{name: In, targets: [stage], part_of: true}", "{name: In, part_of: true}");
+    let dir = repo(
+        "bad-prefix",
+        &chain_config().replace("https://example.test/blob/main/", "ftp://x/ y"),
+        chain_records,
+    );
+    assert_eq!(
+        run(&dir, &["export", "--format", "json"]).status.code(),
+        Some(2)
+    );
+    let no_targets = chain_config().replace(
+        "{name: In, targets: [stage], part_of: true}",
+        "{name: In, part_of: true}",
+    );
     let dir = repo("no-targets", &no_targets, chain_records);
     let out = run(&dir, &["export", "--format", "json"]);
     assert_eq!(out.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&out.stdout).contains("without targets"), "{}", String::from_utf8_lossy(&out.stdout));
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("without targets"),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
 }
 
 #[test]
@@ -445,12 +615,19 @@ fn sections_carry_checkbox_counts_and_the_header_list_and_text_are_unchanged() {
             "docs/tickets/TCK-1-t.md",
             "---\nStatus: Todo\n---\n# 1 — T\n\n## Checks\n\n- [x] one\n- [ ] two\n- [ ] three\n",
         );
-        write(dir, "docs/memos/MEM-1-m.md", "---\nTopic: x\n---\n# 1 — M\n");
+        write(
+            dir,
+            "docs/memos/MEM-1-m.md",
+            "---\nTopic: x\n---\n# 1 — M\n",
+        );
     });
     let e = export(&dir);
     let t = by_id(&e, "TCK-1");
     let checks = &t["sections"][0];
-    assert_eq!((checks["ticked"].as_u64(), checks["unticked"].as_u64()), (Some(1), Some(2)));
+    assert_eq!(
+        (checks["ticked"].as_u64(), checks["unticked"].as_u64()),
+        (Some(1), Some(2))
+    );
     assert!(t["raw_text"].as_str().unwrap().contains("- [x] one"));
     for key in ["name", "heading", "line", "end_line", "content"] {
         assert!(checks.get(key).is_some(), "{key}");
@@ -462,24 +639,48 @@ fn the_export_without_its_new_keys_has_the_keys_it_had() {
     let dir = chain("additive");
     let e = export(&dir);
     let new_record_keys = [
-        "title", "title_is_fallback", "fields", "status", "state", "state_decided_by", "waiting_on",
-        "ready", "gated_moves", "parent", "children", "children_by_state",
-        "state_disagrees_with_children", "refers_to", "unresolved_refs", "referred_by", "link",
+        "title",
+        "title_is_fallback",
+        "fields",
+        "status",
+        "state",
+        "state_decided_by",
+        "waiting_on",
+        "ready",
+        "gated_moves",
+        "parent",
+        "children",
+        "children_by_state",
+        "state_disagrees_with_children",
+        "refers_to",
+        "unresolved_refs",
+        "referred_by",
+        "link",
     ];
     for r in e["records"].as_array().unwrap() {
         let mut keys: Vec<&str> = r.as_object().unwrap().keys().map(String::as_str).collect();
         keys.retain(|k| !new_record_keys.contains(k));
         keys.sort_unstable();
         let expected = [
-            "header", "header_readable", "id", "path", "preamble", "raw_text", "sections",
-            "stable_id", "type",
+            "header",
+            "header_readable",
+            "id",
+            "path",
+            "preamble",
+            "raw_text",
+            "sections",
+            "stable_id",
+            "type",
         ];
         assert_eq!(keys, expected, "{}", r["path"]);
     }
     let mut top: Vec<&str> = e.as_object().unwrap().keys().map(String::as_str).collect();
     top.retain(|k| !["type_roles", "read"].contains(k) && !k.starts_with("next_action"));
     top.sort_unstable();
-    assert_eq!(top, ["record_count", "records", "roadmap", "status", "types"]);
+    assert_eq!(
+        top,
+        ["record_count", "records", "roadmap", "status", "types"]
+    );
     assert_eq!(e["types"][0].as_object().unwrap().len(), 3);
     let without = run(&dir, &["export", "--format", "json", "--no-raw-text"]);
     let lean = json(&without);
@@ -492,7 +693,12 @@ fn the_read_stamp_names_the_commit_the_branch_and_uncommitted_record_changes() {
     let dir = chain("stamp");
     let e = export(&dir);
     let head = String::from_utf8(
-        common::isolated_git().args(["rev-parse", "HEAD"]).current_dir(&dir).output().unwrap().stdout,
+        common::isolated_git()
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&dir)
+            .output()
+            .unwrap()
+            .stdout,
     )
     .unwrap();
     assert_eq!(e["read"]["commit"], head.trim());
@@ -500,7 +706,11 @@ fn the_read_stamp_names_the_commit_the_branch_and_uncommitted_record_changes() {
     assert_eq!(e["read"]["uncommitted_record_changes"], false);
     let time = e["read"]["time"].as_str().unwrap();
     assert!(time.len() == 20 && time.ends_with('Z'), "{time}");
-    write(&dir, "docs/steps/STP-1-a.md", &record("Status: Idea", "In: STG-2\n", "# 1 — A"));
+    write(
+        &dir,
+        "docs/steps/STP-1-a.md",
+        &record("Status: Idea", "In: STG-2\n", "# 1 — A"),
+    );
     assert_eq!(export(&dir)["read"]["uncommitted_record_changes"], true);
 }
 
@@ -532,7 +742,11 @@ fn assert_well_formed(html: &str) {
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric())
             .collect();
-        assert!(!name.is_empty(), "a `<` that opens no tag at byte {i}: {}", &rest[..rest.len().min(60)]);
+        assert!(
+            !name.is_empty(),
+            "a `<` that opens no tag at byte {i}: {}",
+            &rest[..rest.len().min(60)]
+        );
         let mut j = name_start + name.len();
         let mut quote: Option<char> = None;
         let rb = rest.as_bytes();
@@ -548,16 +762,25 @@ fn assert_well_formed(html: &str) {
             }
             j += 1;
         }
-        assert!(quote.is_none() && j < rb.len(), "an unterminated tag at byte {i}");
+        assert!(
+            quote.is_none() && j < rb.len(),
+            "an unterminated tag at byte {i}"
+        );
         let tag = &rest[..=j];
         if closing {
-            assert_eq!(stack.pop().as_deref(), Some(name.as_str()), "mismatched </{name}> at byte {i}");
+            assert_eq!(
+                stack.pop().as_deref(),
+                Some(name.as_str()),
+                "mismatched </{name}> at byte {i}"
+            );
         } else if !VOID.contains(&name.as_str()) {
             stack.push(name.clone());
         }
         i += j + 1;
         if !closing && (name == "script" || name == "style") && !tag.ends_with("/>") {
-            let end = html[i..].find(&format!("</{name}>")).expect("raw text element closes");
+            let end = html[i..]
+                .find(&format!("</{name}>"))
+                .expect("raw text element closes");
             i += end;
         }
     }
@@ -585,12 +808,21 @@ const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 
 fn csp_source(content: &str) -> String {
     let hex = urzua_io::sha256_hex_of_str(content);
-    let bytes: Vec<u8> = (0..32).map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap()).collect();
+    let bytes: Vec<u8> = (0..32)
+        .map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap())
+        .collect();
     let mut out = String::new();
     for chunk in bytes.chunks(3) {
-        let n = chunk.iter().enumerate().fold(0u32, |n, (i, b)| n | (u32::from(*b) << (16 - 8 * i)));
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, b)| n | (u32::from(*b) << (16 - 8 * i)));
         for i in 0..4 {
-            out.push(if i <= chunk.len() { BASE64[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
+            out.push(if i <= chunk.len() {
+                BASE64[(n >> (18 - 6 * i) & 63) as usize] as char
+            } else {
+                '='
+            });
         }
     }
     format!("'sha256-{out}'")
@@ -602,18 +834,61 @@ fn assert_self_contained(html: &str) {
     assert!(html.contains("<meta name=\"viewport\""));
     assert!(html.contains("http-equiv=\"Content-Security-Policy\""));
     assert!(html.contains("default-src 'none'"));
-    assert_eq!(count(html, "<script"), 1, "one inline script, nothing from a record");
-    for value in attribute_values(html, "href").into_iter().chain(attribute_values(html, "src")) {
-        assert!(value.starts_with('#') || value.starts_with("record/"), "address {value}");
+    assert_eq!(
+        count(html, "<script"),
+        1,
+        "one inline script, nothing from a record"
+    );
+    for value in attribute_values(html, "href")
+        .into_iter()
+        .chain(attribute_values(html, "src"))
+    {
+        assert!(
+            value.starts_with('#') || value.starts_with("record/"),
+            "address {value}"
+        );
     }
-    for forbidden in ["http://", "https://", "fetch(", "XMLHttpRequest", "WebSocket", "@import", "url(", "<link", "<img", "<iframe", "<form"] {
+    for forbidden in [
+        "http://",
+        "https://",
+        "fetch(",
+        "XMLHttpRequest",
+        "WebSocket",
+        "@import",
+        "url(",
+        "<link",
+        "<img",
+        "<iframe",
+        "<form",
+    ] {
         assert!(!html.contains(forbidden), "the page contains {forbidden}");
     }
-    let script = html.split("<script>").nth(1).unwrap().split("</script>").next().unwrap();
-    let style = html.split("<style>").nth(1).unwrap().split("</style>").next().unwrap();
-    assert!(html.contains(&format!("script-src {}", csp_source(script))), "the script's hash is the policy's");
-    assert!(html.contains(&format!("style-src {}", csp_source(style))), "the style's hash is the policy's");
-    assert!(!html.contains(" style=\""), "an inline style attribute would be blocked");
+    let script = html
+        .split("<script>")
+        .nth(1)
+        .unwrap()
+        .split("</script>")
+        .next()
+        .unwrap();
+    let style = html
+        .split("<style>")
+        .nth(1)
+        .unwrap()
+        .split("</style>")
+        .next()
+        .unwrap();
+    assert!(
+        html.contains(&format!("script-src {}", csp_source(script))),
+        "the script's hash is the policy's"
+    );
+    assert!(
+        html.contains(&format!("style-src {}", csp_source(style))),
+        "the style's hash is the policy's"
+    );
+    assert!(
+        !html.contains(" style=\""),
+        "an inline style attribute would be blocked"
+    );
 }
 
 #[test]
@@ -623,7 +898,11 @@ fn the_page_holds_every_record_and_is_a_self_contained_well_formed_document() {
         let (html, answer) = board_page(&dir);
         assert_self_contained(&html);
         let records = e["record_count"].as_u64().unwrap() as usize;
-        assert_eq!(count(&html, " data-record=\""), records, "{name}: every record is an entry, once");
+        assert_eq!(
+            count(&html, " data-record=\""),
+            records,
+            "{name}: every record is an entry, once"
+        );
         assert_eq!(answer["record_count"], e["record_count"]);
         assert_eq!(answer["status"], "ok");
         assert!(answer["bytes"].as_u64().unwrap() as usize == html.len());
@@ -638,7 +917,10 @@ fn the_page_writes_to_the_cache_by_default_and_stdout_stays_json() {
     let dir = flat("default-path");
     let out = run(&dir, &["board"]);
     let answer = json(&out);
-    assert_eq!(answer["file"], dir.join(".urzua/cache/board.html").to_str().unwrap());
+    assert_eq!(
+        answer["file"],
+        dir.join(".urzua/cache/board.html").to_str().unwrap()
+    );
     assert!(dir.join(".urzua/cache/board.html").is_file());
 }
 
@@ -646,13 +928,22 @@ fn the_page_writes_to_the_cache_by_default_and_stdout_stays_json() {
 fn what_waits_on_a_person_is_the_gated_moves_the_transitions_allow() {
     let dir = chain("person");
     let (html, _) = board_page(&dir);
-    let section = html.split("Waiting on a person (").nth(1).unwrap().split("<h3>Under way").next().unwrap();
+    let section = html
+        .split("Waiting on a person (")
+        .nth(1)
+        .unwrap()
+        .split("<h3>Under way")
+        .next()
+        .unwrap();
     assert!(section.starts_with("2)"), "{section}");
     for id in ["STG-2", "STG-4"] {
         assert!(section.contains(&format!(">{id}</a>")), "{id}");
     }
     assert!(!section.contains(">STG-1</a>") && !section.contains(">STG-3</a>"));
-    assert!(section.contains("The type charter declares a gate but no transitions"), "{section}");
+    assert!(
+        section.contains("The type charter declares a gate but no transitions"),
+        "{section}"
+    );
     let flat = flat("person-flat");
     let (html, _) = board_page(&flat);
     assert!(html.contains("Waiting on a person (0)"));
@@ -665,7 +956,10 @@ fn work_is_a_tree_with_parents_counts_marks_and_a_group_for_records_with_no_pare
     let (html, _) = board_page(&dir);
     assert!(html.contains("<h3>Parents ("));
     assert!(html.contains("<h3>No parent ("));
-    assert!(html.contains("1 finished, 1 dropped, 1 under way, 1 not started"), "counts beside the parent");
+    assert!(
+        html.contains("1 finished, 1 dropped, 1 under way, 1 not started"),
+        "counts beside the parent"
+    );
     assert_eq!(count(&html, "status and children disagree"), 2);
     // PRG-1's section holds STG-2's, which holds STP-1.
     let prg1 = html.find("id=\"r-PRG-1\"").unwrap();
@@ -689,11 +983,23 @@ fn without_containment_work_is_grouped_by_type_and_other_types_are_compact_rows(
     assert!(html.contains("declares no containment"));
     assert!(!html.contains("<h3>Parents"));
     assert!(html.contains("<h3>ticket ("));
-    let other = html.split("id=\"other\"").nth(1).unwrap().split("id=\"closed\"").next().unwrap();
+    let other = html
+        .split("id=\"other\"")
+        .nth(1)
+        .unwrap()
+        .split("id=\"closed\"")
+        .next()
+        .unwrap();
     assert!(other.contains("<h3>memo (2)</h3>"));
-    assert!(other.contains("1 refer to it"), "a row says how many records refer to it: {other}");
+    assert!(
+        other.contains("1 refer to it"),
+        "a row says how many records refer to it: {other}"
+    );
     assert!(html.contains("waits on: <a href=\"#r-TCK-2\">TCK-2</a>"));
-    assert!(html.contains("Area: web, cli"), "a declared-value field shows");
+    assert!(
+        html.contains("Area: web, cli"),
+        "a declared-value field shows"
+    );
     assert!(html.contains("Related: <a href=\"#r-TCK-4\">TCK-4</a>"));
 }
 
@@ -725,8 +1031,22 @@ fn everything_from_a_record_is_escaped_and_nothing_becomes_a_link() {
 fn the_script_only_filters_and_builds_no_html() {
     let dir = flat("script");
     let (html, _) = board_page(&dir);
-    let script = html.split("<script>").nth(1).unwrap().split("</script>").next().unwrap();
-    for forbidden in ["innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "Function(", "location"] {
+    let script = html
+        .split("<script>")
+        .nth(1)
+        .unwrap()
+        .split("</script>")
+        .next()
+        .unwrap();
+    for forbidden in [
+        "innerHTML",
+        "outerHTML",
+        "insertAdjacentHTML",
+        "document.write",
+        "eval(",
+        "Function(",
+        "location",
+    ] {
         assert!(!script.contains(forbidden), "{forbidden}");
     }
 }
@@ -748,8 +1068,11 @@ impl Server {
             .spawn()
             .unwrap();
         let mut line = String::new();
-        BufReader::new(child.stdout.as_mut().unwrap()).read_line(&mut line).unwrap();
-        let v: Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("not one JSON line ({e}): {line}"));
+        BufReader::new(child.stdout.as_mut().unwrap())
+            .read_line(&mut line)
+            .unwrap();
+        let v: Value = serde_json::from_str(&line)
+            .unwrap_or_else(|e| panic!("not one JSON line ({e}): {line}"));
         assert_eq!(v["status"], "ok");
         let port = v["port"].as_u64().unwrap() as u16;
         assert_eq!(v["address"], format!("127.0.0.1:{port}"));
@@ -759,7 +1082,9 @@ impl Server {
 
     fn request(&self, raw: &str) -> (String, String) {
         let mut stream = TcpStream::connect(("127.0.0.1", self.port)).unwrap();
-        stream.set_read_timeout(Some(Duration::from_secs(120))).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(120)))
+            .unwrap();
         stream.write_all(raw.as_bytes()).unwrap();
         let mut response = String::new();
         let _ = stream.read_to_string(&mut response);
@@ -768,12 +1093,18 @@ impl Server {
     }
 
     fn get(&self, path: &str) -> (String, String) {
-        self.request(&format!("GET {path} HTTP/1.1\r\nHost: a-proxy.example\r\nConnection: close\r\n\r\n"))
+        self.request(&format!(
+            "GET {path} HTTP/1.1\r\nHost: a-proxy.example\r\nConnection: close\r\n\r\n"
+        ))
     }
 
     fn interrupt_and_wait(&mut self) -> bool {
         let pid = self.child.id().to_string();
-        assert!(std::process::Command::new("kill").args(["-INT", &pid]).status().unwrap().success());
+        assert!(std::process::Command::new("kill")
+            .args(["-INT", &pid])
+            .status()
+            .unwrap()
+            .success());
         let started = Instant::now();
         while started.elapsed() < Duration::from_secs(20) {
             if self.child.try_wait().unwrap().is_some() {
@@ -799,23 +1130,53 @@ fn the_server_answers_get_only_re_reads_every_request_and_stops_on_interrupt() {
 
     let (head, body) = server.get("/");
     assert!(head.starts_with("HTTP/1.1 200"), "{head}");
-    assert!(head.to_lowercase().contains("cache-control: no-store"), "{head}");
-    assert!(head.to_lowercase().contains("content-type: text/html"), "{head}");
+    assert!(
+        head.to_lowercase().contains("cache-control: no-store"),
+        "{head}"
+    );
+    assert!(
+        head.to_lowercase().contains("content-type: text/html"),
+        "{head}"
+    );
     assert_self_contained(&body);
     assert_eq!(count(&body, " data-record=\""), 18);
     assert!(body.contains("Alpha"));
 
-    write(&dir, "docs/programmes/PRG-1-alpha.md", &record("Status: Rolling", "Owner: ann\nLane: north\n", "# 1 — Alpha renamed between requests"));
+    write(
+        &dir,
+        "docs/programmes/PRG-1-alpha.md",
+        &record(
+            "Status: Rolling",
+            "Owner: ann\nLane: north\n",
+            "# 1 — Alpha renamed between requests",
+        ),
+    );
     let (_, body) = server.get("/");
-    assert!(body.contains("Alpha renamed between requests"), "the second request reads the changed record");
+    assert!(
+        body.contains("Alpha renamed between requests"),
+        "the second request reads the changed record"
+    );
 
     let (head, text) = server.get("/record/PRG-1");
-    assert!(head.starts_with("HTTP/1.1 200") && text.contains("Alpha renamed between requests"), "{head}");
-    for path in ["/nope", "/record/", "/record/..%2f..%2fetc%2fpasswd", "/record/NOPE-9", "/../../etc/passwd", "//", "/index.html"] {
+    assert!(
+        head.starts_with("HTTP/1.1 200") && text.contains("Alpha renamed between requests"),
+        "{head}"
+    );
+    for path in [
+        "/nope",
+        "/record/",
+        "/record/..%2f..%2fetc%2fpasswd",
+        "/record/NOPE-9",
+        "/../../etc/passwd",
+        "//",
+        "/index.html",
+    ] {
         assert!(server.get(path).0.starts_with("HTTP/1.1 404"), "{path}");
     }
     for method in ["POST", "PUT", "DELETE", "HEAD", "OPTIONS"] {
-        let (head, _) = server.request(&format!("{method} / HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n"));
+        let (head, _) = server.request(&format!(
+            "{method} / HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n"
+        ));
         assert!(head.starts_with("HTTP/1.1 405"), "{method}: {head}");
         assert!(head.contains("Allow: GET"));
     }
@@ -831,8 +1192,14 @@ fn the_server_answers_get_only_re_reads_every_request_and_stops_on_interrupt() {
     drop(stalled);
 
     let port = server.port;
-    assert!(server.interrupt_and_wait(), "the server did not stop on SIGINT");
-    assert!(TcpStream::connect(("127.0.0.1", port)).is_err(), "the port is released");
+    assert!(
+        server.interrupt_and_wait(),
+        "the server did not stop on SIGINT"
+    );
+    assert!(
+        TcpStream::connect(("127.0.0.1", port)).is_err(),
+        "the port is released"
+    );
 }
 
 #[test]
@@ -844,7 +1211,11 @@ fn the_server_listens_on_the_loopback_address_only_and_refuses_a_flag_misuse() {
     let out = run(&dir, &["board", "--port", "9"]);
     assert_eq!(out.status.code(), Some(2), "--port needs --serve");
     let out = run(&dir, &["board", "--serve", "--out", "x.html"]);
-    assert_eq!(out.status.code(), Some(2), "--out and --serve exclude each other");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "--out and --serve exclude each other"
+    );
 }
 
 // ---------------------------------------------------------------- this repository's records
@@ -862,23 +1233,44 @@ fn this_repositorys_records_have_a_state_each_and_the_page_holds_every_one() {
     assert!(records.len() > 600);
     let states = ["finished", "dropped", "under-way", "not-started", "none"];
     for r in records {
-        assert!(states.contains(&r["state"].as_str().unwrap()), "{}", r["path"]);
+        assert!(
+            states.contains(&r["state"].as_str().unwrap()),
+            "{}",
+            r["path"]
+        );
         assert!(r["title"].is_string());
         assert!(r.get("raw_text").is_none());
     }
     let numbers: Vec<u64> = records
         .iter()
         .filter(|r| r["type"] == "milestone")
-        .map(|r| r["id"].as_str().unwrap().rsplit('-').next().unwrap().parse().unwrap())
+        .map(|r| {
+            r["id"]
+                .as_str()
+                .unwrap()
+                .rsplit('-')
+                .next()
+                .unwrap()
+                .parse()
+                .unwrap()
+        })
         .collect();
-    assert!(numbers.windows(2).all(|w| w[0] < w[1]), "milestones are in numeric order");
+    assert!(
+        numbers.windows(2).all(|w| w[0] < w[1]),
+        "milestones are in numeric order"
+    );
     for r in records.iter().filter(|r| r["ready"] == true) {
         assert!(e["type_roles"][r["type"].as_str().unwrap()]["work"] == true);
         assert!(r["waiting_on"].as_array().unwrap().is_empty());
         assert!(["not-started", "under-way", "none"].contains(&r["state"].as_str().unwrap()));
     }
     let head = String::from_utf8(
-        common::isolated_git().args(["rev-parse", "HEAD"]).current_dir(&root).output().unwrap().stdout,
+        common::isolated_git()
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&root)
+            .output()
+            .unwrap()
+            .stdout,
     )
     .unwrap();
     assert_eq!(e["read"]["commit"], head.trim());

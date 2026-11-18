@@ -114,7 +114,12 @@ struct Page<'a> {
 
 impl<'a> Page<'a> {
     fn new(e: &'a ExportReport, serving: bool) -> Self {
-        let bytes: usize = e.records.iter().filter_map(|r| r.raw_text.as_ref()).map(String::len).sum();
+        let bytes: usize = e
+            .records
+            .iter()
+            .filter_map(|r| r.raw_text.as_ref())
+            .map(String::len)
+            .sum();
         let text = match (bytes <= TEXT_BUDGET, serving) {
             (true, _) => Text::Inline,
             (false, true) => Text::Linked,
@@ -122,13 +127,18 @@ impl<'a> Page<'a> {
         };
         let mut anchors: Vec<String> = Vec::with_capacity(e.records.len());
         for (i, r) in e.records.iter().enumerate() {
-            let stem: String = r
-                .id
-                .clone()
-                .unwrap_or_else(|| format!("p{i}"))
-                .chars()
-                .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' })
-                .collect();
+            let stem: String =
+                r.id.clone()
+                    .unwrap_or_else(|| format!("p{i}"))
+                    .chars()
+                    .map(|c| {
+                        if c.is_ascii_alphanumeric() || c == '-' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect();
             let mut anchor = format!("r-{stem}");
             if anchors.contains(&anchor) {
                 anchor = format!("{anchor}-{i}");
@@ -154,7 +164,10 @@ impl<'a> Page<'a> {
     }
 
     fn is_work(&self, r: &ExportedRecord) -> bool {
-        self.e.type_roles.get(&r.record_type).is_some_and(|t| t.work)
+        self.e
+            .type_roles
+            .get(&r.record_type)
+            .is_some_and(|t| t.work)
     }
 
     /// A link to a record on this page, or its id as plain text.
@@ -207,7 +220,11 @@ impl<'a> Page<'a> {
         format!(
             "<span class=\"counts\">{} {}: {}</span>",
             r.view.children.len(),
-            if r.view.children.len() == 1 { "child" } else { "children" },
+            if r.view.children.len() == 1 {
+                "child"
+            } else {
+                "children"
+            },
             parts.join(", ")
         )
     }
@@ -273,13 +290,20 @@ impl<'a> Page<'a> {
     /// The expandable area: what refers to the record, and its text.
     fn more(&self, i: usize) -> String {
         let r = self.record(i);
-        let mut out = String::from("<details class=\"more\"><summary>What refers to it and its text</summary>");
+        let mut out = String::from(
+            "<details class=\"more\"><summary>What refers to it and its text</summary>",
+        );
         out.push_str("<div class=\"meta\">");
         if r.view.referred_by.is_empty() {
             out.push_str("<div>Nothing refers to it.</div>");
         }
         for (field, ids) in &r.view.referred_by {
-            let _ = write!(out, "<div>referred to through {}: {}</div>", esc(field), self.links(ids));
+            let _ = write!(
+                out,
+                "<div>referred to through {}: {}</div>",
+                esc(field),
+                self.links(ids)
+            );
         }
         out.push_str("</div>");
         match (self.text, r.raw_text.as_ref(), r.id.as_deref()) {
@@ -297,12 +321,8 @@ impl<'a> Page<'a> {
 
     fn attrs(&self, i: usize) -> String {
         let r = self.record(i);
-        let search = format!(
-            "{} {}",
-            r.id.as_deref().unwrap_or_default(),
-            r.view.title
-        )
-        .to_lowercase();
+        let search =
+            format!("{} {}", r.id.as_deref().unwrap_or_default(), r.view.title).to_lowercase();
         format!(
             "id=\"{}\" class=\"rec\" data-record=\"{}\" data-state=\"{}\" data-search=\"{}\"",
             esc(&self.anchors[i]),
@@ -361,11 +381,7 @@ fn field_text(value: &urzua_core::view_model::FieldValue) -> String {
 
 /// "3 of 5 items resolved" for a record with a declared checklist.
 fn checklist_line(r: &ExportedRecord) -> Option<String> {
-    let items = r
-        .sections
-        .as_ref()?
-        .iter()
-        .find_map(|s| s.items.as_ref())?;
+    let items = r.sections.as_ref()?.iter().find_map(|s| s.items.as_ref())?;
     let resolved = items.iter().filter(|i| i.resolved).count();
     let waived = items.iter().filter(|i| i.waived).count();
     let mut line = format!("checklist: {resolved} of {} items resolved", items.len());
@@ -386,8 +402,14 @@ fn head(csp_style: &str, csp_script: &str) -> String {
 
 fn stamp(page: &Page<'_>, check: Option<&CheckLine>) -> String {
     let read = &page.e.read;
-    let commit = read.commit.as_deref().map_or("no commit", |c| &c[..c.len().min(12)]);
-    let branch = read.branch.as_deref().unwrap_or("no branch (detached head)");
+    let commit = read
+        .commit
+        .as_deref()
+        .map_or("no commit", |c| &c[..c.len().min(12)]);
+    let branch = read
+        .branch
+        .as_deref()
+        .unwrap_or("no branch (detached head)");
     let changes = if read.uncommitted_record_changes {
         "record files have uncommitted changes"
     } else {
@@ -428,14 +450,23 @@ fn controls(total: usize) -> String {
 }
 
 /// A brief list of links: open when short, collapsed under its count when long.
-fn brief(page: &Page<'_>, title: &str, ids: &[usize], note: impl Fn(&ExportedRecord) -> String) -> String {
+fn brief(
+    page: &Page<'_>,
+    title: &str,
+    ids: &[usize],
+    note: impl Fn(&ExportedRecord) -> String,
+) -> String {
     let mut out = format!("<h3>{} ({})</h3>\n", esc(title), ids.len());
     if ids.is_empty() {
         out.push_str("<p class=\"note\">None.</p>\n");
         return out;
     }
     let open = if ids.len() <= 12 { " open" } else { "" };
-    let _ = write!(out, "<details class=\"group\"{open}><summary>{} records</summary><ul class=\"brief\">", ids.len());
+    let _ = write!(
+        out,
+        "<details class=\"group\"{open}><summary>{} records</summary><ul class=\"brief\">",
+        ids.len()
+    );
     for &i in ids {
         let r = page.record(i);
         let _ = write!(
@@ -452,7 +483,9 @@ fn brief(page: &Page<'_>, title: &str, ids: &[usize], note: impl Fn(&ExportedRec
 
 fn attention(page: &Page<'_>) -> String {
     let all = || (0..page.e.records.len()).filter(|&i| page.record(i).header_readable);
-    let gated: Vec<usize> = all().filter(|&i| !page.record(i).view.gated_moves.is_empty()).collect();
+    let gated: Vec<usize> = all()
+        .filter(|&i| !page.record(i).view.gated_moves.is_empty())
+        .collect();
     let under_way: Vec<usize> = all()
         .filter(|&i| page.record(i).view.state == StateCategory::UnderWay)
         .collect();
@@ -481,7 +514,10 @@ fn attention(page: &Page<'_>) -> String {
         }
     }
     out.push_str(&brief(page, "Under way", &under_way, |r| {
-        format!("<span class=\"status\">{}</span>", esc(r.view.status.as_deref().unwrap_or_default()))
+        format!(
+            "<span class=\"status\">{}</span>",
+            esc(r.view.status.as_deref().unwrap_or_default())
+        )
     }));
     out.push_str(&brief(page, "Ready", &ready, |r| {
         format!("<span class=\"status\">{}</span>", esc(&r.record_type))
@@ -553,14 +589,23 @@ fn group(title: &str, note: &str, entries: String, count: usize) -> String {
     } else {
         format!("<p class=\"note\">{}</p>", esc(note))
     };
-    format!("<h3>{} ({count})</h3>{note}<ul>{entries}</ul>\n", esc(title))
+    format!(
+        "<h3>{} ({count})</h3>{note}<ul>{entries}</ul>\n",
+        esc(title)
+    )
 }
 
 /// Whether following `part_of` from `i` comes back to it.
 fn in_loop(page: &Page<'_>, i: usize) -> bool {
     let mut at = i;
     for _ in 0..page.e.records.len() {
-        match page.record(at).view.parent.as_deref().and_then(|p| page.by_id.get(p)) {
+        match page
+            .record(at)
+            .view
+            .parent
+            .as_deref()
+            .and_then(|p| page.by_id.get(p))
+        {
             Some(&next) if next == i => return true,
             Some(&next) => at = next,
             None => return false,
@@ -571,7 +616,11 @@ fn in_loop(page: &Page<'_>, i: usize) -> bool {
 
 fn work_section(page: &Page<'_>) -> String {
     let tree = Tree::of(page);
-    let contained = page.e.type_roles.values().any(|t| t.work && t.part_of.is_some());
+    let contained = page
+        .e
+        .type_roles
+        .values()
+        .any(|t| t.work && t.part_of.is_some());
     let mut out = String::from("<h2 id=\"work\">Work</h2>\n");
     if !tree.in_tree.iter().any(|&b| b) {
         out.push_str("<p class=\"note\">No open work record.</p>\n");
@@ -611,7 +660,12 @@ fn work_section(page: &Page<'_>) -> String {
     let (entries, n) = render(&parents);
     out.push_str(&group("Parents", "", entries, n));
     let (entries, n) = render(&no_parent);
-    out.push_str(&group("No parent", "Records that are not part of another record.", entries, n));
+    out.push_str(&group(
+        "No parent",
+        "Records that are not part of another record.",
+        entries,
+        n,
+    ));
     let (entries, n) = render(&elsewhere);
     out.push_str(&group(
         "Part of a record shown elsewhere",
@@ -702,6 +756,9 @@ pub(crate) fn render(export: &ExportReport, check: Option<&CheckLine>, serving: 
     out.push_str(&other_section(&page));
     out.push_str(&closed_section(&page));
     out.push_str(&unreadable_section(&page));
-    let _ = write!(out, "</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n");
+    let _ = write!(
+        out,
+        "</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n"
+    );
     out
 }

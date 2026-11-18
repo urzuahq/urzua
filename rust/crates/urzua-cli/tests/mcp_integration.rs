@@ -830,8 +830,18 @@ fn show_record_returns_the_record_with_its_sections_text_and_supersession_edges(
 fn the_record_tools_carry_the_exports_view_model_keys() {
     let dir = fixture("viewmodel");
     let keys = [
-        "title", "fields", "status", "state", "state_decided_by", "waiting_on", "ready",
-        "parent", "children", "children_by_state", "refers_to", "referred_by",
+        "title",
+        "fields",
+        "status",
+        "state",
+        "state_decided_by",
+        "waiting_on",
+        "ready",
+        "parent",
+        "children",
+        "children_by_state",
+        "refers_to",
+        "referred_by",
     ];
     let listed = call_one(&dir, "urzua_list_records", json!({}));
     let first = &listed["result"]["structuredContent"]["records"][0];

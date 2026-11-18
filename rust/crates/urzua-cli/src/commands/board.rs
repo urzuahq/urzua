@@ -115,7 +115,11 @@ fn build_page(
                 errors: count(FindingSeverity::Error),
                 warnings: count(FindingSeverity::Warning),
                 infos: count(FindingSeverity::Info),
-                waived: report.findings.iter().filter(|f| f.waived.is_some()).count(),
+                waived: report
+                    .findings
+                    .iter()
+                    .filter(|f| f.waived.is_some())
+                    .count(),
             }
         });
     Ok((render(&export, check.as_ref(), serving), export))

@@ -11,8 +11,8 @@ use crate::config::{Config, RelationRole};
 use crate::graph::GraphEdge;
 use crate::record::Record;
 use crate::rules::{
-    build_normalized_index, extract_references, natural_cmp, record_id,
-    unfinished_dependencies, title_in_text, RecordIndex,
+    build_normalized_index, extract_references, natural_cmp, record_id, title_in_text,
+    unfinished_dependencies, RecordIndex,
 };
 use crate::status_model::StatusDecl;
 use crate::values::RecordId;
@@ -183,10 +183,17 @@ fn state_of(
     let field = config.record_types[type_name].relation_field(RelationRole::Status);
     let status = present(record.header.get(field));
     let declared = decls.get(type_name).filter(|d| {
-        !(d.values.is_empty() && d.success.is_empty() && d.failure.is_empty() && d.progress.is_empty())
+        !(d.values.is_empty()
+            && d.success.is_empty()
+            && d.failure.is_empty()
+            && d.progress.is_empty())
     });
     let Some(decl) = declared else {
-        return (status, StateCategory::NoStatuses, "no-statuses-declared".to_string());
+        return (
+            status,
+            StateCategory::NoStatuses,
+            "no-statuses-declared".to_string(),
+        );
     };
     let Some(value) = status.as_deref() else {
         return (status, StateCategory::NotStarted, "no-status".to_string());
@@ -213,7 +220,10 @@ pub fn parent_of<'a>(
     record: &Record,
 ) -> Option<&'a Record> {
     let field = config.part_of.get(&record.record_type)?;
-    let targets = config.pointer_targets.get(&record.record_type)?.get(field)?;
+    let targets = config
+        .pointer_targets
+        .get(&record.record_type)?
+        .get(field)?;
     let value = record.header.get(field)?;
     extract_references(value).into_iter().find_map(|reference| {
         index
@@ -225,11 +235,7 @@ pub fn parent_of<'a>(
 
 /// The records `record` is part of, nearest first. A loop in the declarations
 /// ends the chain where it would revisit a record.
-pub fn ancestors<'a>(
-    config: &Config,
-    index: &RecordIndex<'a>,
-    record: &Record,
-) -> Vec<&'a Record> {
+pub fn ancestors<'a>(config: &Config, index: &RecordIndex<'a>, record: &Record) -> Vec<&'a Record> {
     let mut chain: Vec<&Record> = Vec::new();
     let mut at = record;
     while let Some(parent) = parent_of(config, index, at) {
@@ -329,10 +335,7 @@ fn gated_moves(
             continue;
         }
         for to in next {
-            let reserved = gate
-                .to
-                .iter()
-                .any(|g| crate::authority::same_status(g, to));
+            let reserved = gate.to.iter().any(|g| crate::authority::same_status(g, to));
             let listed = moves.iter().any(|m: &GatedMove| m.to == *to);
             if reserved && !listed {
                 moves.push(GatedMove {
@@ -459,9 +462,7 @@ fn containment(records: &[Record], config: &Config, index: &RecordIndex<'_>) -> 
         .collect();
     let parent: Vec<Option<usize>> = records
         .iter()
-        .map(|r| {
-            parent_of(config, index, r).and_then(|p| position.get(p.path.as_path()).copied())
-        })
+        .map(|r| parent_of(config, index, r).and_then(|p| position.get(p.path.as_path()).copied()))
         .collect();
     let mut children = vec![Vec::new(); records.len()];
     for (child, parent) in parent.iter().enumerate() {
@@ -520,26 +521,32 @@ pub fn compute(input: &ViewInput<'_>) -> ViewModel {
                 .filter_map(|c| ids[*c].clone())
                 .collect();
             children = natural_sorted(children);
-            let (title, title_is_fallback) = match title_in_text(record, text).filter(|t| !t.is_empty()) {
-                Some(title) => (title, false),
-                None => (
-                    ids[i].clone().unwrap_or_else(|| {
-                        record
-                            .path
-                            .file_stem()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_default()
-                    }),
-                    true,
-                ),
-            };
+            let (title, title_is_fallback) =
+                match title_in_text(record, text).filter(|t| !t.is_empty()) {
+                    Some(title) => (title, false),
+                    None => (
+                        ids[i].clone().unwrap_or_else(|| {
+                            record
+                                .path
+                                .file_stem()
+                                .map(|s| s.to_string_lossy().to_string())
+                                .unwrap_or_default()
+                        }),
+                        true,
+                    ),
+                };
             let is_work = roles[&record.record_type].work;
             RecordView {
                 title,
                 title_is_fallback,
                 fields: fields_of(config, record_ref, text),
                 gated_moves: if state.is_open() {
-                    gated_moves(config, decls.get(&record.record_type), record, status.as_deref())
+                    gated_moves(
+                        config,
+                        decls.get(&record.record_type),
+                        record,
+                        status.as_deref(),
+                    )
                 } else {
                     Vec::new()
                 },
@@ -572,7 +579,10 @@ pub fn checkbox_counts(content: &str) -> (usize, usize) {
     let mut fence: Option<char> = None;
     for line in content.lines() {
         let trimmed = line.trim_start();
-        if let Some(marker) = ['`', '~'].into_iter().find(|m| trimmed.starts_with([*m; 3])) {
+        if let Some(marker) = ['`', '~']
+            .into_iter()
+            .find(|m| trimmed.starts_with([*m; 3]))
+        {
             fence = match fence {
                 Some(open) if open == marker => None,
                 None => Some(marker),
@@ -587,8 +597,12 @@ pub fn checkbox_counts(content: &str) -> (usize, usize) {
             .strip_prefix(['-', '*', '+'])
             .filter(|rest| rest.starts_with(' '))
             .map(str::trim_start);
-        let boxed = item
-            .filter(|rest| rest[3.min(rest.len())..].chars().next().is_none_or(char::is_whitespace));
+        let boxed = item.filter(|rest| {
+            rest[3.min(rest.len())..]
+                .chars()
+                .next()
+                .is_none_or(char::is_whitespace)
+        });
         match boxed.and_then(|rest| rest.get(..3)) {
             Some("[ ]") => unticked += 1,
             Some("[x]" | "[X]") => ticked += 1,

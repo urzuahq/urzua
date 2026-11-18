@@ -152,7 +152,9 @@ fn checklists(session: &Session) -> Checklists {
             else {
                 continue;
             };
-            let Some(decl) = &delivery.items else { continue };
+            let Some(decl) = &delivery.items else {
+                continue;
+            };
             let judged = urzua_core::rules::judge_items(record, items, config, delivery, env);
             let listed = judged
                 .items
