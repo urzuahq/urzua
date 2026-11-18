@@ -24,12 +24,27 @@ fn own_config_declares_a_level_for_every_shipped_rule() {
         .filter(|id| !config.rules.contains_key(*id))
         // A rule that is on for every configuration needs no declaration.
         .filter(|id| urzua_core::rules::default_on(id).is_none())
+        .filter(|id| !NOT_YET_RELEASED.contains(id))
         .collect();
     assert!(
         undeclared.is_empty(),
         "rules with no declared level in .urzua/config.yaml: {undeclared:?}"
     );
+    let stale: Vec<&str> = NOT_YET_RELEASED
+        .iter()
+        .copied()
+        .filter(|id| config.rules.contains_key(*id))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "declared in .urzua/config.yaml now, so remove them from NOT_YET_RELEASED: {stale:?}"
+    );
 }
+
+/// Rules the build ships that the configuration cannot declare yet: the latest
+/// release rejects a rule key it does not know, so the line is added once a release
+/// carries the rule.
+const NOT_YET_RELEASED: &[&str] = &["status.children-agreement"];
 
 fn git(dir: &Path, args: &[&str]) {
     assert!(Command::new("git")

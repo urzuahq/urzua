@@ -131,6 +131,9 @@ pub enum Declaration {
     StatusTransitions,
     /// `statuses.delivery`, read by `status.delivery-agreement`.
     StatusDelivery,
+    /// A `pointer_fields` entry declared `part_of: true`, read by
+    /// `status.children-agreement`.
+    PartOf,
     /// A record type declaring `role: suppression`, which
     /// `waiver.matches-nothing` reads the records of.
     WaiverType,
@@ -161,6 +164,7 @@ impl Declaration {
             Declaration::StatusForbid => "statuses.forbid",
             Declaration::StatusTransitions => "statuses.transitions",
             Declaration::StatusDelivery => "statuses.delivery",
+            Declaration::PartOf => "a `pointer_fields` entry with `part_of: true`",
             Declaration::WaiverType => "a record type with `role: suppression` and `effective_requires: [Reason, Expires]` (or `permanent`), the form `waive --from-report` accepts",
         }
     }
@@ -2023,6 +2027,31 @@ pub const RULE_TABLE: &[RuleDef] = &[
         },
     },
     RuleDef {
+        id: RULE_STATUS_CHILDREN_AGREEMENT,
+        description: "A record's `Status` contradicts the records that are part of it, through a `pointer_fields` entry declared `part_of: true`. Reports, on the parent's file, a parent that is not started (a status outside its type's `statuses.progress`, which that type must declare) while a child is under way or finished, and a parent that is finished (`statuses.success`) while a child is neither finished nor dropped; the message names the parent, its status, the children by state and up to five of the children that make it disagree. A parent whose children are all finished and which is still under way is not reported: finishing it is a judgement its own checklist governs. A dropped parent is not reported, nor is one whose type declares no `statuses.progress` and is not finished, nor one whose header cannot be read, nor a child whose `part_of` field names several records. The states are the ones `urzua export` computes, so the finding is `state_disagrees_with_children`. On a not-started parent whose type declares exactly one progress status, no gate reserves the move and the type's transitions lead there, the suggested action sets the parent's `Status` to it; otherwise the finding says who may make the move or that the type names no single status to move to. Opt-in, off by default, no options. Enabled with no `part_of` field declared, or with a parent type that declares no `statuses.progress`, it says so in one notice. On a `--base` run a change to a child that is new, or whose `Status` or `part_of` value differs from the merge base's, brings its parent into the examined set, so the parent's finding is reported at the pull request that caused it.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::CrossRecord,
+        needs_identity_index: true,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: Some(Declaration::PartOf),
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("children-parent-not-started", ActionDecl::FIELD_SET),
+            VariantAction::new("children-parent-not-started-gated", ActionDecl::Exempt("the move to the progress status is reserved by an `authority` gate for a person; the finding names who may make it and no action offers it")),
+            VariantAction::new("children-parent-not-started-choice", ActionDecl::Exempt("the type declares no single progress status, or its declared transitions do not lead to it from the parent's status, so which status to move to is a judgement")),
+            VariantAction::new("children-parent-finished", ActionDecl::Exempt("a finished parent with an open child is repaired by reopening the parent or finishing or dropping the child, which is a judgement")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| status_children_agreement(c.records, c.config),
+    },
+    RuleDef {
         id: RULE_DATE_FIELD_VALID,
         description: "A value in a declared date field (`date_fields`) that is not a well-formed `YYYY-MM-DD` date, or is well-formed but not a real calendar date such as `2026-02-30`, is an error (`MILE-137`). A blank, placeholder or pending value is not a date value and is left to `field.quality` and `status.required-field-missing`. Needs `date_fields`. The population counts the date values examined.",
         scope: Scope::Records,
@@ -2790,6 +2819,7 @@ mod tests {
                 (RULE_STATUS_DELIVERY_AGREEMENT, Declaration::StatusDelivery),
                 (RULE_STATUS_DONE_ITEMS_SHAPE, Declaration::DeliveryItems),
                 (RULE_STATUS_WAIVED_ITEM_STALE, Declaration::DeliveryItems),
+                (RULE_STATUS_CHILDREN_AGREEMENT, Declaration::PartOf),
                 (RULE_SECTION_REQUIRED, Declaration::SectionsRequired),
                 (RULE_SECTION_SHAPE, Declaration::SectionsRequired),
                 (RULE_SECTION_DUPLICATE, Declaration::UniqueHeadings),

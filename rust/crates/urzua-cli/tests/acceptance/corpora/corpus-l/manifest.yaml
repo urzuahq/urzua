@@ -9,3 +9,5 @@ fixtures:
   irregularity: 'Done, with no dependency: the finished blocker most cases depend on, which the roadmap ignores.'
 - path: .urzua/containment.yaml
   irregularity: 'a milestone type whose Part-of field declares containment, grouped by Phase, which only the parent writes; not a record.'
+- path: .urzua/children.yaml
+  irregularity: 'a milestone type whose Part-of field declares containment, with one progress status, and status.children-agreement on; not a record.'

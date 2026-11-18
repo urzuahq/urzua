@@ -211,6 +211,11 @@ struct PostVerdict {
     /// The gated paths whose content is the one on the configured base ref,
     /// reported at the configured lower level. `None` when there are none.
     base_match: Option<BaseMatch>,
+    /// One line per parent record whose state a record the command changed
+    /// contradicts (`status.children-agreement`), when the rule is on. The
+    /// finding is on the parent's file, which the command did not change.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    parent_state: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -234,6 +239,7 @@ impl PostVerdict {
             person: String::new(),
             adopted: Vec::new(),
             base_match: None,
+            parent_state: Vec::new(),
         }
     }
 
@@ -624,11 +630,60 @@ fn judge_changes(
     };
     let all = report.as_ref().map(live).unwrap_or_default();
     let (old, new) = partition_by_head(config, &all, base);
+    let already: HashSet<PathBuf> = new
+        .iter()
+        .filter(|f| f.rule == urzua_core::rules::RULE_STATUS_CHILDREN_AGREEMENT)
+        .map(|f| f.file.clone())
+        .collect();
     write_memory(&repo_root, &remembered);
 
     let mut v = report_verdict(&to_check, &gates, (new, old), scan.note.as_deref());
     v.adopted = adopted;
+    with_parent_state(v, parent_state_lines(config, &loaded, &to_check, &already))
+}
+
+/// Adds the parent lines to what the agent and the person are told.
+fn with_parent_state(mut v: PostVerdict, lines: Vec<String>) -> PostVerdict {
+    if lines.is_empty() {
+        return v;
+    }
+    let text = lines.join("\n");
+    if v.verdict == "allow" {
+        v.verdict = "allow-with-warnings";
+        v.message = format!("{}\n{text}", v.message);
+        v.agent = text;
+    } else {
+        v.message = format!("{}\n{text}", v.message);
+        v.agent = if v.agent.is_empty() {
+            text
+        } else {
+            format!("{}\n{text}", v.agent)
+        };
+    }
+    v.parent_state = lines;
     v
+}
+
+/// One line per parent whose state a changed child contradicts, when
+/// `status.children-agreement` is on. A parent already reported as a new
+/// finding is not told again.
+fn parent_state_lines(
+    config: &Option<PathBuf>,
+    loaded: &Config,
+    changed: &[String],
+    already: &HashSet<PathBuf>,
+) -> Vec<String> {
+    if changed.is_empty() || !super::parent_state::enabled(loaded) {
+        return Vec::new();
+    }
+    let Ok(session) = crate::session::Session::open(config.clone()) else {
+        return Vec::new();
+    };
+    let changed: HashSet<PathBuf> = changed.iter().map(PathBuf::from).collect();
+    super::parent_state::lines(&session, &changed, already)
+        .into_iter()
+        .map(|line| format!("{P}: {line}"))
+        .collect()
 }
 
 /// The comparison rule (`base`, `base_match`) the configuration sets.

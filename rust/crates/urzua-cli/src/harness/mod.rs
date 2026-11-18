@@ -20,6 +20,7 @@ mod hook;
 mod json;
 mod limits;
 mod lock;
+mod parent_state;
 mod post_command;
 mod presence;
 pub(crate) mod receipt;

@@ -110,7 +110,7 @@ has begun, so its records that are neither finished nor dropped are *open*. The 
 declares a status which is none of `initial`, `success` and `failure` (a type with only those has nothing to declare, and a type that declares no `initial` is never named: without it the board cannot tell a start status from an in-between one, so it does not guess), with
 those statuses, and says that a parent's state cannot disagree with its children until a progress set is declared: add `statuses.progress` under the type's `statuses` to
 name the statuses that mean work has begun. *Not started* is used only for a type that declares a progress set, for a
-status outside it. Nothing is left off the page: its rows number as many as `urzua export` returns records.
+status outside it. A parent that *disagrees* is the one `check` reports, when the repository enables `status.children-agreement` ([config](config.md#containment-part_of)), so the same finding can fail a build instead of waiting to be seen on the page. Nothing is left off the page: its rows number as many as `urzua export` returns records.
 
 The search and the state filter are a small inline script; with script disabled the page reads the same, without them.
 It is readable at 360 px wide, with no sideways scroll, and has a light and a dark palette chosen by the viewer's setting.

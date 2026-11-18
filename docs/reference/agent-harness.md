@@ -266,6 +266,11 @@ protected-path change is reported once, to you, however it arrived. Ordinary fin
 checkout brought in are not reported. The agent gets a short line; you get a message only for a gated
 move, a protected-path change, or a check that could not run.
 
+When the repository enables `status.children-agreement` ([config](config.md#containment-part_of)), the post-command report
+also says, in one line per parent, when a record the command changed contradicts the status of the record it is part of
+("PARENT is still 'Planned' while CHILD is now 'Active'"), and the editor hook's message for an allowed edit says it for a
+proposed child. Neither blocks; the finding itself is on the parent's file. With the rule off, nothing is added.
+
 Each gated change is compared with a base branch: the file as it is after the command, its mode and its
 raw bytes (no filters run) against the same path in that branch's tree (a symlink or an executable bit
 the branch does not have never matches). When every one matches, as after a fast-forward

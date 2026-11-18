@@ -1,0 +1,23 @@
+schema_version: 2
+record_types:
+  milestone:
+    dir: records
+    prefix: MILE
+    required_fields: [Status]
+    known_fields: [Part-of]
+    header_shape: yaml-frontmatter
+    pointer_fields:
+      - {name: Part-of, targets: [milestone], part_of: true}
+    statuses:
+      values: [Planned, Active, Done, WontDo]
+      initial: [Planned]
+      progress: [Active]
+      success: [Done]
+      failure: [WontDo]
+      transitions:
+        Planned: [Active, WontDo]
+        Active: [Done, WontDo]
+        Done: [Active]
+rules:
+  header.required-fields: error
+  status.children-agreement: error
