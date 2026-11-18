@@ -4,6 +4,22 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.10 (2026-11-18)
+
+### Features
+
+- `urzua explain --types` carries, for each type that declares them, each gate that names the type (`gates`, one entry per gate, no logins), the values a field declares (`field_values`), the condition sentences in place of their count (`conditions`), the revision-log classes the type declares (`revision_log_classes`) and a `checklist` marker with its section, the engine's evidence categories, the tier the configuration declares for each and the resolving tiers; it prints each array of scalars and each flat object on one line. `urzua explain --type <name>` shows a type's `checklist`: the engine's evidence categories, the tier each is declared to compute to with its line, beside the `resolving_tiers`. `template` says whether `urzua new` can read its file when the command runs (`readable_when_run`) and is printed whether or not it does. The summary carries one note that these are declarations. The summary's `conditions` is now a list of sentences, not a count.
+
+#### Opt-in: ask the person about a gated edit in the agent session. `harness.guardrails.acceptance` takes `in_session: ask` (default `refuse`). With it, an agent's Write, Edit or MultiEdit that moves a record into a status the `authority` table reserves goes to the person through the agent host's permission prompt instead of being refused, in the Claude Code permission mode `default`, from the main session, when the session's name is a login in the gate's group. The hook writes the prompt's reason and adds a receipt row to the edit, which begins "Recorded as approved in an agent session, not verified" and ends "the pull request check does not rely on it". Approving writes the file; declining writes nothing. Nothing is stored and no hook is added.
+
+The local commit check is unchanged except that, under `require_evidence` and with no actors file, a gated move whose record carries a receipt row for that move (a row the diff adds to the declared revision log, naming the record's id and the statuses left and entered, dated the day of its change) is reported at info as unverified. The row is text anything able to edit the record can write, so a repository that relies on local `require_evidence` should not turn the mode on; the pull request check with the actors file is the control. On a repository with `require_evidence` off (the default), a gated status change made by shell and committed is not refused locally; the local check reports it at info and the pull request check decides.
+
+With the mode off, one change applies to every repository with `protected-paths` on: the edit tools are refused writes under any git directory and to `.git` pointer files, including a git directory outside the working tree (a separate git directory, a symlinked `.git`, a submodule's, a bare repository's), because its hooks and config are there. As a consequence an agent can no longer edit `.git/info/exclude`, which it could before.
+
+### Fixes
+
+- The hook command's fallback when `urzua` is missing or too old no longer refuses every edit on a configuration whose guardrails are open because a quoted value sits in a one-line flow map elsewhere in the file. It now scans the configuration as YAML reads it, in linear time: quoted scalars and flow collections on one line or several, comments and block scalars are ordinary, and so are anchors and aliases outside `harness`. It reads keys with blanks before the colon and an indented document, and refuses what it cannot place: line breaks awk does not see (a lone carriage return, U+0085, U+2028, U+2029), a byte order mark after the start, bytes that are not UTF-8 and control characters, a tab in leading whitespace on any line, a duplicate top-level key, a directive without `---`, a merge key at the root, deep nesting, a line longer than 64 KiB, and a complex `? harness` key. Run `urzua harness update` to install the new hook command.
+
 ## 0.4.9 (2026-11-17)
 
 ### Features
