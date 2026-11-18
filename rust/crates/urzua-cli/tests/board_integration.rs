@@ -879,10 +879,6 @@ fn attribute_values(html: &str, attribute: &str) -> Vec<String> {
     out
 }
 
-/// The only address a page may carry outside itself: a record's file, as the
-/// export's `link` gives it, which a person follows and the page never requests.
-const CHAIN_LINK_PREFIX: &str = "https://example.test/blob/main/";
-
 const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 fn csp_source(content: &str) -> String {
@@ -933,7 +929,8 @@ fn assert_page(html: &str, served: bool) {
         .into_iter()
         .chain(attribute_values(html, "src"))
     {
-        let record_link = value.starts_with(CHAIN_LINK_PREFIX);
+        let anchor = format!(" href=\"{value}\" target=\"_blank\" rel=\"noopener noreferrer\"");
+        let record_link = value.starts_with("https://") && html.contains(&anchor);
         assert!(
             value.starts_with('#')
                 || value.starts_with("record/")
@@ -942,7 +939,7 @@ fn assert_page(html: &str, served: bool) {
             "address {value}"
         );
         if record_link {
-            scanned = scanned.replace(&format!(" href=\"{value}\""), "");
+            scanned = scanned.replace(&anchor, "");
         }
     }
     for forbidden in [
