@@ -946,7 +946,7 @@ fn the_title_is_the_one_the_title_rules_read() {
         "---\n# ADR-1: A title",
         "# Fake front\n---\n```\n# Fake fenced\n```\n# ADR-1: A title",
     );
-    p["tool_input"]["content"] = serde_json::json!(text.replacen("---\nStatus", "---\nStatus", 1));
+    p["tool_input"]["content"] = serde_json::json!(text);
     let v = hook(&dir, "edit", &p, "Alice");
     let r = decision(&v).1;
     assert!(r.ends_with("as the agent wrote it: ADR-1: A title"), "{r}");

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.167'
+Version: '0.168'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:e2981c06fd2407d7fe81d1c1d5a796caf66cfa47d57f6e188a22412d3d1a545d, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -1030,15 +1030,18 @@ harness:
   person's is allowed). A denying guardrail that cannot judge refuses an agent's edit to the protected
   paths too, including this file; a person repairs it by editing outside the agent harness (a plain editor
   or a terminal), where no hook runs. `urzua doctor` and the verdict's message say so.
-- **`acceptance.in_session`** is `refuse` or `ask` (anything else is a load error; `ADR-102`, amendment of
+- **`acceptance.in_session`** is `refuse` or `ask` (anything else is a load error; `ADR-102`, amendments of
   2026-11-17). `refuse`, and the key undeclared, refuse an agent's move to a gated status as before. `ask` puts an
-  agent's edit that moves one record into a gated status to the person through the agent host's permission prompt, with
-  a reason built from values checked against the configuration and the record's cleaned title, and with a receipt row
-  added to the edit; nothing is stored. Where the adapter cannot show the person that prompt, or the session's name is
-  not a login in the gate's group, the edit stays refused and the message says what to do. With `ask`, under
-  `require_evidence` and with no `--actors` file, `urzua check` reports a gated move whose record carries the receipt
-  row for that move at `info`, as unverified; nothing else in the check changes, and CI never reads the row.
-  Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept." The reason's wording and its 80-character title cap, the receipt row's exact text, the sanitising list and refusing the git directory to edit tools were decided by the builder and the orchestrator on 2026-11-17, pending maintainer review.
+  agent's edit that moves one existing record into a status exactly one gate reserves, at the path as written, to the
+  person through the agent host's permission prompt, with a reason built from values checked against the configuration
+  and the record's cleaned title, and with a receipt row and the entered status's blank date fields added to the edit;
+  nothing is stored and no hook is added. Where the person cannot be asked, the edit is answered as without the mode or
+  refused with what to do. With `ask`, under `require_evidence` and with no `--actors` file, `urzua check` reports a gated
+  move whose record carries a receipt row for that move at `info`, as unverified; nothing else in the check changes, and
+  CI never reads the row. A receipt row for a gated move is a row of the record's declared revision log, read as that log with its date and class columns, that is in the head copy and not in the base copy the check compares against (the record at the merge base), whose narrative begins "Recorded as approved in an agent session, not verified" followed by this record's id, the status the move leaves and the status it enters (`<id> <field> moved from '<from>' to '<to>'`), and whose date is the date the check reads for that row's change: the day of the commit that added it (the later of its author and committer days), or the evaluation date while it is uncommitted. The row is text and unverified: the name in it is not checked. Approving writes the file with the row; declining writes nothing; the person's own edits
+  and the commit check behave as without the mode except for that row under a local `require_evidence`: accepted by the
+  maintainer on 2026-11-17 ("I accept."). The key's name, the reason's wording, the row's text, the sanitising and the
+  receipt-row definition were decided by the builder and the orchestrator on 2026-11-18, pending maintainer review.
 - **`editor-hook.pending_pair`** is `allow` or `refuse` (anything else is a load error; `ADR-69` amendment of
   2026-11-16, `MILE-287`). It decides an edit whose only new error findings are `relation.pair-reciprocity` or
   `relation.supersession-reciprocity` findings that one edit of another record would satisfy (the other half of a
@@ -3012,3 +3015,5 @@ proves this configuration produces the three findings.
 > | 2026-11-17 | Bumped to `0.165`. `acceptance.in_session: ask` needs the `post-command` guardrail; with it, an uncommitted gated move without a confirmed, unused approval is an error at the local check whatever `require_evidence` says; the receipt is a local record. Decided by the builder on 2026-11-17, pending maintainer review. **Why:** a security review of the pull request that builds it found that never asking was rewarded and that a shell can forge an approval. | **substantive** |
 > | 2026-11-17 | Bumped to `0.166`. With `in_session: ask` a gated move with no approval is judged as without the mode (`require_evidence` decides); only a pending or invalid approval is an error, and a confirmed one satisfies the check. **Why:** the orchestrator withdrew the instruction that made a move with no approval an error, because it blocked a maintainer committing an acceptance he made himself. | **substantive** |
 > | 2026-11-17 | Bumped to `0.167`. `acceptance.in_session: ask` stores nothing: `approval_minutes` and the requirement of `post-command` are removed, and under `require_evidence` a record's receipt row lowers the local finding to info as unverified. **Why:** Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept." | **substantive** |
+> | 2026-11-18 | Bumped to `0.168`. States the definition of a receipt row the local check honours under `require_evidence` (a row the diff adds to the declared revision log, naming the record's id and the statuses left and entered, dated the day of its change); the mode asks only for one gate, an existing record and the path as written. **Why:** a security review of the pull request that builds it found the earlier match accepted rows outside the log, misdated or from an earlier move; decided by the builder and the orchestrator on 2026-11-18, pending maintainer review. | **substantive** |
+> | 2026-11-18 | Closing note on this pull request's earlier rows: the rows of 2026-11-17 for `0.164`, `0.165` and `0.166` describe intermediate states the merged change does not contain (`acceptance.approval_minutes`, the requirement of `post-command`, and stored approvals that were pending, confirmed or invalid); `0.167` and `0.168` describe what ships. **Why:** rows are history and stay; this says which of them never shipped. | **structural** |
