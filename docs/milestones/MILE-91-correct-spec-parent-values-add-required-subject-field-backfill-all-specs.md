@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: BUG-10
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml#record_types::spec@sha256:de227f13cc15380e1b8a38e013653a08617e96a6493646cd5ff28d4722f25c7d, code:.urzua/config.yaml#rules::header.required-fields@sha256:fead838027afc70a4e72e88f77d9c05a400485472a3e74683f459a9ff6144a84, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md, spec:docs/specs/SPEC-18-the-spec-record-type.md
+Realized-by: code:.urzua/config.yaml#record_types::spec@sha256:9a51521856a144a1fdc335f2d88b7c34956cd9961810a226b5378f58216f7e0c, code:.urzua/config.yaml#rules::header.required-fields@sha256:fead838027afc70a4e72e88f77d9c05a400485472a3e74683f459a9ff6144a84, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md, spec:docs/specs/SPEC-18-the-spec-record-type.md
 ---
 # 91 — Correct spec Parent values, add required Subject field, backfill all specs
 
@@ -44,8 +44,8 @@ type, no new mechanism or rule.
 
 ## Done means
 
-- `spec` requires a one-line `Subject` field in `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml#record_types::spec@sha256:de227f13cc15380e1b8a38e013653a08617e96a6493646cd5ff28d4722f25c7d
-- Every spec carries a `Subject`, and `urzua check` reports no missing `Subject`. — evidence: code:.urzua/config.yaml#record_types::spec@sha256:de227f13cc15380e1b8a38e013653a08617e96a6493646cd5ff28d4722f25c7d, code:.urzua/config.yaml#rules::header.required-fields@sha256:fead838027afc70a4e72e88f77d9c05a400485472a3e74683f459a9ff6144a84, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
+- `spec` requires a one-line `Subject` field in `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml#record_types::spec@sha256:9a51521856a144a1fdc335f2d88b7c34956cd9961810a226b5378f58216f7e0c
+- Every spec carries a `Subject`, and `urzua check` reports no missing `Subject`. — evidence: code:.urzua/config.yaml#record_types::spec@sha256:9a51521856a144a1fdc335f2d88b7c34956cd9961810a226b5378f58216f7e0c, code:.urzua/config.yaml#rules::header.required-fields@sha256:fead838027afc70a4e72e88f77d9c05a400485472a3e74683f459a9ff6144a84, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
 - The corrected `Parent` values from `BUG-10` are in place on all specs. — evidence: spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md
 - `SPEC-18` documents both. — evidence: spec:docs/specs/SPEC-18-the-spec-record-type.md
 
@@ -81,3 +81,4 @@ type, no new mechanism or rule.
 > | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#record_types::spec@sha256:485bee151ece Reason: Narrowed to record_types::spec: the required Subject field is declared in the spec type's entry. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
 > | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#rules::header.required-fields@sha256:fead838027af Reason: Added rules::header.required-fields: urzua check reports a missing Subject only while that rule is enabled, so the item rests on it as well. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml#record_types::spec` (lines 222-295) 485bee151ece -> de227f13cc15. Reason: config.yaml: every record type's revision_log gains the class evidence and evidence_class: evidence, so a re-pin row no longer bumps a version, and the rule embodiment.back-pointer-resolution declares its two markers at their default values; neither changes what this record claims **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml#record_types::spec` (lines 225-300) de227f13cc15 -> 9a51521856a1. Reason: in .urzua/config.yaml an export link prefix is declared and the Parent reference of a spec is marked part_of; nothing this record relies on changed (applied by the orchestrator through the shell) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
