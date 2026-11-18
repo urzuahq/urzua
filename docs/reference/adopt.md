@@ -160,10 +160,16 @@ key urzua does not recognize, which `doctor` treats as an error.
 ## 7. Create new records with `new`
 
 An agent starting work in a repository runs `urzua explain --types` first: a short summary of every
-record type the configuration declares (prefix, directories, fields, states, references and the
-`urzua new` command). `urzua explain --type <name>` gives one type in full: field values, allowed
-moves, each requirement as one sentence with what counts as missing, gates, and the configuration
-line every entry came from.
+record type the configuration declares: prefix, directories, required and optional fields, states
+with the initial ones, references, and, for a type that declares them, each gate that names the type
+(`gates`), the values a field declares (`field_values`), each condition as one `declared: when ...`
+sentence (`conditions`), the revision-log classes (`revision_log_classes`) and a `checklist` marker
+(its section, the evidence categories and the tier the configuration declares for each, and the
+resolving tiers). These are declarations, not what is enforced: `urzua check` says that.
+`urzua explain --type <name>` gives one type in full: field values, allowed moves, each requirement as
+one sentence with what counts as missing, gates with who may act, the checklist's evidence categories
+beside their tiers, whether `urzua new` can read the type's template, and the configuration line every
+entry came from.
 
 ```sh
 urzua new adr "Use S3 for blobs"
