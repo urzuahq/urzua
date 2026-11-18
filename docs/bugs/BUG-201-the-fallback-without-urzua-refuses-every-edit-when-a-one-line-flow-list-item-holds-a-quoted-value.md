@@ -2,7 +2,7 @@
 Stable-Id: 01M7PEECW8ET6KT77JBQM4V96S
 Status: Fixed
 Found-in: "an adopting repository's configuration, upgrading to 0.4.9 (2026-11-18)"
-Realized-by: test:rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_every_real_configuration_is_read_as_the_binary_reads_it@sha256:bb954de02883a0b0b0d177d75e2896a48ff638fc94b6cde3372c64919eef8bca, test:rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused_and_an_open_one_is_open@sha256:93d063bb5f2ff25d975fbeed202b4e18d28b824dad841f253e265381b596a986, code:rust/crates/urzua-cli/src/harness/hook/claude_code/command.rs@sha256:f548f0198bd5cd78ee4a76cae68c4a0abc1103aa669ffb927f07f42b6923c992
+Realized-by: test:rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_every_real_configuration_is_read_as_the_binary_reads_it@sha256:bb954de02883a0b0b0d177d75e2896a48ff638fc94b6cde3372c64919eef8bca, test:rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_every_shape_is_read_as_the_binary_reads_it_or_more_strictly@sha256:4c0544edd46a75d57927256ad369ea872311c8b749aea36d659d8b6ae07d34a6, code:rust/crates/urzua-cli/src/harness/hook/claude_code/command.rs@sha256:aac336ada8202209a9c86fc798ff5f64265cc4dde054c3ddb90851275bcb7f38
 ---
 # 201 — The fallback without urzua refuses every edit when a one-line flow list item holds a quoted value
 
@@ -41,7 +41,7 @@ The reader is rewritten to scan each line as YAML reads it (quotes, comments, fl
 lines, block scalars) and to look for keys only where they can change the guardrails.
 `harness_fallback_integration::without_urzua_every_real_configuration_is_read_as_the_binary_reads_it`
 runs it over every real configuration in this repository and requires agreement with the binary;
-`without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused_and_an_open_one_is_open`
+`without_urzua_every_shape_is_read_as_the_binary_reads_it_or_more_strictly`
 holds the repro and the other ordinary shapes as must-be-open.
 
 > **Revision log**
@@ -50,3 +50,5 @@ holds the repro and the other ordinary shapes as must-be-open.
 > |---|---|---|
 > | 2026-11-18 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 1 file-level, 2 scoped. Evidence: rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_every_real_configuration_is_read_as_the_binary_reads_it@sha256:bb954de02883, rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused_and_an_open_one_is_open@sha256:93d063bb5f2f, rust/crates/urzua-cli/src/harness/hook/claude_code/command.rs@sha256:f548f0198bd5 Reason: the regression tests and the rewritten reader, read and run green on this branch **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |
 > | 2026-11-18 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `Realized-by computes to Verified` -- stated `Open` disagreed with the computed value `Fixed`. | **structural** |
+> | 2026-11-18 | Pin moved to another locator (attested by beauwilliams, identity: gh-verified, actor: agent): `rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused_and_an_open_one_is_open`@sha256:93d063bb5f2ff25d975fbeed202b4e18d28b824dad841f253e265381b596a986 -> `rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_every_shape_is_read_as_the_binary_reads_it_or_more_strictly`@sha256:4c0544edd46a75d57927256ad369ea872311c8b749aea36d659d8b6ae07d34a6. Reason: the shape test was renamed when it began comparing every shape with the binary's own decision; it holds the same repro and more **Why:** the evidence a claim rests on changed and a person or agent attested why, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/harness/hook/claude_code/command.rs` f548f0198bd5 -> aac336ada820. Reason: command.rs: the reader is extended in review (keys with blanks before the colon, an indented document, line breaks and bytes the parser sees, tabs on every line, a linear scan with a 64 KiB line bound); the repro still reads as open, so the claim holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
