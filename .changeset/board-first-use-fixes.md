@@ -1,0 +1,6 @@
+---
+default: patch
+closes: [BUG-202]
+---
+
+`urzua board` fixes from a first use in an adopting repository. At phone width (under 460 px) a row's title wraps to up to three lines and its details (what it waits on, declared-value chips, checklist count, referrers, a parent's finished count and "disagrees") drop to a line under it instead of being hidden; the wide layout is unchanged. Rows in the Needs you, Under way and Ready lists, and rows not drawn inside their parent's row, now say what the record waits on and what it is part of. A record's details panel links to its file when the configuration declares `export.link_prefix`, using the export's own `link`. The note under *Under way* about `statuses.progress` is shown only for a type that declares a status that is none of `initial`, `success` and `failure` and no progress set, names those statuses, and is also a `board.progress` notice in the JSON `urzua board` prints; `type_roles` in the export gains `unplaced_statuses`. A collapsed row names what it hides: up to five ids, `+N more`, and how many finished or dropped records are under them. The read stamp of the export and the board gains `uncommitted_config_changes`, true while the configuration file has uncommitted changes, shown on the page beside the working-tree marker; `uncommitted_record_changes` keeps its meaning.

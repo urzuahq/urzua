@@ -1595,7 +1595,8 @@ pub struct ChecklistItem {
 }
 
 /// What the export read, and when: the commit and branch of the repository,
-/// whether any record file differs from the commit, and the time.
+/// whether any record file or the configuration file differs from the commit,
+/// and the time.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ReadStamp {
     /// The commit the working tree is on; `null` outside a repository with one.
@@ -1605,7 +1606,10 @@ pub struct ReadStamp {
     /// Any record file has uncommitted changes (modified, staged, or new and
     /// not committed). The records read are the working tree's.
     pub uncommitted_record_changes: bool,
-    /// UTC, `YYYY-MM-DDTHH:MM:SSZ`.
+    /// The configuration file has uncommitted changes (modified, staged, or
+    /// new and not committed). The configuration read is the working tree's.
+    pub uncommitted_config_changes: bool,
+    /// UTC, `YYYY-MM-DDTHH:MM:SSZ`, to the second.
     pub time: String,
 }
 

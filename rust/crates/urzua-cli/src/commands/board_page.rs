@@ -217,15 +217,30 @@ impl<'a> Page<'a> {
         (v.state.is_open() && !v.waiting_on.is_empty()).then(|| self.links(&v.waiting_on))
     }
 
+    fn waits_span(&self, r: &ExportedRecord) -> String {
+        self.waits(r)
+            .map(|links| format!("<span class=\"x w\">waits on {links}</span>"))
+            .unwrap_or_default()
+    }
+
+    fn parent_span(&self, r: &ExportedRecord) -> String {
+        r.view
+            .parent
+            .as_deref()
+            .map(|parent| format!("<span class=\"x\">part of {}</span>", self.link(parent)))
+            .unwrap_or_default()
+    }
+
     /// The right-hand details of a row, in the order they are dropped for room:
     /// what it waits on, a chip per declared-value field, the checklist count,
     /// how many records refer to it, and a parent's progress.
-    fn details(&self, r: &ExportedRecord) -> String {
+    fn details(&self, r: &ExportedRecord, show_parent: bool) -> String {
         let v = &r.view;
         let mut out = String::new();
-        if let Some(links) = self.waits(r) {
-            let _ = write!(out, "<span class=\"x w\">waits on {links}</span>");
+        if show_parent {
+            out.push_str(&self.parent_span(r));
         }
+        out.push_str(&self.waits_span(r));
         if !v.parent_ambiguous.is_empty() {
             let _ = write!(
                 out,
@@ -273,9 +288,10 @@ impl<'a> Page<'a> {
         out
     }
 
-    /// The cells of a row: a disclosure slot, the id, the title (one line), and
-    /// at the right the details, the dot and the status.
-    fn row(&self, i: usize, parent: bool) -> String {
+    /// The cells of a row: a disclosure slot, the id, the title, and at the
+    /// right the details, the dot and the status. A row not drawn inside its
+    /// parent's row says what it is part of.
+    fn row(&self, i: usize, parent: bool, under_parent: bool) -> String {
         let r = self.record(i);
         let id = esc(r.id.as_deref().unwrap_or(&r.path.to_string_lossy()));
         let title = if r.view.title_is_fallback {
@@ -291,7 +307,7 @@ impl<'a> Page<'a> {
         format!(
             "<span class=\"ch{}\"></span><span class=\"id\">{id}</span><span class=\"t\"{hover}>{title}</span><span class=\"s\">{}{}</span>",
             if parent { " tri" } else { "" },
-            self.details(r),
+            self.details(r, !under_parent),
             status_cell(r)
         )
     }
@@ -303,6 +319,13 @@ impl<'a> Page<'a> {
         let v = &r.view;
         let role = self.e.type_roles.get(&r.record_type);
         let mut out = String::from("<div class=\"more\">");
+        if let Some(link) = &v.link {
+            let _ = write!(
+                out,
+                "<div><a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\">Open the record's file</a></div>",
+                esc(link)
+            );
+        }
         if let Some(parent) = &v.parent {
             let _ = write!(out, "<div>part of {}</div>", self.link(parent));
         }
@@ -438,7 +461,7 @@ impl<'a> Page<'a> {
     /// (`kids`), and starts open only when one of them is active. The record's
     /// own detail is a second disclosure at the right of the row, closed
     /// until it is asked for, for a parent and a leaf alike.
-    fn entry(&self, i: usize, level: usize, kids: &str) -> String {
+    fn entry(&self, i: usize, level: usize, kids: &str, under_parent: bool) -> String {
         let r = self.record(i);
         let parent = !r.view.children.is_empty();
         let open = parent
@@ -452,7 +475,7 @@ impl<'a> Page<'a> {
             "<details class=\"det\"><summary aria-label=\"Details of {id}\" title=\"Details\"><span class=\"dw\">details</span><span class=\"dn\">›</span></summary>{}</details>",
             self.more(i)
         );
-        let row = self.row(i, parent);
+        let row = self.row(i, parent, under_parent);
         let body = if parent {
             format!(
                 "<details class=\"kd\"{}><summary class=\"rs\">{row}</summary>{kids}</details>",
@@ -464,9 +487,61 @@ impl<'a> Page<'a> {
         format!("<li {}>{body}{detail}</li>", self.attrs(i, level, parent))
     }
 
+    /// The finished and dropped records under `ids`, at any depth, that are not
+    /// among `ids`: collapsed somewhere on the page along with them.
+    fn closed_below(&self, ids: &[usize]) -> usize {
+        let mut seen: HashSet<usize> = ids.iter().copied().collect();
+        let mut stack: Vec<usize> = ids.to_vec();
+        let mut closed = 0;
+        while let Some(i) = stack.pop() {
+            for &c in self
+                .record(i)
+                .view
+                .children
+                .iter()
+                .filter_map(|c| self.by_id.get(c.as_str()))
+            {
+                if !seen.insert(c) {
+                    continue;
+                }
+                let r = self.record(c);
+                if r.header_readable && self.is_work(r) && !r.view.state.is_open() {
+                    closed += 1;
+                }
+                stack.push(c);
+            }
+        }
+        closed
+    }
+
+    /// What a fold hides: the ids of the records it stands for, up to
+    /// `FOLD_IDS`, and how many more closed records are under them.
+    fn fold_names(&self, ids: &[usize]) -> String {
+        let shown: Vec<String> = ids
+            .iter()
+            .take(FOLD_IDS)
+            .map(|&i| {
+                let r = self.record(i);
+                esc(r.id.as_deref().unwrap_or(&r.path.to_string_lossy()))
+            })
+            .collect();
+        let mut out = shown.join(", ");
+        if ids.len() > FOLD_IDS {
+            let _ = write!(out, " +{} more", ids.len() - FOLD_IDS);
+        }
+        match self.closed_below(ids) {
+            0 => {}
+            1 => out.push_str("; 1 record under them"),
+            n => {
+                let _ = write!(out, "; {n} records under them");
+            }
+        }
+        out
+    }
+
     /// A muted row that opens in place to the finished and dropped records it
-    /// stands for.
-    fn fold(&self, ids: &[usize], level: usize) -> String {
+    /// stands for, and names them.
+    fn fold(&self, ids: &[usize], level: usize, under_parent: bool) -> String {
         if ids.is_empty() {
             return String::new();
         }
@@ -483,16 +558,20 @@ impl<'a> Page<'a> {
         .filter(|(n, _)| *n > 0)
         .map(|(n, word)| format!("{n} {word}"))
         .collect();
-        let rows: String = ids.iter().map(|&i| self.entry(i, level + 1, "")).collect();
+        let rows: String = ids
+            .iter()
+            .map(|&i| self.entry(i, level + 1, "", under_parent))
+            .collect();
         let anchor = ids
             .first()
             .map(|&i| self.anchors[i].as_str())
             .unwrap_or_default();
         format!(
-            "<li id=\"f-{}\" class=\"fold lv{}\"><details><summary><span class=\"ch\"></span>{}, collapsed</summary><ul class=\"kids\">{rows}</ul></details></li>",
+            "<li id=\"f-{}\" class=\"fold lv{}\"><details><summary><span class=\"ch\"></span><span>{}, collapsed: {}</span></summary><ul class=\"kids\">{rows}</ul></details></li>",
             esc(anchor),
             level.min(8),
-            parts.join(", ")
+            parts.join(", "),
+            self.fold_names(ids)
         )
     }
 }
@@ -572,6 +651,11 @@ fn top(page: &Page<'_>, digest: Option<&str>) -> String {
     } else {
         ""
     };
+    let config_changes = if read.uncommitted_config_changes {
+        ", uncommitted configuration changes"
+    } else {
+        ""
+    };
     let time = esc(&exact_time(&read.time));
     let stamp = match digest {
         Some(digest) => format!(
@@ -581,7 +665,7 @@ fn top(page: &Page<'_>, digest: Option<&str>) -> String {
         None => format!("<span class=\"meta\" id=\"upd\">static file, generated {time}</span>"),
     };
     format!(
-        "<header class=\"top\"><b>urzua board</b><span class=\"meta\" id=\"meta\">{} · {} · working tree{changes}</span>{stamp}</header>\n",
+        "<header class=\"top\"><b>urzua board</b><span class=\"meta\" id=\"meta\">{} · {} · working tree{changes}{config_changes}</span>{stamp}</header>\n",
         esc(branch),
         esc(commit)
     )
@@ -720,9 +804,11 @@ fn brief_rows(
     let row = |&i: &usize| {
         let r = page.record(i);
         format!(
-            "<li class=\"br\"><span class=\"id\">{}</span><span class=\"t\">{}</span><span class=\"s\">{}</span></li>",
+            "<li class=\"br\"><span class=\"id\">{}</span><span class=\"t\">{}</span><span class=\"s\">{}{}{}</span></li>",
             page.link(r.id.as_deref().unwrap_or_default()),
             esc(&r.view.title),
+            page.parent_span(r),
+            page.waits_span(r),
             right(r)
         )
     };
@@ -766,28 +852,42 @@ fn no_transitions_note(page: &Page<'_>) -> String {
     )
 }
 
-fn progress_note(page: &Page<'_>, none_under_way: bool) -> String {
-    let names: Vec<&str> = page
-        .e
+/// The types that declare statuses beyond initial, finished and dropped but no
+/// `statuses.progress`, each with those statuses.
+pub(crate) fn progress_gaps(export: &ExportReport) -> Vec<(&str, &[String])> {
+    export
         .type_roles
         .iter()
-        .filter(|(_, role)| role.statuses_declared && !role.progress_declared)
-        .map(|(name, _)| name.as_str())
+        .filter(|(_, role)| !role.unplaced_statuses.is_empty())
+        .map(|(name, role)| (name.as_str(), role.unplaced_statuses.as_slice()))
+        .collect()
+}
+
+/// What a type in [`progress_gaps`] leaves unsaid, in one sentence.
+pub(crate) fn progress_gap_sentence(type_name: &str, statuses: &[String]) -> String {
+    let names: Vec<&str> = statuses.iter().map(String::as_str).collect();
+    format!(
+        "{type_name} declares no `statuses.progress`: until it does, its records in {} show as open and a parent's state cannot disagree with its children.",
+        names_phrase(&names)
+    )
+}
+
+fn progress_note(page: &Page<'_>, none_under_way: bool) -> String {
+    let sentences: Vec<String> = progress_gaps(page.e)
+        .into_iter()
+        .map(|(name, statuses)| progress_gap_sentence(name, statuses))
         .collect();
-    if names.is_empty() {
+    if sentences.is_empty() {
         return String::new();
     }
-    let one = names.len() == 1;
     format!(
-        "{}{} {} no `statuses.progress`, so {} records show as open.",
+        "{}{}",
         if none_under_way {
             "Nothing is under way. "
         } else {
             ""
         },
-        names_phrase(&names),
-        if one { "declares" } else { "declare" },
-        if one { "its" } else { "their" }
+        sentences.join(" ")
     )
 }
 
@@ -905,13 +1005,13 @@ fn draw(
             closed.push(c);
         }
     }
-    inner.push_str(&page.fold(&closed, level + 1));
+    inner.push_str(&page.fold(&closed, level + 1, true));
     let kids = if inner.is_empty() {
         String::new()
     } else {
         format!("<ul class=\"kids\">{inner}</ul>")
     };
-    Some(page.entry(i, level, &kids))
+    Some(page.entry(i, level, &kids, level > 0))
 }
 
 fn in_loop(page: &Page<'_>, i: usize) -> bool {
@@ -952,7 +1052,7 @@ fn work_by_type(page: &Page<'_>, tree: &Tree, seen: &mut HashSet<usize>) -> Stri
             .iter()
             .filter_map(|&i| draw(page, tree, i, 0, seen))
             .collect();
-        rows.push_str(&page.fold(&closed, 0));
+        rows.push_str(&page.fold(&closed, 0, false));
         out.push_str(&section(
             name,
             &(open.len() + closed.len()).to_string(),
@@ -1047,7 +1147,7 @@ fn work_section(page: &Page<'_>) -> String {
             &closed.len().to_string(),
             false,
             "",
-            &page.fold(&closed, 0),
+            &page.fold(&closed, 0, false),
             "",
         ));
     }
@@ -1056,6 +1156,9 @@ fn work_section(page: &Page<'_>) -> String {
 
 /// A title longer than this carries its full text as a tooltip, for when the row cuts it short.
 const TITLE_HOVER: usize = 40;
+
+/// A fold names at most this many of the records it hides.
+const FOLD_IDS: usize = 5;
 
 /// More than this many records in a type, and its finished and dropped ones fold.
 const FOLD_OVER: usize = 10;
@@ -1080,8 +1183,8 @@ fn other_section(page: &Page<'_>) -> String {
         } else {
             (of_type.clone(), Vec::new())
         };
-        let mut rows: String = open.iter().map(|&i| page.entry(i, 0, "")).collect();
-        rows.push_str(&page.fold(&closed, 0));
+        let mut rows: String = open.iter().map(|&i| page.entry(i, 0, "", false)).collect();
+        rows.push_str(&page.fold(&closed, 0, false));
         out.push_str(&section(
             name,
             &of_type.len().to_string(),
@@ -1101,7 +1204,7 @@ fn unreadable_section(page: &Page<'_>) -> String {
     if ids.is_empty() {
         return String::new();
     }
-    let rows: String = ids.iter().map(|&i| page.entry(i, 0, "")).collect();
+    let rows: String = ids.iter().map(|&i| page.entry(i, 0, "", false)).collect();
     section(
         "Headers that could not be read",
         &ids.len().to_string(),

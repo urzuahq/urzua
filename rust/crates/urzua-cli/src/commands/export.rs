@@ -82,6 +82,7 @@ pub(crate) fn build_with(
     let session = Session::open(config_path)?;
     let Session {
         repo_root,
+        config_path,
         config,
         records,
         full_text,
@@ -134,7 +135,7 @@ pub(crate) fn build_with(
         record_count: exported.len(),
         types,
         type_roles: model.roles,
-        read: read_stamp(repo_root, config),
+        read: read_stamp(repo_root, config_path, config),
         records: exported,
         roadmap: (!config.roadmap.pairs.is_empty())
             .then(|| urzua_core::rules::compute_roadmap(records, config)),
@@ -206,9 +207,10 @@ pub(crate) fn git_identity(repo_root: &Path) -> (Option<String>, Option<String>)
 }
 
 /// The commit and branch the working tree is on, whether any file under a
-/// record directory differs from the commit, and when this was read. A failure
+/// record directory or the configuration file differs from the commit, and when
+/// this was read. A failure
 /// to ask git is an absent value, never a guess.
-fn read_stamp(repo_root: &Path, config: &Config) -> ReadStamp {
+fn read_stamp(repo_root: &Path, config_path: &Path, config: &Config) -> ReadStamp {
     let git = |args: &[&str]| git_line(repo_root, args);
     let mut status = vec!["status", "--porcelain", "--untracked-files=all", "--"];
     let dirs: Vec<&str> = config
@@ -217,10 +219,20 @@ fn read_stamp(repo_root: &Path, config: &Config) -> ReadStamp {
         .flat_map(|t| t.all_dirs())
         .collect();
     status.extend(&dirs);
+    let config_file = config_path.strip_prefix(repo_root).unwrap_or(config_path);
+    let config_file = config_file.to_string_lossy();
     ReadStamp {
         commit: git(&["rev-parse", "HEAD"]),
         branch: git(&["symbolic-ref", "--short", "-q", "HEAD"]),
         uncommitted_record_changes: !dirs.is_empty() && git(&status).is_some(),
+        uncommitted_config_changes: git(&[
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            &config_file,
+        ])
+        .is_some(),
         time: urzua_io::read_instant(),
     }
 }

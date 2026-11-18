@@ -409,16 +409,23 @@ fn without_a_progress_set_a_record_that_is_neither_finished_nor_dropped_is_open(
         .all(|r| r["state"] != "under-way" && r["state"] != "not-started"));
     let (html, _) = board_page(&dir);
     assert!(html.contains("<h3>Under way<i>0</i></h3>"));
+    let note = html
+        .split("<h3>Under way")
+        .nth(1)
+        .unwrap()
+        .split("</p>")
+        .next()
+        .unwrap();
     assert!(
-        html.contains("Nothing is under way. charter, programme, stage and step declare no <code>statuses.progress</code>, so their records show as open."),
-        "{}",
-        html.split("<h3>Under way")
-            .nth(1)
-            .unwrap()
-            .chars()
-            .take(400)
-            .collect::<String>()
+        note.contains("Nothing is under way. charter declares no <code>statuses.progress</code>: until it does, its records in Draft show as open and a parent&#39;s state cannot disagree with its children."),
+        "{note}"
     );
+    for name in ["programme", "stage", "step"] {
+        assert!(
+            note.contains(&format!("{name} declares no <code>statuses.progress</code>: until it does, its records in Rolling show as open")),
+            "{note}"
+        );
+    }
     assert!(html.contains("statuses.progress"));
 }
 
@@ -872,6 +879,10 @@ fn attribute_values(html: &str, attribute: &str) -> Vec<String> {
     out
 }
 
+/// The only address a page may carry outside itself: a record's file, as the
+/// export's `link` gives it, which a person follows and the page never requests.
+const CHAIN_LINK_PREFIX: &str = "https://example.test/blob/main/";
+
 const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 fn csp_source(content: &str) -> String {
@@ -917,14 +928,22 @@ fn assert_page(html: &str, served: bool) {
         1,
         "one inline script, nothing from a record"
     );
+    let mut scanned = html.to_string();
     for value in attribute_values(html, "href")
         .into_iter()
         .chain(attribute_values(html, "src"))
     {
+        let record_link = value.starts_with(CHAIN_LINK_PREFIX);
         assert!(
-            value.starts_with('#') || value.starts_with("record/") || value == "check",
+            value.starts_with('#')
+                || value.starts_with("record/")
+                || value == "check"
+                || record_link,
             "address {value}"
         );
+        if record_link {
+            scanned = scanned.replace(&format!(" href=\"{value}\""), "");
+        }
     }
     for forbidden in [
         "http://",
@@ -940,7 +959,10 @@ fn assert_page(html: &str, served: bool) {
         "<iframe",
         "<form",
     ] {
-        assert!(!html.contains(forbidden), "the page contains {forbidden}");
+        assert!(
+            !scanned.contains(forbidden),
+            "the page contains {forbidden}"
+        );
     }
     let script = html
         .split("<script>")
@@ -1051,7 +1073,7 @@ fn what_needs_a_person_is_the_gated_moves_the_transitions_allow() {
     let under_way = section_of(&html, "under-way");
     assert!(
         under_way.contains(
-            "charter declares no <code>statuses.progress</code>, so its records show as open."
+            "charter declares no <code>statuses.progress</code>: until it does, its records in Draft show as open and a parent&#39;s state cannot disagree with its children."
         ),
         "{under_way}"
     );
@@ -2688,6 +2710,371 @@ fn this_repositorys_export_without_the_new_keys_equals_the_released_builds() {
     for key in ["status", "record_count", "types", "roadmap", "notices"] {
         assert_eq!(old.get(key), new.get(key), "top-level `{key}`");
     }
+}
+
+// ---------------------------------------------------------------- first-use fixes
+
+fn narrow_rules(html: &str) -> &str {
+    html.split("@media (max-width: 460px) {")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("a narrow-screen block")
+}
+
+const NARROW_NEEDS: [&str; 5] = [
+    ".rs, .br { flex-wrap: wrap;",
+    "-webkit-line-clamp: 3",
+    "white-space: normal",
+    ".s { flex: 1 0 100%;",
+    ".s .x { max-width: none; overflow: visible;",
+];
+
+const NARROW_NEVER: [&str; 3] = [".s .x { display: none", "max-width: 12ch", "nowrap"];
+
+const WIDE_TITLE_RULE: &str =
+    ".t { flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }";
+
+#[test]
+fn at_phone_width_a_title_wraps_and_the_detail_drops_to_a_line_under_it() {
+    let dir = chain("narrow");
+    let (html, _) = board_page(&dir);
+    let narrow = narrow_rules(&html);
+    for needed in NARROW_NEEDS {
+        assert!(narrow.contains(needed), "{needed}: {narrow}");
+    }
+    for never in NARROW_NEVER {
+        assert!(!narrow.contains(never), "{never}: {narrow}");
+    }
+    let wide = html.split("@media (max-width: 460px)").next().unwrap();
+    assert!(
+        wide.contains(WIDE_TITLE_RULE),
+        "the wide layout keeps one line"
+    );
+    let waiting = entry(&html, "r-STP-10");
+    let after_title = waiting.split("<span class=\"t\"").nth(1).unwrap();
+    assert!(
+        after_title.contains("</span><span class=\"s\"><span class=\"x w\">waits on"),
+        "the detail is in the row's own right-hand group, which the narrow rules put under the title: {after_title}"
+    );
+}
+
+#[test]
+fn a_list_row_says_what_it_waits_on_and_what_it_is_part_of() {
+    let dir = chain("list-context");
+    let (html, _) = board_page(&dir);
+    let under_way = section_of(&html, "under-way");
+    let stage = under_way
+        .split("<li class=\"br\">")
+        .find(|r| r.contains(">STG-2</a>"))
+        .unwrap();
+    assert!(
+        stage.contains("<span class=\"x\">part of <a href=\"#r-PRG-1\">PRG-1</a></span>"),
+        "{stage}"
+    );
+    let e = export(&dir);
+    let ready = section_of(&html, "ready");
+    for id in ids(&by_id(&e, "STG-2")["children"])
+        .iter()
+        .filter(|c| by_id(&e, c)["ready"] == true)
+    {
+        let parent = by_id(&e, id)["parent"].as_str().unwrap().to_string();
+        let row = ready
+            .split("<li class=\"br\">")
+            .find(|r| r.contains(&format!(">{id}</a>")))
+            .unwrap_or_else(|| panic!("{id} in Ready: {ready}"));
+        assert!(
+            row.contains(&format!("part of <a href=\"#r-{parent}\">{parent}</a>")),
+            "{row}"
+        );
+    }
+    let flat = repo("list-waits", FLAT_CONFIG, |dir| {
+        write(
+            dir,
+            "docs/tickets/TCK-1-a.md",
+            &record("Status: Doing", "", "# 1 — A"),
+        );
+        write(
+            dir,
+            "docs/tickets/TCK-2-b.md",
+            &record("Status: Doing", "Needs: TCK-1\n", "# 2 — B"),
+        );
+    });
+    let (html, _) = board_page(&flat);
+    let row = section_of(&html, "under-way")
+        .split("<li class=\"br\">")
+        .find(|r| r.contains(">TCK-2</a>"))
+        .unwrap()
+        .to_string();
+    assert!(
+        row.contains("<span class=\"x w\">waits on <a href=\"#r-TCK-1\">TCK-1</a></span>"),
+        "{row}"
+    );
+    assert!(
+        !row.contains("part of"),
+        "a record with no parent claims none: {row}"
+    );
+}
+
+#[test]
+fn the_details_panel_links_to_the_records_file_once_and_only_where_the_export_has_a_link() {
+    let dir = chain("file-link");
+    let (html, _) = board_page(&dir);
+    let e = export(&dir);
+    let mut with_link = 0;
+    for record in e["records"].as_array().unwrap() {
+        let Some(link) = record["link"].as_str() else {
+            continue;
+        };
+        with_link += 1;
+        let anchor = format!("<a href=\"{link}\" target=\"_blank\" rel=\"noopener noreferrer\">");
+        assert_eq!(count(&html, &anchor), 1, "{link}");
+    }
+    assert!(with_link > 0);
+    assert_eq!(count(&html, "rel=\"noopener noreferrer\""), with_link);
+
+    let flat = flat("file-link-none");
+    let (html, _) = board_page(&flat);
+    assert!(!html.contains("noopener") && !html.contains("Open the record's file"));
+    assert!(!html.contains("http://") && !html.contains("https://"));
+
+    let escaped = repo(
+        "file-link-escaped",
+        &chain_config().replace(
+            "https://example.test/blob/main/",
+            "https://example.test/view?a=1&b=2&path=",
+        ),
+        chain_records,
+    );
+    let (html, _) = board_page(&escaped);
+    let link = export(&escaped)["records"][0]["link"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(link.contains("&b=2"));
+    assert_eq!(
+        count(&html, &format!("href=\"{}\"", link.replace('&', "&amp;"))),
+        1
+    );
+}
+
+fn two_type_config(extra_type_statuses: &str) -> String {
+    format!(
+        "schema_version: 2
+record_types:
+  plain:
+    dir: docs/plain
+    prefix: PLN
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    narrative_fields: []
+    pointer_fields: []
+    statuses:
+      values: [Idea, Shipped, Cancelled]
+      success: [Shipped]
+      failure: [Cancelled]
+      initial: [Idea]
+      transitions:
+        Idea: [Shipped, Cancelled]
+  staged:
+    dir: docs/staged
+    prefix: STD
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    narrative_fields: []
+    pointer_fields: []
+{extra_type_statuses}"
+    )
+}
+
+#[test]
+fn the_progress_note_names_only_a_type_with_statuses_in_between_and_the_json_answer_says_it_too() {
+    let in_between = "    statuses:
+      values: [Idea, Rolling, Reviewing, Shipped]
+      success: [Shipped]
+      initial: [Idea]
+      transitions:
+        Idea: [Rolling]
+        Rolling: [Reviewing]
+        Reviewing: [Shipped]
+";
+    let dir = repo("progress-gap", &two_type_config(in_between), |dir| {
+        write(
+            dir,
+            "docs/plain/PLN-1-a.md",
+            &record("Status: Idea", "", "# 1 — A"),
+        );
+        write(
+            dir,
+            "docs/staged/STD-1-a.md",
+            &record("Status: Rolling", "", "# 1 — A"),
+        );
+    });
+    let (html, answer) = board_page(&dir);
+    let note = section_of(&html, "under-way");
+    assert!(
+        note.contains("staged declares no <code>statuses.progress</code>: until it does, its records in Rolling and Reviewing show as open and a parent&#39;s state cannot disagree with its children."),
+        "{note}"
+    );
+    assert!(
+        !note.contains("plain"),
+        "a type with nothing in between is not named: {note}"
+    );
+    let notices = answer["notices"].as_array().unwrap();
+    assert_eq!(notices.len(), 1, "{notices:?}");
+    assert_eq!(notices[0]["subject"], "board.progress");
+    assert_eq!(notices[0]["severity"], "info");
+    assert_eq!(notices[0]["detail"]["type"], "staged");
+    assert_eq!(
+        notices[0]["detail"]["statuses"],
+        serde_json::json!(["Rolling", "Reviewing"])
+    );
+    assert!(notices[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("until it does, its records in Rolling and Reviewing show as open"));
+
+    let declared = in_between.replace(
+        "      initial: [Idea]",
+        "      progress: [Rolling, Reviewing]\n      initial: [Idea]",
+    );
+    let dir = repo("progress-declared", &two_type_config(&declared), |dir| {
+        write(
+            dir,
+            "docs/staged/STD-1-a.md",
+            &record("Status: Rolling", "", "# 1 — A"),
+        );
+    });
+    let (html, answer) = board_page(&dir);
+    assert!(!section_of(&html, "under-way").contains("statuses.progress"));
+    assert!(answer.get("notices").is_none(), "{answer}");
+
+    let nothing_to_declare = "    statuses:
+      values: [Idea, Shipped]
+      success: [Shipped]
+      initial: [Idea]
+      transitions:
+        Idea: [Shipped]
+";
+    let dir = repo(
+        "progress-none",
+        &two_type_config(nothing_to_declare),
+        |dir| {
+            write(
+                dir,
+                "docs/staged/STD-1-a.md",
+                &record("Status: Idea", "", "# 1 — A"),
+            );
+        },
+    );
+    let (html, answer) = board_page(&dir);
+    assert!(!html.contains("statuses.progress"));
+    assert!(answer.get("notices").is_none(), "{answer}");
+    assert_eq!(
+        export(&dir)["type_roles"]["staged"]["unplaced_statuses"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn a_fold_names_the_records_it_hides_capped_and_counts_those_below_them() {
+    let dir = repo("fold-names", &chain_config(), |dir| {
+        let r = |path: &str, status: &str, extra: &str, heading: &str| {
+            write(
+                dir,
+                path,
+                &record(&format!("Status: {status}"), extra, heading),
+            );
+        };
+        r("docs/programmes/PRG-1-a.md", "Rolling", "", "# 1 — A");
+        r(
+            "docs/stages/STG-1-a.md",
+            "Shipped",
+            "In: PRG-1\n",
+            "# 1 — A",
+        );
+        r("docs/steps/STP-1-a.md", "Shipped", "In: STG-1\n", "# 1 — A");
+        r(
+            "docs/steps/STP-2-a.md",
+            "Cancelled",
+            "In: STG-1\n",
+            "# 2 — B",
+        );
+        for n in 2..=8 {
+            r(
+                &format!("docs/stages/STG-{n}-a.md"),
+                "Shipped",
+                "In: PRG-1\n",
+                &format!("# {n} — S"),
+            );
+        }
+    });
+    let (html, _) = board_page(&dir);
+    assert!(
+        html.contains("8 finished, collapsed: STG-1, STG-2, STG-3, STG-4, STG-5 +3 more; 2 records under them"),
+        "{}",
+        html.split("collapsed").next().unwrap_or_default().chars().rev().take(300).collect::<String>().chars().rev().collect::<String>()
+    );
+    assert!(html.contains("1 finished, 1 dropped, collapsed: STP-1, STP-2</span>"));
+    let one = repo("fold-one", &chain_config(), |dir| {
+        write(
+            dir,
+            "docs/programmes/PRG-1-a.md",
+            &record("Status: Rolling", "", "# 1 — A"),
+        );
+        write(
+            dir,
+            "docs/stages/STG-1-a.md",
+            &record("Status: Shipped", "In: PRG-1\n", "# 1 — A"),
+        );
+        write(
+            dir,
+            "docs/steps/STP-1-a.md",
+            &record("Status: Shipped", "In: STG-1\n", "# 1 — A"),
+        );
+    });
+    let (html, _) = board_page(&one);
+    assert!(html.contains("1 finished, collapsed: STG-1; 1 record under them"));
+}
+
+#[test]
+fn the_read_stamp_says_apart_when_the_configuration_has_uncommitted_changes() {
+    let dir = chain("config-stamp");
+    let first = export(&dir);
+    assert_eq!(first["read"]["uncommitted_config_changes"], false);
+    let (page, answer) = board_page(&dir);
+    assert_eq!(answer["read"]["uncommitted_config_changes"], false);
+    assert!(!page.contains("uncommitted configuration changes"));
+
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    write(&dir, ".urzua/config.yaml", &format!("{config}\n# edited\n"));
+    let changed = export(&dir);
+    assert_eq!(changed["read"]["uncommitted_config_changes"], true);
+    assert_eq!(
+        changed["read"]["uncommitted_record_changes"], false,
+        "the existing key keeps its meaning"
+    );
+    let (page, answer) = board_page(&dir);
+    assert_eq!(answer["read"]["uncommitted_config_changes"], true);
+    assert!(
+        page.contains("working tree, uncommitted configuration changes</span>"),
+        "{}",
+        page.split("<header")
+            .nth(1)
+            .unwrap()
+            .split("</header>")
+            .next()
+            .unwrap()
+    );
+
+    common::commit_all(&dir, 1);
+    assert_eq!(export(&dir)["read"]["uncommitted_config_changes"], false);
+
+    let time = |value: &Value| value["read"]["time"].as_str().unwrap().to_string();
+    assert_eq!(
+        time(&first).len(),
+        20,
+        "the stamp is to the second, so two runs within a second print one time"
+    );
 }
 
 /// Writes the pages the phone-width check measures into `URZUA_BOARD_REVIEW_DIR`:

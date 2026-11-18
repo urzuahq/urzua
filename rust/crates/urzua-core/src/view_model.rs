@@ -161,6 +161,11 @@ pub struct TypeRole {
     /// Whether the type declares a `statuses.progress` set, which is what lets
     /// a record be `under-way` or `not-started` instead of `open`.
     pub progress_declared: bool,
+    /// The declared statuses that are none of `initial`, `success` and
+    /// `failure`, for a type that declares statuses and no `statuses.progress`:
+    /// the ones a progress set would say are under way. Empty when a progress
+    /// set is declared or every status is placed.
+    pub unplaced_statuses: Vec<String>,
     /// The fields through which a record of the type states what it waits on:
     /// the forward field of each pair in `roadmap.pairs` that the type carries.
     /// `waiting_on` already lists what they name that is unfinished.
@@ -421,6 +426,17 @@ fn gated_moves(
     moves
 }
 
+fn unplaced_statuses(decl: &StatusDecl) -> Vec<String> {
+    if !decl.progress.is_empty() {
+        return Vec::new();
+    }
+    decl.values
+        .iter()
+        .filter(|v| !decl.is_initial(v) && !decl.is_success(v) && !decl.failure.contains(v))
+        .cloned()
+        .collect()
+}
+
 fn roles(config: &Config, decls: &HashMap<String, StatusDecl>) -> BTreeMap<String, TypeRole> {
     config
         .record_types
@@ -458,6 +474,7 @@ fn roles(config: &Config, decls: &HashMap<String, StatusDecl>) -> BTreeMap<Strin
                     .unwrap_or_default(),
                 statuses_declared: decl.is_some_and(|d| !d.values.is_empty()),
                 progress_declared: decl.is_some_and(|d| !d.progress.is_empty()),
+                unplaced_statuses: decl.map(unplaced_statuses).unwrap_or_default(),
                 gated_without_transitions: gated && decl.is_none_or(|d| !d.has_transitions()),
             };
             (name.clone(), role)
