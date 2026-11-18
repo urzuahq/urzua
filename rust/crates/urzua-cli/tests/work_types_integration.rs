@@ -183,7 +183,8 @@ fn with_the_key_absent_every_type_is_work_and_there_is_no_waiting_on() {
     assert_eq!(r["records"]["FACT-1"]["wave"], 1, "{r}");
     assert!(r["records"].get("FACT-1").is_some());
     let (_, export) = run(&dir, &["export", "--format", "json"]);
-    assert!(!export.contains("waiting_on"), "{export}");
+    let export: serde_json::Value = serde_json::from_str(&export).unwrap();
+    assert!(export["roadmap"].get("waiting_on").is_none(), "{export}");
 }
 
 #[test]
@@ -484,6 +485,18 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
+/// An export without the `waiting_on` every record carries, which says what that
+/// record waits on and is not the roadmap's `waiting_on` block these tests guard,
+/// and without the moment it was read.
+fn without_record_waits(text: &str) -> String {
+    let mut value: serde_json::Value = serde_json::from_str(text).unwrap();
+    for record in value["records"].as_array_mut().unwrap() {
+        record.as_object_mut().unwrap().remove("waiting_on");
+    }
+    value["read"].as_object_mut().unwrap().remove("time");
+    serde_json::to_string_pretty(&value).unwrap() + "\n"
+}
+
 /// `text` without the `"waiting_on": []` entry the declared key adds, and the
 /// comma that led to it.
 fn without_empty_waiting_on(text: &str) -> String {
@@ -545,7 +558,11 @@ fn on_this_repository_the_absent_key_is_byte_identical_to_every_type_being_work(
         for args in [&["roadmap"][..], &["export", "--format", "json"][..]] {
             let (code, text) = run(&dir, args);
             assert_eq!(code, 0, "{args:?}: {}", &text[..text.len().min(400)]);
-            pair.push(text);
+            pair.push(if args[0] == "export" {
+                without_record_waits(&text)
+            } else {
+                text
+            });
         }
         outputs.push(pair);
     }

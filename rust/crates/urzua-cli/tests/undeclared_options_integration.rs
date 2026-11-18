@@ -233,6 +233,11 @@ const RUNS: &[(&str, &[&str], i32)] = &[
 /// - `scope.include_untracked` and `scope.untracked_included`: added by #386
 ///   (MILE-206, `discovery.include_untracked`), `false` and `0` when undeclared.
 ///
+/// - `read`: the stamp the export carries (MILE-330): the commit, the branch git
+///   started on and the moment it was read. The view model's keys (`title`,
+///   `state` and the rest) are part of `export.json`'s golden: they are a
+///   deliberate addition, regenerated with `URZUA_UNDECLARED_UPDATE=export.json`,
+///   and what the golden still holds is that no option moves them.
 /// - `as_of`: the report's evaluation date (`--as-of`, ADR-97's amendment of
 ///   2026-11-08), always present and the clock's date when no flag is given.
 ///
@@ -252,7 +257,7 @@ fn normalise(text: &str) -> String {
             && lines[i + 3].trim_start().starts_with('}');
         if is_entry {
             i += 4;
-        } else if line.trim() == "\"as_of\": {" {
+        } else if line.trim() == "\"as_of\": {" || line.trim() == "\"read\": {" {
             while !lines[i].trim_start().starts_with('}') {
                 i += 1;
             }
@@ -316,6 +321,10 @@ fn a_config_declaring_none_of_the_opt_in_options_reports_byte_identically_to_bef
             Some(*code),
             "{args:?} exit code: {stdout}"
         );
+        if std::env::var("URZUA_UNDECLARED_UPDATE").is_ok_and(|only| only == *file) {
+            std::fs::write(golden_dir().join(file), normalise(&stdout)).unwrap();
+            continue;
+        }
         let golden = std::fs::read_to_string(golden_dir().join(file))
             .unwrap_or_else(|e| panic!("golden {file}: {e}"));
         if golden != normalise(&stdout) {
