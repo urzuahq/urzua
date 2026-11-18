@@ -268,6 +268,25 @@ enum Command {
         root: Option<PathBuf>,
     },
 
+    /// One page showing every record, laid out only from the configuration.
+    ///
+    /// Writes one self-contained HTML file (no network request, no build step)
+    /// and prints a JSON answer naming it; stdout stays JSON. With `--serve` it
+    /// answers the same page at a local address (127.0.0.1 only, GET only),
+    /// re-reading the records on each request, until interrupted. Build any
+    /// other view from `urzua export --format json`.
+    Board {
+        /// Where to write the file. Default `.urzua/cache/board.html`.
+        #[arg(long, value_name = "PATH", conflicts_with = "serve")]
+        out: Option<PathBuf>,
+        /// Serve the page at 127.0.0.1 instead of writing a file, until interrupted.
+        #[arg(long)]
+        serve: bool,
+        /// With `--serve`: the port to listen on. 0, the default, takes a free one.
+        #[arg(long, requires = "serve", default_value_t = 0)]
+        port: u16,
+    },
+
     /// The order of work, computed from the records: waves, the ready set, the
     /// critical path, what each record blocks and a grouping (ADR-82).
     ///
@@ -773,6 +792,9 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
         Command::Explain { path, rule, .. } => commands::explain::run(config, path, rule),
         Command::Graph => commands::graph::run(config),
         Command::Roadmap => commands::roadmap::run(config),
+        Command::Board { out, serve, port } => {
+            commands::board::run(config, commands::board::BoardArgs { out, serve, port })
+        }
         Command::Mcp { root } => commands::mcp::run(config, root),
         Command::New {
             record_type,
@@ -1006,6 +1028,7 @@ fn command_name(command: &Command) -> &'static str {
         Command::Explain { .. } => "explain",
         Command::Graph => "graph",
         Command::Roadmap => "roadmap",
+        Command::Board { .. } => "board",
         Command::Mcp { .. } => "mcp",
         Command::Audit => "audit",
         Command::Migrate { .. } => "migrate",
