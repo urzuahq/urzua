@@ -825,6 +825,39 @@ fn show_record_returns_the_record_with_its_sections_text_and_supersession_edges(
         .all(|e| e["from"] == "ADR-3" || e["to"] == "ADR-3"));
 }
 
+/// The record tools return the export's view model, not a second reading of it.
+#[test]
+fn the_record_tools_carry_the_exports_view_model_keys() {
+    let dir = fixture("viewmodel");
+    let keys = [
+        "title", "fields", "status", "state", "state_decided_by", "waiting_on", "ready",
+        "parent", "children", "children_by_state", "refers_to", "referred_by",
+    ];
+    let listed = call_one(&dir, "urzua_list_records", json!({}));
+    let first = &listed["result"]["structuredContent"]["records"][0];
+    let shown = call_one(&dir, "urzua_show_record", json!({"id": "ADR-3"}));
+    let record = &shown["result"]["structuredContent"]["record"];
+    for key in keys {
+        assert!(first.get(key).is_some(), "list: {key}");
+        assert!(record.get(key).is_some(), "show: {key}");
+    }
+    let output = common::urzua()
+        .args(["export", "--format", "json"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let exported: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let same = exported["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "ADR-3")
+        .unwrap();
+    for key in keys {
+        assert_eq!(&record[key], &same[key], "{key}");
+    }
+}
+
 #[test]
 fn show_record_of_an_unknown_id_is_an_error_result_not_an_empty_record() {
     let dir = fixture("showunknown");

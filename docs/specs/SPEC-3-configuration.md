@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.163'
+Version: '0.164'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:e2981c06fd2407d7fe81d1c1d5a796caf66cfa47d57f6e188a22412d3d1a545d, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -1424,6 +1424,18 @@ discovery:
   corpus. Two checkouts of one commit with different untracked files still disagree on `files_examined`,
   as they already do for staged files.
 
+## What an export adds: `export`
+
+```yaml
+export:
+  link_prefix: "https://example.org/blob/main/"
+```
+
+`link_prefix` is optional. When declared, each record `urzua export --format json` returns carries a `link`: the
+prefix followed by the record's repository-relative path with `/` separators. The prefix must start with `https://`,
+`http://` or `/` and hold no whitespace or control character; anything else is a load error (`export: ...`). Absent,
+no record carries a `link`. The engine fetches nothing from it. `urzua board` does not render it.
+
 ## Numbering against open pull requests: `new`
 
 A top-level `new` sets whether `urzua new` fetches pull-request head refs before numbering a record, so it skips
@@ -1653,6 +1665,17 @@ outside it is reported by `pointer.target-type` only, not also by `relation.cros
 `urzua graph` lists the claims of every declared relation pair as `pointer` edges, alongside `pointer_fields` and
 `narrative_fields`.
 
+**Containment: `part_of`.** A reference with a declared target type does not by itself mean "is part of", so
+containment is declared. A `pointer_fields` entry of the map form may add `part_of: true`:
+`{name: Parent, targets: [group], part_of: true}`. A record naming another through that field is part of it; the
+first reference that resolves to a record of a listed type, other than the record itself, is its `parent`.
+`urzua export --format json` reads `parent`, `children`, `children_by_state` and
+`state_disagrees_with_children` from this declaration alone (`SPEC-1`), `urzua board` draws its tree from it, and
+`roadmap.group_by` follows a record to its parents for a value the record does not carry. A configuration that
+declares no `part_of` has no tree: its types are flat groups. Load errors: `part_of: true` without `targets` (a
+containment field names the types it may point at), and `part_of: true` on more than one field of one type (a record
+has one parent). `part_of: false` declares nothing. The engine reads no field or type by name for this.
+
 `provisional` (`MILE-154`, from the `MILE-127` decision) splits `relation.pair-reciprocity` by the
 **claimant's** status, read from its `Status` role field by exact comparison. A claim from a record
 whose status is listed in `provisional.statuses` and that the peer does not echo is reported at
@@ -1773,7 +1796,10 @@ are optional and default to empty, and so is `work_types`. Absent `pairs` means 
   roadmap agree on a loop that crosses pairs (`SPEC-2`).
 - `group_by`: each name must be a field some record type declares (`required_fields` or
   `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
-  A field no open record carries is not an error; the roadmap notes it.
+  A field no open record carries is not an error; the roadmap notes it. A record that does not carry
+  the field takes the value of its nearest ancestor that does, through the type's `part_of` field when it
+  declares one; its own value wins. The group value is therefore not `null` under a child merely because the
+  field lives on the parent.
 - `work_types` (`ADR-82` Amendment of 2026-11-05, `MILE-196`): the `record_types` keys whose records the
   roadmap orders. A record of any other type still blocks its dependents but is not in `waves`,
   `ready`, `critical_path`, `records` or `groups`, and the output gains a `waiting_on` list (`SPEC-2`).
@@ -2999,3 +3025,4 @@ proves this configuration produces the three findings.
 > | 2026-11-17 | Bumped to `0.162`. A type declaring `statuses.delivery.items` need not list the evidence field in `required_fields` or `known_fields` (it is still required of a `delivery` without `items`); the rules that judge a checklist and the two status-requirement rules are on by declaration, and only an `off` entry for `status.delivery-agreement` is refused at load; an incomplete checklist declaration is refused naming the missing key and printing the smallest block that loads; the embodiment `evidence` categories gain `record`, which counts only where a tier declares it, and a `record:` locator in a Done-means item must name a record of a declared type (decided by the builder, accepted by the maintainer on 2026-11-17: "I'm happy with the decisions the builder made."); a `record:` locator in a `Realized-by` header must name one too, which extends that to the header (decided by the builder on 2026-11-17, pending maintainer review). **Why:** `MILE-335`, `MILE-326` and an adopting repository's report on setting up a checklist; a configuration that declares none of these keys is unchanged. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 4c2fb7f2d848 -> e2981c06fd24. Reason: rust/crates/urzua-core/src/config.rs: Config gains a skipped declared_status_entries field, filled at load from the validated status declarations; no key is read or written differently **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.163`. The decision that a `record:` locator in a `Realized-by` header must name a record of a declared type is marked accepted by the maintainer, with the words given; no behaviour changes. **Why:** the maintainer accepted it on 2026-11-17 after it had been recorded as pending review. | **structural** |
+> | 2026-11-18 | Bumped to `0.164`. A `pointer_fields` entry may add `part_of: true` to declare containment (it requires `targets`; one per type); `roadmap.group_by` follows a record to its nearest ancestor's value when the record carries none; a new optional `export.link_prefix` makes each exported record carry a `link`. **Why:** `MILE-330` and its amendment of 2026-11-18, and `MILE-344`: a reference with a target type does not say "is part of", and the roadmap's grouping returned `null` under a child whose group field lives on its parent. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |

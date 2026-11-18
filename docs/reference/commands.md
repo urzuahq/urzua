@@ -34,7 +34,7 @@ path outside the repository, a directory that is not a git repository).
 ### What uses the network
 
 Almost nothing. `check`, `fix` and `reverify` without `--apply`, `explain`, `graph`, `roadmap`,
-`rules`, `doctor`, `export`, `index`, `migrate`, `mcp`, `init` and `harness` make no network call.
+`rules`, `doctor`, `export`, `board`, `index`, `migrate`, `mcp`, `init` and `harness` make no network call.
 Four commands do:
 
 - `urzua refs refresh` fetches issue and pull request numbers from the GitHub REST API (with `curl`).
@@ -60,6 +60,7 @@ Four commands do:
 | [`explain`](#explain) | Which records govern a path, what a rule is, or what the configuration declares for its record types | no |
 | [`graph`](#graph) | The record relationship graph | no |
 | [`roadmap`](#roadmap) | The order of work, computed from the records | no |
+| [`board`](#board) | One page showing every record, as a file or served locally | a file under `.urzua/cache` (or `--out`) |
 | [`rules`](#rules) | Every rule this build ships | no |
 | [`migrate`](#migrate) | Backfill stable ids, rename files to the filename convention, upgrade the config, preview a new required field | with `--apply` or `config` |
 | [`export`](#export) | Emit the records as JSON | no |
@@ -359,6 +360,19 @@ config and stores nothing. A repository that declares none gets a note (`no-sequ
 empty roadmap. Output: `status` and `roadmap` with `schema`, `pairs`, `waves`, `ready`,
 `critical_path`, `records`, `groups`, `needs_replan`, `cycles` and `notes`.
 
+## board
+
+```text
+urzua board [--out <path>]
+urzua board --serve [--port <n>]
+```
+
+One HTML page of every record, laid out only from the configuration; see [the board](board.md). Without
+`--serve` it writes the file (default `.urzua/cache/board.html`) and prints `status`, `file`, `bytes`,
+`record_count` and `read`. With `--serve` it listens on 127.0.0.1 (a free port unless `--port` names one),
+prints one JSON line with `listening`, `address` and `port`, and answers `GET` until interrupted. `--port`
+needs `--serve`, and `--out` excludes it. The page is a file or a response, never stdout.
+
 ## mcp
 
 ```text
@@ -433,9 +447,25 @@ urzua migrate schema --report --field <name>
 urzua export --format json
 ```
 
-Every record as plain JSON data. Output: `status`, `record_count`, `types` and `records`, each record
-with `id`, `type`, `path`, `stable_id`, `header`, `header_readable`, `preamble`, `sections` and
-`raw_text`. The format must be named. `--format agdr` is not implemented and exits 2.
+Every record as plain JSON data. Output: `status`, `record_count`, `types`, `type_roles`, `read` and
+`records`, each record with `id`, `type`, `path`, `stable_id`, `header`, `header_readable`, `preamble`,
+`sections` and `raw_text`, and what a view of the records needs: `title`, `fields`, `status`, `state` and
+`state_decided_by`, `waiting_on`, `ready`, `gated_moves`, `parent`, `children`, `children_by_state`,
+`state_disagrees_with_children`, `refers_to`, `unresolved_refs`, `referred_by` and, when the configuration
+declares an `export.link_prefix`, `link`. Records are in numeric order within a type. `--no-raw-text`
+leaves `raw_text` out of every record. The format must be named. `--format agdr` is not implemented and
+exits 2. [The board](board.md) is built from these keys alone; so can your own view be.
+
+```text
+urzua export --format json --no-raw-text
+```
+
+`state` is one of `finished`, `dropped`, `under-way`, `not-started` or `none`, read from the type's
+`statuses.success`, `failure` and `progress` lists, and `state_decided_by` names the declaration that
+decided it. `waiting_on` is separate from it: a record can be under way and waiting. `parent` and
+`children` exist only where a `pointer_fields` entry declares `part_of: true` (see
+[config](config.md#containment-part_of)). `read` names the commit, the branch, whether a record file has
+uncommitted changes, and the time. The full contract is in `SPEC-1`.
 
 ## index
 

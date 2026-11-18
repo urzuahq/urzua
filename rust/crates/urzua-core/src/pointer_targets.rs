@@ -312,6 +312,26 @@ mod tests {
     }
 
     #[test]
+    fn part_of_names_a_types_containment_field_and_needs_targets() {
+        let c = parse(&cfg("[Up, {name: Parent, targets: [b], part_of: true}]", "")).unwrap();
+        assert_eq!(c.part_of["a"], "Parent");
+        assert!(!c.part_of.contains_key("b"));
+        assert_eq!(c.pointer_targets["a"]["Parent"], vec!["b".to_string()]);
+        let c = parse(&cfg("[{name: Parent, targets: [b], part_of: false}]", "")).unwrap();
+        assert!(c.part_of.is_empty(), "part_of: false declares no containment");
+        let c = parse(&cfg("[{name: Parent, targets: [b]}]", "")).unwrap();
+        assert!(c.part_of.is_empty(), "targets alone are not containment");
+
+        assert!(reason(&cfg("[{name: Parent, part_of: true}]", "")).contains("without targets"));
+        assert!(reason(&cfg(
+            "[{name: Parent, targets: [b], part_of: true}, {name: Up, targets: [b], part_of: true}]",
+            ""
+        ))
+        .contains("more than one pointer field"));
+        assert!(parse(&cfg("[{name: Parent}]", "")).is_err(), "an entry with neither is still refused");
+    }
+
+    #[test]
     fn a_config_without_targets_has_no_constraints() {
         let c = parse(&cfg("[Parent]", "")).unwrap();
         assert!(c.pointer_targets.is_empty());

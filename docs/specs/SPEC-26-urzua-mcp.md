@@ -2,7 +2,7 @@
 Stable-Id: 01M7A8QGWXMR8WYFDC36XW8XEF
 Status: Draft
 Date: 2026-11-13
-Version: '0.7'
+Version: '0.8'
 Author: beauwilliams
 Subject: '`urzua mcp` -- a read-only MCP server over stdio that serves the reports urzua already builds.'
 Implements: ADR-99
@@ -56,7 +56,7 @@ schema does not name is `-32602`, never ignored. Names carry a read word and no 
 | Tool | Input | Result |
 |---|---|---|
 | `urzua_check` | `{paths?: [string], base?: string, rules?: [string]}` | `CheckReport` |
-| `urzua_list_records` | `{type?: string, status?: [string]}` | `ExportReport` with each record's `raw_text`, `sections` and `preamble` left out: `types`, `record_count` and `records[]` (id, type, path, header fields). `types[].records` and `record_count` count the records listed, not the corpus. The `roadmap` block `export` carries is left out: it spans the whole corpus whatever the filter, so a two-record listing would carry the whole roadmap. A roadmap tool stays unbuilt (below); `urzua roadmap` is the command. |
+| `urzua_list_records` | `{type?: string, status?: [string]}` | `ExportReport` with each record's `raw_text`, `sections` and `preamble` left out: `types`, `record_count` and `records[]` (id, type, path, header fields). `types[].records` and `record_count` count the records listed, not the corpus. Each record carries the keys `export` derives (`SPEC-1`: `title`, `fields`, `state`, `waiting_on`, `ready`, `parent`, `children`, `refers_to`, `referred_by` and the rest), computed over the whole corpus before the filter. The `roadmap` block `export` carries is left out: it spans the whole corpus whatever the filter, so a two-record listing would carry the whole roadmap. A roadmap tool stays unbuilt (below); `urzua roadmap` is the command. |
 | `urzua_show_record` | `{id: string}` | one `ExportedRecord` (header, `sections`, `raw_text`) and the `GraphEdge`s that touch it, supersession included |
 | `urzua_get_findings_for_path` | `{path: string}` | `ExplainReport` |
 | `urzua_get_graph` | `{}` | `GraphReport` |
@@ -151,3 +151,4 @@ The server is registered by a person in a user-owned file, with the snippet docu
 > | 2026-11-14 | Bumped to `0.5`. A `not-run` report is an error result (`isError: true`); `urzua_list_records` leaves out the whole-corpus `roadmap` block; the `.git/index` note says git refreshes the index for any stat-dirty tracked file and may hold `index.lock`, not only for a racily clean one. **Why:** the external review's findings 4.3, 4.4 and 4.5; `ADR-46` says a result that established nothing is not a success. | **substantive** |
 > | 2026-11-15 | Bumped to `0.6`. The 1 MiB request-line cap is `harness.limits.mcp_line_bytes` (`SPEC-3`): the default, and a floor configuration may raise, to at most 64 MiB because a line up to the cap is held in memory, but never lower. **Why:** `ADR-101` amendment of 2026-11-15 (configuration owns behaviour), accepted by the maintainer; tracked by `MILE-232`. | **substantive** |
 > | 2026-11-14 | Bumped to `0.7`. A usage error of `urzua mcp` (an unknown flag or argument, `--as-of`) is one JSON object on stderr and nothing on stdout, as the command section already said. **Why:** an external review found the refusal printed on stdout, where a client expects frames only. | **substantive** |
+> | 2026-11-18 | Bumped to `0.8`. The record tools return the keys `export` now derives, through the same code. **Why:** `MILE-330`, whose last item is that the server's record tools return the same additions as the export. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |

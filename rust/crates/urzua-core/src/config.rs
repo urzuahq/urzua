@@ -6983,6 +6983,25 @@ record_types:
     const AMEND_PAIR: &str = "relation_pairs:\n  - {name: amendment, forward: Amends, inverse: Amended-by, reciprocity: required, cross_type: false}\n";
 
     #[test]
+    fn a_link_prefix_joins_a_record_path_and_must_be_an_address() {
+        let none = parse(&pair_cfg("", "")).unwrap();
+        assert_eq!(none.export.link_for(std::path::Path::new("docs/a.md")), None);
+        let c = parse(&pair_cfg("", "export:\n  link_prefix: https://h.test/blob/main/\n")).unwrap();
+        assert_eq!(
+            c.export.link_for(std::path::Path::new("docs/a.md")).as_deref(),
+            Some("https://h.test/blob/main/docs/a.md")
+        );
+        for bad in ["ftp://h.test/", "h.test/", "https://h.test/ x/", "javascript:alert(1)//"] {
+            let text = pair_cfg("", &format!("export:\n  link_prefix: \"{bad}\"\n"));
+            assert!(
+                matches!(parse(&text), Err(ConfigError::InvalidExport { .. })),
+                "{bad}"
+            );
+        }
+        assert!(parse(&pair_cfg("", "export:\n  other: 1\n")).is_err());
+    }
+
+    #[test]
     fn fail_on_defaults_to_error_and_accepts_warning() {
         assert_eq!(parse(&pair_cfg("", "")).unwrap().fail_on, FailOn::Error);
         let c = parse(&pair_cfg("", "fail_on: warning\n")).unwrap();

@@ -587,7 +587,9 @@ pub fn checkbox_counts(content: &str) -> (usize, usize) {
             .strip_prefix(['-', '*', '+'])
             .filter(|rest| rest.starts_with(' '))
             .map(str::trim_start);
-        match item.and_then(|rest| rest.get(..3)) {
+        let boxed = item
+            .filter(|rest| rest[3.min(rest.len())..].chars().next().is_none_or(char::is_whitespace));
+        match boxed.and_then(|rest| rest.get(..3)) {
             Some("[ ]") => unticked += 1,
             Some("[x]" | "[X]") => ticked += 1,
             _ => {}

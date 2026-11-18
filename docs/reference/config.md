@@ -39,6 +39,7 @@ rules:
 | `locator_resolvers` | list | How a `path#Symbol` evidence pin finds the item it pins, per file type. A line-range pin (`#L10-L40`) needs none. |
 | `relation_pairs` | list | Pairs of fields declared as inverses of each other, optionally a sequencing relation. |
 | `roadmap` | map | `pairs` (the sequencing pairs `urzua roadmap` orders by), `group_by` (fields to group by) and `work_types` (types the roadmap orders). |
+| `export` | map | `link_prefix` (optional): text put before a record's repository-relative path to make the `link` each exported record carries. Must start with `https://`, `http://` or `/`. Absent, no record carries a `link`. |
 | `new` | map | How `urzua new` numbers records. `check_open_prs` (default `false`) fetches pull request head refs to skip numbers open pull requests took; `pull_ref_patterns` (default `refs/pull/*/head`), `remote` (default `origin`), `fetch_timeout_seconds` (30), `lock_timeout_seconds` (10). |
 | `discovery` | map | `include_untracked` (default `false`): also read untracked, non-ignored files directly under a record directory, so `check` sees a draft before `git add`. |
 | `attestation` | map | Who a tool-written revision row names. `identity` is `gh-verified` (default) or `asserted`; `require_verified` (default `false`) refuses a run with no verified identity. `reason` sets the least a `--reason` must hold for `fix --rebaseline --apply` and `reverify --apply`: `min_words` (default `3`, runs holding a letter or digit) and `min_chars` (default `12`). |
@@ -172,6 +173,23 @@ relation_pairs:
 Each element of a list is judged; with no target types declared anywhere the rule reports `not-enabled`. A reference that names no record is not this rule's finding but `pointer.resolution`'s, and that rule must be enabled for a dangling link to be reported; a freshly initialised config does not turn it on. Each target type
 must be a declared record type, the list must not be empty, and only a `pointer_fields` entry takes `targets`. A pair
 with `cross_type: false` may list only types that carry its forward field.
+
+### Containment: `part_of`
+
+A reference with target types does not say "is part of", so containment is its own declaration. Add
+`part_of: true` to a `pointer_fields` entry that declares `targets`:
+
+```yaml
+record_types:
+  step:
+    pointer_fields: [{name: In, targets: [stage], part_of: true}]
+```
+
+A record naming another through that field is part of it. `urzua export` reads `parent`, `children`,
+`children_by_state` and `state_disagrees_with_children` from it, [the board](board.md) draws its tree
+from it, and `roadmap.group_by` follows a record that carries no value for a group field to the value of its
+nearest parent. A configuration without `part_of` has no tree, and its types are flat groups. `part_of`
+requires `targets`, and a type declares at most one.
 
 ### `statuses`
 

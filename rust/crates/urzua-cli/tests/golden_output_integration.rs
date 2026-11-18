@@ -72,7 +72,7 @@ fn repo(name: &str) -> common::TempDir {
 }
 
 /// Drops what varies run to run or build to build: the root path, the clock's
-/// evaluation date, and the rules a build lists as `not-enabled`.
+/// evaluation date, the export's read stamp, and the rules a build lists as `not-enabled`.
 fn normalise(value: &mut Value, root: &str) {
     match value {
         Value::String(s) => *s = s.replace(root, "<ROOT>"),
@@ -85,6 +85,14 @@ fn normalise(value: &mut Value, root: &str) {
             if let Some(Value::Object(as_of)) = map.get_mut("as_of") {
                 if as_of.get("source") == Some(&Value::String("clock".into())) {
                     as_of.insert("date".into(), Value::String("<TODAY>".into()));
+                }
+            }
+            // The export's read stamp names the commit hash, the branch git started on and the moment it was read.
+            if let Some(Value::Object(read)) = map.get_mut("read") {
+                if read.contains_key("uncommitted_record_changes") {
+                    read.insert("commit".into(), Value::String("<COMMIT>".into()));
+                    read.insert("branch".into(), Value::String("<BRANCH>".into()));
+                    read.insert("time".into(), Value::String("<NOW>".into()));
                 }
             }
             map.values_mut().for_each(|v| normalise(v, root));

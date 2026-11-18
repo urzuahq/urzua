@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.50'
+Version: '0.51'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -206,7 +206,18 @@ rewrites a config from the previous schema version to the current one.
 Every record of every configured type as plain JSON data, so tooling reads records through the one
 parser `check` uses instead of a second one. Takes no paths: it always exports the whole tracked
 corpus. `--format` is required, for `export` and `import` alike: there is no default format, and a
-bare `urzua export` exits 2 asking for one. `--format agdr` is not implemented (exit 2). The exact fields are under "Export contract" below.
+bare `urzua export` exits 2 asking for one. `--format agdr` is not implemented (exit 2). `--no-raw-text` leaves each record's `raw_text` out and changes nothing else. The exact fields are under "Export contract" below.
+
+### `urzua board`
+**Specified in full by `docs/reference/board.md`.** One self-contained HTML page showing every record,
+laid out only from what the configuration declares and read from the export's view model: the
+page computes nothing a consumer of `urzua export` could not read. `urzua board` writes it to a file
+(`--out <path>`, default `.urzua/cache/board.html`) and prints a JSON answer naming the file, the
+record count and the `read` stamp. `urzua board --serve [--port N]` answers `GET /` (and each
+record's text at `GET /record/<id>` when the page links it) on 127.0.0.1 only, re-reading the records
+on every request, with `Cache-Control: no-store`, as a foreground process that prints one JSON line
+with its address when it listens. It is the one command whose product is a page for a person; its
+stdout is still JSON.
 
 ### `urzua export --format=agdr` / `urzua import`
 AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fields. Not
@@ -265,7 +276,9 @@ command applies (`SPEC-2`, "Symlinked records"):
 | `status` | `"ok"` | Read-only; no blocking axis. |
 | `record_count` | integer | Length of `records`. |
 | `types` | array | One entry per configured type, in sorted name order: `type`, `dir`, `records` (the count exported). A type with no records is listed with `0`, so "empty" and "not configured" differ. |
-| `records` | array | Every record, ordered by `type` then `path`. |
+| `type_roles` | object | Per configured type, what it means to a view: `work` (in `roadmap.work_types`; every type when that is absent), `part_of` (the pointer field it declares as containment, or `null`), `value_fields` (the fields with declared `field_values`), `statuses_declared`, and `gated_without_transitions` (an `authority` gate reserves a move to one of its statuses but the type declares no transitions, so the next move cannot be read). |
+| `read` | object | When and from what the export read: `commit` (`null` outside a repository with one), `branch` (`null` on a detached head), `uncommitted_record_changes` (any file under a record directory modified, staged or new and uncommitted), and `time` (UTC, `YYYY-MM-DDTHH:MM:SSZ`, read through `urzua-io`'s clock afresh at each export; `--as-of` does not move it). The records read are the working tree's. |
+| `records` | array | Every record, ordered by `type`, then by the number in its id (so `MILE-2` before `MILE-10`), then `path`. |
 | `roadmap` | object | The computed roadmap, the same object `urzua roadmap` prints (SPEC-2). Present only when `roadmap.pairs` is declared (SPEC-3), so a repository that has not opted in sees no new key. |
 | `notices` | array | Omitted when empty, as for every report. |
 
@@ -279,12 +292,27 @@ Each `records` entry:
 | `stable_id` | string or `null` | The `Stable-Id` header value (key matched case-insensitively, as everywhere); `null` when absent. |
 | `header_readable` | boolean | `false` when no header region parsed. Then `header` is empty and means "unreadable", not "no fields". A type declaring `header_shape: none` has no header by design, so its records are `true` with an empty `header`. |
 | `header` | array | The header as the configured `header_shape` parser (the one `check` uses) read it, in file order: `{ "name", "value", "line" }`. A list, not a map, so a repeated key stays visible. Values are strings exactly as parsed. |
-| `raw_text` | string | The file's complete text, unmodified, header included. |
+| `raw_text` | string | The file's complete text, unmodified, header included. Absent under `--no-raw-text`. |
+| `title` | string | The title the engine's own title check reads: the first `#` heading without its identifier (`# 7 — Title` and `# ADR-7: Title` both give `Title`). The record's id when it has no recognisable title (see `title_is_fallback`). |
+| `title_is_fallback` | boolean | `true` when `title` is the id (or the file stem) because no title was found. |
+| `fields` | object | The header as a map. A field is an array when its type declares it in `pointer_fields` or gives it `field_values`, or it was written as a YAML list; otherwise a string. The first of a repeated key is kept; `header` still lists every one. |
+| `status` | string or `null` | The value of the type's status field. |
+| `state` | string | One of `finished` (the status is in the type's `statuses.success`), `dropped` (in `failure`), `under-way` (in `progress` and in neither of those), `not-started` (any other status of a type that declares statuses, or no status written), `none` (the type declares no statuses). Set for every record. |
+| `state_decided_by` | string | Which declaration decided `state`: `record_types.<type>.statuses.success`, `.failure` or `.progress`; else `default` (no list names the status), `no-status` or `no-statuses-declared`. |
+| `waiting_on` | array | The ids of the records this one directly depends on, through the pairs `roadmap.pairs` names, that are not in their own type's `success`. Separate from `state`: a record can be under way and waiting. Empty without a pair. |
+| `ready` | boolean | `true` only for a record of a work type that is neither finished nor dropped and waits on nothing. |
+| `gated_moves` | array | `{to, by}` for each move to a status that an `authority.gates` entry for the type reserves, which the type's declared `transitions` allow from the record's status. Always empty for a finished or dropped record. |
+| `parent`, `children` | string or `null`, array | The record this one is part of and the records part of it (in numeric order), read only from the type's `pointer_fields` entry that declares `part_of: true` (SPEC-3). A configuration without one has no tree. |
+| `children_by_state` | object | The count of `children` in each `state`: `finished`, `dropped`, `under-way`, `not-started`, `none`. |
+| `state_disagrees_with_children` | boolean | `true` when the record is `finished` while a child is `under-way`, `not-started` or `none`, or `not-started` while a child is `under-way` or `finished`. |
+| `refers_to`, `unresolved_refs`, `referred_by` | objects | Per reference field: the ids the record names that exist (the edges `urzua graph` prints), the ids it names that no record carries, and the records that name this one through that field. |
+| `link` | string | `export.link_prefix` (SPEC-3) followed by the record's path. Present only when the prefix is declared. |
 
-| `sections` | array or `null` | For a type that declares `sections` (SPEC-3), the record's `##` sections in document order, split by the same parser `section.required` uses; `[]` when the record has none. `null` (the key is present) when the type declares no `sections`, so "this type has no declared document model" is never confused with "declared, but this record has no sections", and a consumer cannot mistake an unread type for an empty one. Each entry: `name` (the declared `required` name when the heading is that name or one of its aliases, otherwise the heading), `heading` (as written), `line` and `end_line` (1-based, file-relative), `content` (the lines after the heading through `end_line`, each ending `\n`). |
+| `sections` | array or `null` | For a type that declares `sections` (SPEC-3), the record's `##` sections in document order, split by the same parser `section.required` uses; `[]` when the record has none. `null` (the key is present) when the type declares no `sections`, so "this type has no declared document model" is never confused with "declared, but this record has no sections", and a consumer cannot mistake an unread type for an empty one. Each entry: `name` (the declared `required` name when the heading is that name or one of its aliases, otherwise the heading), `heading` (as written), `line` and `end_line` (1-based, file-relative), `content` (the lines after the heading through `end_line`, each ending `\n`), `ticked` and `unticked` (the counts of `- [x]` and `- [ ]` lines outside fenced code) and, for the section a type declares as its checklist (`statuses.delivery.items`), `items`: per item `n`, `line`, `text`, `resolved`, `evidence` (the locators as written, or `null`) and `waived`, as the delivery rule judges them. |
 | `preamble` | string or `null` | For a type that declares `sections`, the text between the header and the first section (`""` when none); `null` exactly when `sections` is `null`. |
 
-`raw_text` stays beside `sections` and remains the complete file. A record whose header is unreadable
+Every key above beyond the ones the contract had is additive: a consumer written against the earlier
+contract reads the new export unchanged. `raw_text` stays beside `sections` and remains the complete file. A record whose header is unreadable
 is still split from its first line, since no header region is known.
 
 ## Configuration
@@ -436,3 +464,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 155-485) 7b9bda2d7cfa -> 03ad5f3a47f4. Reason: main.rs: explain accepts --full alone only to refuse it with the command to run, and its --type dispatch is unchanged; no other argument or command changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 155-486) 03ad5f3a47f4 -> 25e879434670. Reason: main.rs: the --full help text names the rules set in the configuration and the path gates; no argument or behaviour changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 155-488) 25e879434670 -> 1e4a23278dfd. Reason: main.rs: the explain help gains one sentence on what --types does not say; no argument or behaviour changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-18 | Bumped to `0.51`. Added `urzua board` and `export --no-raw-text` to the command surface, and to the export contract the record keys `title`, `title_is_fallback`, `fields`, `status`, `state`, `state_decided_by`, `waiting_on`, `ready`, `gated_moves`, `parent`, `children`, `children_by_state`, `state_disagrees_with_children`, `refers_to`, `unresolved_refs`, `referred_by` and `link`, the section keys `ticked`, `unticked` and `items`, and the top-level `type_roles` and `read`; records are ordered by the number in their id within a type. **Why:** `MILE-330` and its amendment of 2026-11-18, and `MILE-344`: a view of the records should read what it needs from the export instead of recomputing it. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
