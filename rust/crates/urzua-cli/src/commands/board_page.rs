@@ -5,7 +5,8 @@
 //!
 //! Every string that came from a record is HTML-escaped where it is written,
 //! and a record's text is shown as plain text. The page's own script only
-//! filters what is already on the page.
+//! filters and arranges what is already on the page. The frame around the
+//! records is in `board_shell`.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
@@ -14,6 +15,8 @@ use urzua_core::report::{ExportReport, ExportedRecord};
 use urzua_core::view_model::StateCategory;
 
 use super::board_assets::{LIVE, SCRIPT, STYLE};
+use super::board_declared::{prompt, TypeFacts};
+use super::board_shell::{about_panel, build_panel, favicon, footer, side, tabs, top};
 
 pub(crate) struct CheckLine {
     pub status: String,
@@ -579,7 +582,7 @@ impl<'a> Page<'a> {
 /// Whether a record is work someone can pick up: ready, and not a parent. A
 /// parent at its starting status reads as ready in the export; the board lists
 /// it in Work with its count, not as something to start.
-fn ready_leaf(r: &ExportedRecord) -> bool {
+pub(super) fn ready_leaf(r: &ExportedRecord) -> bool {
     r.view.ready && r.view.children.is_empty()
 }
 
@@ -624,50 +627,9 @@ fn head(csp_style: &str, csp_script: &str, serving: bool) -> String {
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
-<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src {csp_style}; script-src {csp_script};{connect} base-uri 'none'; form-action 'none'\">\n\
-<title>urzua board</title>\n<style>{STYLE}</style>\n</head>\n"
-    )
-}
-
-fn exact_time(time: &str) -> String {
-    match (time.get(..10), time.get(11..19)) {
-        (Some(date), Some(clock)) => format!("{date} {clock} UTC"),
-        _ => time.to_string(),
-    }
-}
-
-/// The header line: the name, where the records were read from, and when. A
-/// served page also carries the digest it was built at and a Refresh button;
-/// a file says it is a file, since it cannot refresh itself.
-fn top(page: &Page<'_>, digest: Option<&str>) -> String {
-    let read = &page.e.read;
-    let commit = read
-        .commit
-        .as_deref()
-        .map_or("no commit", |c| &c[..c.len().min(7)]);
-    let branch = read.branch.as_deref().unwrap_or("detached head");
-    let changes = if read.uncommitted_record_changes {
-        ", uncommitted record changes"
-    } else {
-        ""
-    };
-    let config_changes = if read.uncommitted_config_changes == Some(true) {
-        ", uncommitted configuration changes"
-    } else {
-        ""
-    };
-    let time = esc(&exact_time(&read.time));
-    let stamp = match digest {
-        Some(digest) => format!(
-            "<span class=\"meta\" id=\"upd\" data-d=\"{}\" title=\"{time}\">updated {time}</span><button type=\"button\" id=\"refresh\" class=\"rf\">Refresh</button>",
-            esc(digest)
-        ),
-        None => format!("<span class=\"meta\" id=\"upd\">static file, generated {time}</span>"),
-    };
-    format!(
-        "<header class=\"top\"><b>urzua board</b><span class=\"meta\" id=\"meta\">{} · {} · working tree{changes}{config_changes}</span>{stamp}</header>\n",
-        esc(branch),
-        esc(commit)
+<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src {csp_style}; script-src {csp_script}; img-src data:;{connect} base-uri 'none'; form-action 'none'\">\n\
+<title>urzua board</title>\n<link rel=\"icon\" href=\"{}\">\n<style>{STYLE}</style>\n</head>\n",
+        favicon()
     )
 }
 
@@ -700,61 +662,8 @@ fn notes(page: &Page<'_>, check: &CheckNote<'_>) -> String {
     out
 }
 
-fn controls(page: &Page<'_>) -> String {
-    let readable: Vec<&ExportedRecord> = page.e.records.iter().collect();
-    // A record whose header could not be read has no state to count.
-    let count = |keep: &dyn Fn(&ExportedRecord) -> bool| {
-        readable
-            .iter()
-            .filter(|r| r.header_readable && keep(r))
-            .count()
-    };
-    let state = |s: StateCategory| move |r: &ExportedRecord| r.view.state == s;
-    let filters: Vec<(&str, &str, usize)> = vec![
-        ("", "All", readable.len()),
-        (
-            "needs",
-            "Needs you",
-            count(&|r| !r.view.gated_moves.is_empty()),
-        ),
-        (
-            "under-way",
-            "Under way",
-            count(&state(StateCategory::UnderWay)),
-        ),
-        ("ready", "Ready", count(&ready_leaf)),
-        (
-            "finished",
-            "Finished",
-            count(&state(StateCategory::Finished)),
-        ),
-        ("dropped", "Dropped", count(&state(StateCategory::Dropped))),
-        (
-            "not-started",
-            "Not started",
-            count(&state(StateCategory::NotStarted)),
-        ),
-        ("open", "Open", count(&state(StateCategory::Open))),
-    ];
-    let buttons: String = filters
-        .iter()
-        .filter(|(key, _, n)| {
-            key.is_empty() || ["needs", "under-way", "ready"].contains(key) || *n > 0
-        })
-        .map(|(key, label, n)| {
-            format!(
-                "<button type=\"button\" data-f=\"{key}\"{}>{label} {n}</button>",
-                if key.is_empty() { " class=\"on\"" } else { "" }
-            )
-        })
-        .collect();
-    format!(
-        "<div class=\"bar\"><input id=\"q\" type=\"search\" placeholder=\"Search id or title\" aria-label=\"Search id or title\"><div class=\"seg\" role=\"group\" aria-label=\"Filter by state\">{buttons}</div></div>\n<p id=\"shown\" class=\"note\" hidden></p>\n"
-    )
-}
-
 /// Escaped text in which a `backticked` word is code.
-fn with_code(text: &str) -> String {
+pub(super) fn with_code(text: &str) -> String {
     esc(text)
         .split('`')
         .enumerate()
@@ -776,6 +685,20 @@ fn section(
     rows: &str,
     group: &str,
 ) -> String {
+    section_or(label, count, type_name, note, rows, group, "")
+}
+
+/// A section as a card, or when it has no rows and says so, as a header and the
+/// one muted sentence in `none`.
+fn section_or(
+    label: &str,
+    count: &str,
+    type_name: bool,
+    note: &str,
+    rows: &str,
+    group: &str,
+    none: &str,
+) -> String {
     let note = if note.is_empty() {
         String::new()
     } else {
@@ -786,12 +709,19 @@ fn section(
     } else {
         format!(" data-sec=\"{group}\"")
     };
-    format!(
-        "<section{attr}><h3{}>{}<i>{}</i></h3>{note}<ul class=\"list\">{rows}</ul></section>\n",
+    let head = format!(
+        "<div class=\"sh\"><h3{}>{}<i>{}</i></h3></div>",
         if type_name { " class=\"ty\"" } else { "" },
         esc(label),
         esc(count)
-    )
+    );
+    if rows.is_empty() && !none.is_empty() {
+        return format!(
+            "<section class=\"none\"{attr}>{head}{note}<p class=\"empty\">{}</p></section>\n",
+            esc(none)
+        );
+    }
+    format!("<section class=\"card\"{attr}>{head}{note}<ul class=\"list\">{rows}</ul></section>\n")
 }
 
 fn brief_rows(
@@ -824,7 +754,7 @@ fn brief_rows(
     out
 }
 
-fn names_phrase(names: &[&str]) -> String {
+pub(super) fn names_phrase(names: &[&str]) -> String {
     match names {
         [] => String::new(),
         [only] => (*only).to_string(),
@@ -834,7 +764,7 @@ fn names_phrase(names: &[&str]) -> String {
 
 /// A name in a note, which `with_code` splits at backticks: a backtick in a
 /// type or status name would pair with the note's own and turn text into code.
-fn without_backticks(name: &str) -> String {
+pub(super) fn without_backticks(name: &str) -> String {
     name.replace('`', "'")
 }
 
@@ -879,28 +809,6 @@ pub(crate) fn progress_gap_sentence(type_name: &str, statuses: &[String]) -> Str
     )
 }
 
-fn progress_note(page: &Page<'_>, none_under_way: bool) -> String {
-    let sentences: Vec<String> = progress_gaps(page.e)
-        .into_iter()
-        .map(|(name, statuses)| {
-            let statuses: Vec<String> = statuses.iter().map(|s| without_backticks(s)).collect();
-            progress_gap_sentence(&without_backticks(name), &statuses)
-        })
-        .collect();
-    if sentences.is_empty() {
-        return String::new();
-    }
-    format!(
-        "{}{}",
-        if none_under_way {
-            "Nothing is under way. "
-        } else {
-            ""
-        },
-        sentences.join(" ")
-    )
-}
-
 fn attention(page: &Page<'_>) -> String {
     let all = || (0..page.e.records.len()).filter(|&i| page.record(i).header_readable);
     let gated: Vec<usize> = all()
@@ -924,32 +832,34 @@ fn attention(page: &Page<'_>) -> String {
         )
     };
     if !gated.is_empty() || !notes.is_empty() {
-        out.push_str(&section(
+        out.push_str(&section_or(
             "Needs you",
             &gated.len().to_string(),
             false,
             notes.trim(),
             &brief_rows(page, "needs", &gated, &needs_right),
             "needs",
+            "No record is waiting on a person.",
         ));
     }
-    let progress_note = progress_note(page, under_way.is_empty());
     let by_status = |r: &ExportedRecord| status_cell(r);
-    out.push_str(&section(
+    out.push_str(&section_or(
         "Under way",
         &under_way.len().to_string(),
         false,
-        &progress_note,
+        "",
         &brief_rows(page, "under-way", &under_way, &by_status),
         "under-way",
+        "No record is under way.",
     ));
-    out.push_str(&section(
+    out.push_str(&section_or(
         "Ready",
         &ready.len().to_string(),
         false,
         "",
         &brief_rows(page, "ready", &ready, &by_status),
         "ready",
+        "No record is ready.",
     ));
     out
 }
@@ -1085,7 +995,7 @@ fn work_section(page: &Page<'_>) -> String {
         .any(|t| t.work && t.part_of.is_some());
     let any_work = (0..n).any(|i| tree.in_tree[i] || tree.is_closed_work(page, i));
     if !any_work {
-        return section("Work", "0", false, "No work record.", "", "");
+        return section_or("Work", "0", false, "", "", "", "No work record.");
     }
     let mut seen = HashSet::new();
     if !contained {
@@ -1231,22 +1141,33 @@ fn script(serving: bool) -> String {
 
 /// The whole page. `live` is the digest of the records and configuration the
 /// page was built from when it is served, and `None` for a file.
-pub(crate) fn render(export: &ExportReport, check: &CheckNote<'_>, live: Option<&str>) -> String {
+pub(crate) fn render(
+    export: &ExportReport,
+    check: &CheckNote<'_>,
+    live: Option<&str>,
+    declared: &[TypeFacts],
+) -> String {
     let page = Page::new(export, live.is_some());
     let script = script(page.serving);
     let mut out = head(&csp_hash(STYLE), &csp_hash(&script), page.serving);
-    out.push_str("<body>\n<div class=\"wrap\">\n");
-    out.push_str(&top(&page, live));
+    out.push_str(
+        "<body>\n<a class=\"skip\" href=\"#board\">Skip to the records</a>\n<div class=\"sticky\">",
+    );
+    out.push_str(&top(export, live));
+    out.push_str(&tabs(export));
+    out.push_str("</div>\n<div class=\"app\" id=\"app\">\n");
+    out.push_str(&side(export));
     out.push_str("<main id=\"board\">\n");
     out.push_str(&notes(&page, check));
-    out.push_str(&controls(&page));
+    out.push_str("<p id=\"shown\" class=\"note\" hidden></p>\n<p id=\"empty\" class=\"empty\" hidden>No record matches.</p>\n");
     out.push_str(&attention(&page));
     out.push_str(&work_section(&page));
     out.push_str(&other_section(&page));
     out.push_str(&unreadable_section(&page));
-    let _ = write!(
-        out,
-        "</main>\n</div>\n<script>{script}</script>\n</body>\n</html>\n"
-    );
+    out.push_str(&about_panel(export, declared));
+    out.push_str(&build_panel(&prompt(declared)));
+    out.push_str("</main>\n<aside id=\"panel\" class=\"panel\" aria-label=\"Record details\" hidden></aside>\n</div>\n");
+    out.push_str(&footer());
+    let _ = write!(out, "<script>{script}</script>\n</body>\n</html>\n");
     out
 }

@@ -31,6 +31,18 @@ In the context of a maintainer who wants a standard, unfiltered board of any rep
 
 Decided by the builder on 2026-11-18, pending maintainer review. The words quoted in Context are the maintainer's; everything else in this record is the builder's.
 
+## Amendment (2026-11-18): the page is an application shell, and `--prompt` prints the text for building a view of one's own
+
+The maintainer looked at the board of three different repositories on 2026-11-18 and said: "I don't want it to be opinionated with this board. It should just generally work with anything, right? And then maybe there's even a handy thing for saying like, you know, paste this into your agent and then it can dynamically generate a view. Also, maybe we can make it like just a little bit more like it's just like a thing on a page right now. It just needs like maybe a nav bar and like just to feel like a proper web page rather than just like just just the text on the page. Like you know look at like standard modern apps and how they're built. Also, we can use the [urzua] brand guidelines to like give it a bit of design in the [urzua] logo and everything." (`MILE-349`.)
+
+What the Decision says still holds: one command whose product is a page, a file or a served response, stdout JSON, the page read only from the export, no record type, status or workflow word in it, no network request, everything from a record escaped, `GET` only. What this adds, decided by the builder on 2026-11-18, pending maintainer review:
+
+- The page is drawn as a small application in one file (a top bar, tabs, a sidebar from 1000 px, cards, a details panel, a footer, a light and dark switch) in the urzua brand. It is still one file with no external asset: the mark is inline, the icon is a `data:` address, and the content security policy gains `img-src data:` for it and nothing else.
+- `urzua board --prompt` is a second product of the command that is not the page: a JSON answer (`status`, `prompt`) carrying text written from the repository's configuration, which a person gives a coding agent to build a view of their own from `urzua export --format json`. The same text is in the page. It writes no file and starts no listener.
+- The board's own statements about a declaration (a type with no `statuses.progress`) leave the sections for an *About this board* panel that says how each part of the page follows from the configuration. The JSON `board.progress` notice is unchanged.
+
+The board stays the plain default that works with any configuration; the export stays the stable input for anything richer.
+
 ## Reversibility
 
 Easy. The command is additive: removing it removes a page and a listener, and no other command reads it. The export's additions it relies on stand on their own. A script that called `urzua board` would break; nothing in the repository's gates does.
@@ -53,3 +65,4 @@ Easy. The command is additive: removing it removes a page and a listener, and no
 > |---|---|---|
 > | 2026-11-18 | Initial record, `Status: Proposed`. **Why:** `MILE-344` records the maintainer's request for a built-in board. | **structural** |
 > | 2026-11-18 | The Consequences say what was built: a served request does not run `urzua check` (it links `/check`, one run at a time, cached against the digest), the page and the export behind it are cached against the digest, connections are threaded up to a cap, and `--allowed-host` is available. The Decision is unchanged. **Why:** the Consequences said each request ran `urzua check`, which the served page does not do. | **substantive** |
+> | 2026-11-18 | Amendment added: the page is drawn as an application shell in the urzua brand, and `urzua board --prompt` prints a prompt for building a view of one's own. The Decision is unchanged. **Why:** the maintainer asked on 2026-11-18 for a board that is not opinionated, looks like a proper web page and offers a prompt for an agent to build a view (`MILE-349`). | **substantive** |

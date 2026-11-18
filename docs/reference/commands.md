@@ -391,6 +391,7 @@ empty roadmap. Output: `status` and `roadmap` with `schema`, `pairs`, `waves`, `
 ```text
 urzua board [--out <path>]
 urzua board --serve [--port <n>] [--allowed-host <name>]...
+urzua board --prompt
 ```
 
 One HTML page of every record, laid out only from the configuration; see [the board](board.md). Without
@@ -398,6 +399,7 @@ One HTML page of every record, laid out only from the configuration; see [the bo
 `record_count`, `read` and any `notices`. With `--serve` it listens on 127.0.0.1 (a free port unless `--port` names one),
 prints one JSON line with `listening`, `address` and `port`, and answers `GET` until interrupted (the page refreshes itself from `GET /stamp`; see [the board](board.md)). `--port`
 and `--allowed-host` (a `Host` name to answer besides `localhost` and `127.0.0.1`; others get 403) need `--serve`, and `--out` excludes it. The page is a file or a response, never stdout.
+`--prompt` writes no page: it prints `status` and `prompt`, the text to give a coding agent to build a custom view from `urzua export --format json`, written from this repository's configuration (its record types with their fields and statuses, and the keys the export carries); it excludes `--serve` and `--out`.
 
 ## mcp
 
