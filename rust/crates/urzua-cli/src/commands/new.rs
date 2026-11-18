@@ -4,7 +4,7 @@
 //! the next one.
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::NewDecl;
@@ -495,11 +495,16 @@ struct NewRecordInputs<'a> {
     today: &'a str,
 }
 
+/// The type's checked-in template text, `None` when there is no such file or
+/// it cannot be read as text: the one read `new` and `explain` share.
+pub(crate) fn read_template(repo_root: &Path, record_type: &str) -> Option<String> {
+    urzua_io::read_to_string(&repo_root.join(template_path(record_type))).ok()
+}
+
 /// Reads the type's checked-in template, if any, and hands it to the shared
 /// scaffold in core.
 fn render_record(inputs: &NewRecordInputs) -> (String, Vec<urzua_core::new_record::FieldToFill>) {
-    let template_path = inputs.repo_root.join(template_path(inputs.record_type));
-    let template = urzua_io::read_to_string(&template_path).ok();
+    let template = read_template(inputs.repo_root, inputs.record_type);
     urzua_core::new_record::scaffold_record_reporting(
         &urzua_core::new_record::ScaffoldSpec::plain(
             inputs.type_config,

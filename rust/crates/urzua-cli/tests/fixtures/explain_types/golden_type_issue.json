@@ -1,0 +1,219 @@
+{
+  "status": "ok",
+  "config": ".urzua/config.yaml",
+  "note": "Whether a declared condition or field rule is enforced is answered by the rules set in the configuration (`urzua explain --types --full`) and by `urzua check`.",
+  "types": [
+    {
+      "at": "record_types.issue:3",
+      "conditions": [
+        {
+          "at": "record_types.issue.statuses.require[0]:26",
+          "counts_as_missing": {
+            "pending": {
+              "default": true,
+              "source": "built_in_list"
+            },
+            "placeholders": {
+              "default": true,
+              "source": "built_in_list"
+            }
+          },
+          "fields": [
+            "Severity"
+          ],
+          "kind": "require",
+          "sentence": "declared: when State is Closed and Kind is bug, Severity is required",
+          "when": [
+            "Closed"
+          ],
+          "when_field": {
+            "Kind": [
+              "bug"
+            ]
+          }
+        },
+        {
+          "at": "record_types.issue.statuses.forbid[0]:28",
+          "fields": [
+            "Fixes"
+          ],
+          "kind": "forbid",
+          "sentence": "declared: when State is Open, Fixes is forbidden",
+          "when": [
+            "Open"
+          ]
+        }
+      ],
+      "create_command": "urzua new issue '<title>'",
+      "dirs": [
+        {
+          "at": "record_types.issue.dir:4",
+          "value": "docs/issues"
+        },
+        {
+          "at": "record_types.issue.extra_dirs[0]:5",
+          "value": "docs/issues-archive"
+        }
+      ],
+      "gates": [
+        {
+          "at": "authority.gates[0]:53",
+          "by": "owners",
+          "logins": [
+            "someone"
+          ],
+          "to": [
+            "Dropped"
+          ]
+        }
+      ],
+      "header_fields": [
+        {
+          "at": "record_types.issue.required_fields[0]:8",
+          "name": "State",
+          "required": true,
+          "roles": [
+            {
+              "at": "record_types.issue.relation_fields.status:10",
+              "role": "status"
+            }
+          ]
+        },
+        {
+          "at": "record_types.issue.required_fields[1]:8",
+          "name": "Kind",
+          "required": true,
+          "values": {
+            "at": "record_types.issue.field_values.Kind:12",
+            "value": [
+              "bug",
+              "chore"
+            ]
+          }
+        },
+        {
+          "at": "record_types.issue.required_fields[2]:8",
+          "name": "Stable-Id",
+          "required": true
+        },
+        {
+          "at": "record_types.issue.known_fields[0]:9",
+          "name": "Severity",
+          "values": {
+            "at": "record_types.issue.field_values.Severity:13",
+            "value": [
+              "low",
+              "high"
+            ]
+          }
+        },
+        {
+          "at": "record_types.issue.known_fields[1]:9",
+          "name": "Fixes",
+          "pointer": {
+            "at": "record_types.issue.pointer_fields[0]:15",
+            "effective_targets": [
+              "task"
+            ],
+            "targets": {
+              "at": "record_types.issue.pointer_fields[0].targets:15",
+              "value": [
+                "task"
+              ]
+            }
+          }
+        },
+        {
+          "at": "record_types.issue.known_fields[2]:9",
+          "name": "See-also",
+          "narrative": {
+            "at": "record_types.issue.narrative_fields[0]:16"
+          }
+        },
+        {
+          "at": "record_types.issue.known_fields[3]:9",
+          "name": "Opened",
+          "roles": [
+            {
+              "at": "record_types.issue.relation_fields.date:10",
+              "role": "date"
+            }
+          ]
+        }
+      ],
+      "header_shape": {
+        "at": "record_types.issue.header_shape:7",
+        "value": "yaml-frontmatter"
+      },
+      "name": "issue",
+      "prefix": {
+        "at": "record_types.issue.prefix:6",
+        "value": "ISS"
+      },
+      "revision_log": {
+        "at": "record_types.issue.revision_log:29",
+        "value": {
+          "marker": "**Revision log**"
+        }
+      },
+      "states": {
+        "failure": {
+          "at": "record_types.issue.statuses.failure:20",
+          "value": [
+            "Dropped"
+          ]
+        },
+        "initial": {
+          "at": "record_types.issue.statuses.initial:21",
+          "value": [
+            "Open"
+          ]
+        },
+        "new_writes": {
+          "default": true,
+          "source": "urzua_new_scaffold",
+          "value": "Open"
+        },
+        "success": {
+          "at": "record_types.issue.statuses.success:19",
+          "value": [
+            "Closed"
+          ]
+        },
+        "transitions": [
+          {
+            "at": "record_types.issue.statuses.transitions.Open:23",
+            "from": "Open",
+            "to": [
+              "Closed",
+              "Dropped"
+            ]
+          },
+          {
+            "at": "record_types.issue.statuses.transitions.Closed:24",
+            "from": "Closed",
+            "to": [
+              "Open"
+            ]
+          }
+        ],
+        "values": {
+          "at": "record_types.issue.statuses.values:18",
+          "value": [
+            "Open",
+            "Closed",
+            "Dropped"
+          ]
+        }
+      },
+      "template": {
+        "default": true,
+        "source": "conventional_template_path",
+        "value": ".urzua/templates/issue.md"
+      }
+    }
+  ],
+  "next_action": null,
+  "next_action_reason": null,
+  "next_action_inputs": []
+}

@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.30'
+Version: '0.33'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c, code:rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:8d269478bbb2a32fd78f2121c20e891b3ad36b602a11f1266d0075ab2e999dd9, code:rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e5886132ed49cda81d59ff563f254557b246a58e7b7933ee35b93817ed64eb0b, test:rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:22004fd62300ee0937a3151ba039526da69c8c21563bdb6b8bf5979574f52c9f
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c, code:rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:e775f8637d91fef6f6ce5fa2d56fc7dda68a32c35628012403ba62708d651b1b, code:rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e5886132ed49cda81d59ff563f254557b246a58e7b7933ee35b93817ed64eb0b, test:rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:6741d0cd3af0cc61f4ff7a966469b3a0707f10e98d20c30dfa11046637152738
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -96,9 +96,25 @@ alone exits 2 with `urzua explain --types --full`.
 
 `urzua explain --types` prints a summary: per type `name`, `at`, `prefix`, `dirs`, `cannot_create`
 when `urzua new` refuses the type, `required` and `optional` field names, `states` (`values` and
-`initial`), `references` (each reference field with the types it may name, `"any"`, or `none`) and
-the number of `conditions`; then `path_gates`, the path gates as declared, without the note. A declared value is printed bare; a default keeps its
-marker object. Its `next_action` is `urzua explain --type <name>`.
+`initial`) and `references` (each reference field with the types it may name, `"any"`, or `none`);
+then, only for a type that declares each, `conditions` (the `declared: when ...` sentence of each
+`statuses.require` and `statuses.forbid` entry, the same sentences `--type` prints), `gates` (each
+`authority.gates` entry naming the type as its own entry, `to` and `by` as declared, in declaration
+order, no logins, no combination rule), `field_values` (each field that
+declares values, with them), `revision_log_classes` (`revision_log.classes`) and `checklist` (the
+`statuses.delivery.items` section; `categories`, the evidence categories the engine accepts before a
+locator's path; `tiers`, for each category a tier under `embodiment.tiers` declares, that tier's state,
+a category absent from it having no tier declared and nothing said of whether it may be cited; and
+`resolving_tiers`); then `path_gates`, the path gates as declared, without the note. A declared value
+is printed bare; a default keeps its marker object. Each value is the one `--type` prints for the same
+declaration, not a second reading of the configuration. The summary prints each array of scalars and
+each object whose values are all scalars or arrays of scalars on one line, a layout of the same JSON;
+`--full`, `--type` and every other command print one element per line. Its `next_action` is
+`urzua explain --type <name>`.
+
+The summary carries one fixed `note` (when a type is declared): these are declarations, whether a gate
+or a condition is acted on depends on what the configuration enables, which `--types --full` and
+`urzua check` show, and `--type <name>` says what counts as a missing value for a condition.
 
 `urzua explain --types --full` prints every declaration of every type, `rules_set_in_configuration`
 (each rule as written under `rules:`, in written order, with its level and line, and a fixed note),
@@ -106,9 +122,10 @@ marker object. Its `next_action` is `urzua explain --type <name>`.
 each as `{value, at}`. `urzua explain --type <name>` prints the same detail for one type and the
 note's sentence on enforcement.
 
-Per type in detail: `name`, `at`, `create_command` or `cannot_create`, `prefix`, `dirs`, `template`,
-`header_fields` (each with `required`, `values` from `field_values`, `pointer`, `narrative`, `roles`
-from `relation_fields`), `states`, `conditions`, `gates`, `aliases`. `create_command` (shell-quoted) is
+Per type in detail: `name`, `at`, `create_command` or `cannot_create`, `prefix`, `dirs`, `template`
+(the conventional path, marked as a default, with `readable_when_run`: whether `urzua new`'s own
+read of that file, `new::read_template`, returned text when the command ran), `header_fields` (each with `required`, `values` from `field_values`, `pointer`, `narrative`, `roles`
+from `relation_fields`), `states`, `conditions`, `checklist`, `gates`, `aliases`. `create_command` (shell-quoted) is
 printed when `urzua new`'s own check of the configuration accepts the type (`header_shape`, and an
 identity pattern that compiles); the command can still be refused for the given title, because the
 identity pattern does not read back the name built from the real number and title, or by a path gate,
@@ -130,7 +147,20 @@ the claim-expiry rule's setting declares for the type, with that setting's level
 `when_field` and `fields` keys, a `sentence` worded as a declaration (`declared: when ...`), and for a
 requirement `counts_as_missing`: the type's `pending` and `placeholders` with their lines, or, where
 the type declares none, a marker that the engine's built-in list applies. `gates` lists only the
-`authority` gates declared for the type by name (`type: <name>`). `aliases` lists each YAML alias
+`authority` gates declared for the type by name (`type: <name>`). `checklist` is printed for a type
+that declares `statuses.delivery.items`: the items `section` and `evidence_marker` with their lines;
+`evidence_categories`, the categories the engine accepts before a locator's path
+(`locator::CATEGORIES`); `evidence_tiers`, for each category the first `embodiment.tiers` entry whose
+`evidence` names it, with its state and its line, beside `resolving_tiers` and not joined to it (a configuration that declares no `embodiment` shows the engine's built-in tiers marked
+as a default, and a category no tier declares carries `tier: null` and a `note` saying that no entry of
+`embodiment.tiers` declares it); a `note` that `urzua check` says which items of a record resolve
+(the engine also weighs `kind.cited_records` and whether a locator exists, which no join of tiers
+states); `resolving_tiers`, as
+declared under `items`, else the type's `delivered_tiers` marked as a default, the value the engine's
+own `DeliveryDecl::resolving_tiers` returns. It states what is declared and describes no resolution
+rule and no form of a locator: which files an item's locators must name, and when a tier counts, are
+decided by the rule that reads the clause, and the engine states the `<category>:` form in no single
+place a report could copy it from. `aliases` lists each YAML alias
 under the type with the line of its anchor (`defined_at`), once per alias. Every other declared key
 of the type is printed raw under its own name as `{value, at}`; relation pairs appear as declared
 under `repository`.
@@ -154,8 +184,10 @@ configuration does not declare is printed, with these exceptions, each marked `"
 a `source` and no `at`: `new_writes`, printed beside a declared `initial` so a mismatch between them
 shows
 (`urzua_new_scaffold`); the identifier prefix when `prefix` is not declared, from `urzua new`'s own
-prefix function (`type_name_uppercased`); the template path when `urzua new`'s template file exists
-(`conventional_template_path`); and the built-in pending and placeholder lists in `counts_as_missing`
+prefix function (`type_name_uppercased`); the template path `urzua new` reads, with whether that file
+is read by `urzua new` at the time of the run (`conventional_template_path`, `readable_when_run`); the evidence tiers and
+the resolving tiers of a checklist when the configuration declares none (`built_in_embodiment_tiers`,
+`delivered_tiers`); and the built-in pending and placeholder lists in `counts_as_missing`
 (`built_in_list`). Empty lists, empty objects and absent settings are omitted. The only prose is a
 condition's `sentence`, the reason in `cannot_create` and the fixed notes.
 
@@ -277,3 +309,10 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` 83467de65c2d -> f2c2e4ac96a5, `rust/crates/urzua-cli/src/commands/config_lines.rs` 7e2b16324972 -> e5886132ed49, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 0addf2725ab1 -> 6fc69e681902. Reason: explain_types.rs: per type only gates declared by type name, path gates once as declared, create_command from urzua new's own check, conditions worded as declarations without a rule id, rules set in written order, reference fields from the engine's target constraints, required_of_records from has_transitions; config_lines.rs: each flow-list item gets its own line; explain_types_integration.rs: tests follow **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.30`. An undeclared `initial` is no longer printed (its `required_of_records` could only be false); `create_command` is shell-quoted and can be refused for the title because the identity pattern is fitted to the real number and title by `urzua new`; each header field lists the relation pairs that declare it; `pair_target_types` names its pair; the summary's `path_gates` has no note, and the note in `--full` is worded as a declaration. **Why:** review of 2026-11-17; the identity-pattern fit returns to `urzua new` after numbering, as before this change. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` f2c2e4ac96a5 -> 8d269478bbb2, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 6fc69e681902 -> 22004fd62300. Reason: explain_types.rs: create_command is shell-quoted, an undeclared initial is not printed, each header field lists the relation pairs declaring it, pair_target_types names its pair, the summary's path_gates drops the note, the note reads as a declaration; explain_types_integration.rs: tests follow, including six identity-pattern rows run through urzua new **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.31`. The `urzua explain --types` summary carries, for a type that declares each, `gated` (group per status, from the gates naming the type), `field_values`, `conditions` as the declared sentences in place of a count, `revision_log_classes` and a `checklist` marker; `--type` carries `checklist` with each evidence category, the tier a configuration declares for it, and whether that tier is listed in `resolving_tiers`, from the engine's category list and locator grammar; the summary prints scalar arrays on one line; `template` carries `exists_when_run` and is printed whether or not the file exists. **Why:** `MILE-340`; an adopting repository reported that the summary omitted the declarations it had got wrong; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` 8d269478bbb2 -> f74589ee7177, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 22004fd62300 -> 0da9da3db5c7. Reason: explain_types.rs: the summary gains gated, field_values, revision_log_classes and a checklist marker and prints condition sentences in place of their count, each from a helper shared with the --type detail (condition_rules, gated, checklist, evidence_tiers, resolving_tiers); --type gains checklist with the engine's evidence categories and locator grammar; template is printed with exists_when_run whether or not the file exists; run() prints the summary through emit_compact. explain_types_integration.rs: updated for the condition sentences and the template entry, and new tests for each addition present and absent, summary equal to detail, line numbers, defaults, formatting and sizes (plus the checklist.yaml fixture). The claims this spec states about explain --types and --type still hold and the spec text is updated in this change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.32`. The summary prints each object whose values are all scalars or arrays of scalars on one line, beside the arrays of scalars, and its `checklist` carries `categories` and `tiers` in place of `evidence` and `no_tier_declares`; `--type` prints a category no tier declares as `tier: null` with a `note`, and no longer prints a sentence on how a locator is written, because the engine's grammar does not contain the `<category>:` form. **Why:** `MILE-340`; the maintainer chose the layout of the summary and asked that nothing retype engine behaviour, 2026-11-17; the choice of key names is decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` f74589ee7177 -> d2662dabb8c4, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 0da9da3db5c7 -> 4995c87b85e8. Reason: explain_types.rs: the summary's checklist carries categories and tiers (no evidence or no_tier_declares), --type prints a category no tier declares as tier null with a note and no locator_form sentence; the compact summary printing and its tests are in compact_json.rs and main.rs. explain_types_integration.rs: tests for the summary equal to its pretty form, flat objects on one line, --full, --type and graph as before but for exists_when_run, the checklist keys; new golden fixtures. The claims this spec states about explain --types and --type still hold; the spec text is updated in this change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/explain_types_integration.rs` 4995c87b85e8 -> 26299019603c. Reason: explain_types_integration.rs: a test that the status a real urzua new writes equals new_writes and the first of the summary's declared initial (or the first of the values when none is declared), run against the starting-status rule of the merged main; nothing else in the file changed. The claims this spec states still hold. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.33`. The summary's `gated` becomes `gates`: each `authority.gates` entry naming the type as its own `{to, by}` entry in declaration order, so nothing reads as alternatives; the summary carries one fixed `note` that these are declarations; `--type` no longer prints `in_resolving_tiers` and its `checklist` carries a `note` that `urzua check` says which items resolve; `template` carries `readable_when_run` from `urzua new`'s own template read in place of `exists_when_run`. **Why:** `MILE-340`; review of 2026-11-17: the engine judges each gate on its own, a join of tiers and resolving tiers reads as "this category counts" while the engine also weighs the item kind and the locator, and a template `urzua new` cannot read is not one it uses; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` d2662dabb8c4 -> e775f8637d91, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 26299019603c -> 6741d0cd3af0. Reason: explain_types.rs: the summary's gates are one entry per gate naming the type (replacing gated), the summary carries one fixed note, --type's checklist drops in_resolving_tiers and carries a note, template reports readable_when_run from new::read_template; explain_types_integration.rs and the golden fixtures follow, with tests for each and for an unreadable template. The claims this spec states still hold and the spec text is updated in this change (0.33). **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
