@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4CFP9CSWVTMWMZ9460
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:fa6111f170840a2bbf7b969b3cc0fc3b447a951fe5fd2fa0908cf468f34fa42b, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b129cc4d4755c2258133fe8106821c145cd7a4680eee048df51122526ef74ba7
+Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:f010b60343b8d77bf09acfb8969e0fc1a629caf13871d593297bd61f9242dab2, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b129cc4d4755c2258133fe8106821c145cd7a4680eee048df51122526ef74ba7
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -127,3 +127,4 @@ which motivates deciding this now rather than after v1.0.0.
 > | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-cli/src/main.rs` (Realized-by) 01f7f5ab7d91 and cda428fc42fb -> d93d6f1ef739; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` 01f7f5ab7d91 -> c2c1fcc9665a. Reason: main.rs: a Board command and export's --no-raw-text flag are added and dispatched; no existing command or flag changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-cli/src/main.rs` (Realized-by) c2c1fcc9665a and d93d6f1ef739 -> fa6111f17084; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` fa6111f17084 -> f010b60343b8. Reason: main.rs: export gains --no-text and --no-checklist-items, board gains --allowed-host, and their dispatch moves into dispatch_export and dispatch_board; no existing flag changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

@@ -5,6 +5,7 @@ pub mod audit;
 pub mod board;
 mod board_assets;
 mod board_page;
+mod board_server;
 pub mod check;
 pub(crate) mod config_lines;
 pub mod doctor;

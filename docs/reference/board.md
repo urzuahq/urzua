@@ -23,12 +23,22 @@ It prints one JSON line (`{"status": "ok", "listening": "http://127.0.0.1:8787/"
 it is listening, then runs in the foreground until interrupted. Without `--port` it takes a free port and says which.
 
 - It listens on 127.0.0.1 only and answers `GET` only. Any other method gets `405`, any path but `/`, `/stamp`, `/check` and
-  `/record/<id>` `404`, a request line or head that is too long `400`. It serves no file from disk, and
-  a client that stalls is dropped after a few seconds.
-- It re-reads the records on every request, so a second request shows a record changed since the first. Every
-  response carries `Cache-Control: no-store`.
-- It does not check the `Host` header, since a proxy presents its own name; every address in the page is relative.
-- It writes nothing. The address is local only: to reach it from another device, put a proxy in front of the port.
+  `/record/<id>` `404`, a request line or head that is too long `400`. It serves no file from disk. Each connection is handled on
+  its own thread, up to 32 at once; past that the answer is `503` at once, and a client that has not sent its request head
+  in 2 seconds is dropped, so idle clients cannot starve anyone.
+- The page and the export behind it are cached against the `/stamp` digest: an unchanged repository answers `/` from
+  memory, and a change to a record file or the configuration makes the next request rebuild it. `/record/<id>` reads that
+  one record's text without building the page. Every response carries `Cache-Control: no-store`.
+- `/check` runs one `urzua check` at a time. A request that arrives while a run is in flight waits for that run's result, the
+  result is kept until the digest changes, and no `/check` run delays `/` or `/stamp`.
+- It does not check the `Host` header by default, since a proxy presents its own name; every address in the page is relative.
+  With `--allowed-host <name>` (repeatable) a request whose `Host` is none of those names, `localhost` or `127.0.0.1` (any
+  port) is answered `403`. Use it whenever the address is reached through a proxy with a known name.
+- It writes nothing, and no path changes anything: every one is a read. No `Access-Control-Allow-Origin` is sent, so an
+  ordinary cross-origin page cannot read its responses. What is left without `--allowed-host`: while the server runs, a web
+  page the person visits that rebinds its own name to the local address can read the board and every record's text, because
+  the server answers whatever `Host` it is given. The address is local only: to reach it from another device, put a proxy in
+  front of the port.
 - Interrupt it (Ctrl-C) or stop it (`SIGTERM`) to end it. It holds no state, so there is nothing to flush, and the
   process ends by the signal's default action rather than by exiting 0 (the standard library installs no handler, and
   this crate forbids unsafe code). A service manager treats `SIGTERM` as a clean stop of a service it asked to stop.
@@ -45,13 +55,12 @@ Then `systemctl --user enable --now urzua-board`.
 
 A served page updates itself. Every 15 seconds while its tab is visible (and once when it becomes visible again) it asks
 `GET /stamp`, which answers the commit, the branch and a digest of every record file's and the configuration's path, size and
-modification time without reading a record (about 20 ms on this repository's 722). When the digest differs it fetches `/` and
+modification time without reading a record (about 35 ms on this repository's 729). When the digest differs it fetches `/` and
 swaps the content in place, keeping the search text, the state filter, the open rows and the scroll position. The header shows
 *updated N s ago* (the exact time in its tooltip) and a *Refresh* button; if a request fails the page keeps its content and says
 *not updating: last read <time>* until one succeeds. A static file does not update: it says when it was generated.
 
-A request for `/` reads the records and builds the page from the export alone: on this repository's 722 records
-that is a second or two in a release build. `urzua check` takes ten times as long, so the served page does not run it:
+On this repository's 729 records in a release build, `/` takes 1.7 s the first time and 0.04 s from the cache, `/record/<id>` 0.18 s cold and 0.04 s warm, and `/stamp` about 0.035 s; most of the page's build is judging the checklist items. `urzua check` takes ten times as long, so the served page does not run it:
 it links `GET /check`, which computes the summary for that request and says when it did and how long it took.
 The file `urzua board` writes carries the summary, computed when it was written.
 
@@ -80,7 +89,7 @@ In this order:
 1. **Needs you**: records whose current status has a declared transition (`statuses.transitions`) to a status that an
    `authority.gates` entry for their type names, as *From → To* with the group as a chip. A type with a gate and no
    declared transitions lists nothing, and a line says its next move cannot be read.
-2. **Under way**, then **Ready**: short lists of links. *Needs you*, *Under way* and *Ready* each show eight rows, then one muted *N more* row that opens in place. *Ready* lists leaves only: a parent at its starting status is ready in the export (its `ready` key is unchanged), but the board shows it in Work with its count, and the *Ready* count in the filter is the same leaves. A type that declares no `statuses.progress` is named in one muted line under *Under way*.
+2. **Under way**, then **Ready**: short lists of links. *Needs you*, *Under way* and *Ready* each show eight rows, then one muted *N more* row that opens in place. *Ready* lists leaves only: a parent that has not begun is `ready` in the export, but the board shows it in Work with its count, and the *Ready* count in the filter is the same leaves. A record under way is never ready, so no record is in both lists. A type that declares no `statuses.progress` is named in one muted line under *Under way*.
 3. **Work**: the records of the types in `roadmap.work_types` (every type when it is absent). Where a type declares a
    [`part_of` field](config.md#containment-part_of) they are a tree: a parent is a raised row with a disclosure triangle,
    its children are indented 18 px a level, and a parent's children list starts open only when a child is under way, ready or waiting. A

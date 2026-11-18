@@ -40,7 +40,7 @@ Easy. The command is additive: removing it removes a page and a listener, and no
 - Stdout is still JSON on every command; `urzua board` prints a JSON answer, and `--serve` one JSON line.
 - The page is a second consumer of the export's view model, so a change to a state or a wait changes the board and the export together.
 - `--serve` is the one place the binary listens. It binds 127.0.0.1 only, answers `GET` only, serves no file from disk by path, and holds no state, so a proxy in front of it is the way to reach it from another device. It ends by the default action of an interrupt, since the standard library installs no handler and the crate forbids unsafe code.
-- Each request re-reads the records and runs `urzua check` for the page's summary line, so a request takes as long as a `check`.
+- A request does not run `urzua check`: the served page links `GET /check`, which runs one at a time, shares a run in flight and keeps its result until the records or the configuration change. The page and the export behind it are cached against `GET /stamp`'s digest, so an unchanged repository answers from memory; each connection has its own thread up to a cap, and `--allowed-host` refuses other `Host` names.
 - A record's text is escaped plain text; for a very large corpus the text is left out of the page (linked when served).
 
 ## References
@@ -52,3 +52,4 @@ Easy. The command is additive: removing it removes a page and a listener, and no
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-18 | Initial record, `Status: Proposed`. **Why:** `MILE-344` records the maintainer's request for a built-in board. | **structural** |
+> | 2026-11-18 | The Consequences say what was built: a served request does not run `urzua check` (it links `/check`, one run at a time, cached against the digest), the page and the export behind it are cached against the digest, connections are threaded up to a cap, and `--allowed-host` is available. The Decision is unchanged. **Why:** the Consequences said each request ran `urzua check`, which the served page does not do. | **substantive** |

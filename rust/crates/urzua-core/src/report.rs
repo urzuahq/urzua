@@ -1564,8 +1564,10 @@ pub struct ExportedSectionEntry {
     /// 1-based file line of the heading.
     pub line: usize,
     pub end_line: usize,
-    /// The lines after the heading through `end_line`.
-    pub content: String,
+    /// The lines after the heading through `end_line`. Absent when the export
+    /// was asked to leave text out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
     /// Checkbox lines (`- [x]`) in the section that are ticked.
     pub ticked: usize,
     /// Checkbox lines (`- [ ]`) in the section that are not.

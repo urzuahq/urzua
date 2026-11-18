@@ -377,7 +377,7 @@ fn without_a_progress_set_a_record_that_is_neither_finished_nor_dropped_is_open(
             "record_types.programme.statuses.success",
         ),
         ("STP-3", "dropped", "record_types.step.statuses.failure"),
-        ("STG-7", "open", "no-status"),
+        ("STG-7", "none", "header-unreadable"),
     ] {
         let r = by_id(&e, id);
         assert_eq!(
@@ -443,7 +443,7 @@ fn waiting_and_ready_are_separate_and_a_record_can_be_under_way_and_waiting() {
         serde_json::json!(["Needs"])
     );
     assert_eq!(ids(&by_id(&e, "STG-3")["waiting_on"]), ["STG-2"]);
-    assert_eq!(by_id(&e, "STP-1")["ready"], true);
+    assert_eq!(by_id(&e, "STP-1")["ready"], false, "under way is not ready");
     assert_eq!(by_id(&e, "PRG-3")["ready"], false, "finished");
     assert_eq!(by_id(&e, "STP-3")["ready"], false, "dropped");
     assert_eq!(by_id(&e, "STP-11")["ready"], true);
@@ -460,8 +460,8 @@ fn waiting_and_ready_are_separate_and_a_record_can_be_under_way_and_waiting() {
     assert_eq!(by_id(&e, "TCK-4")["ready"], true);
     assert_eq!(
         by_id(&e, "TCK-2")["ready"],
-        true,
-        "under way and waiting on nothing"
+        false,
+        "under way, so not work to pick up"
     );
     assert_eq!(by_id(&e, "MEM-1")["ready"], false, "not a work type");
     assert_eq!(by_id(&e, "TCK-1")["ready"], false, "finished");
@@ -719,6 +719,7 @@ fn the_export_without_its_new_keys_has_the_keys_it_had() {
         "children",
         "children_by_state",
         "state_disagrees_with_children",
+        "parent_ambiguous",
         "refers_to",
         "unresolved_refs",
         "referred_by",
@@ -1071,7 +1072,7 @@ fn work_is_a_tree_of_one_line_rows_with_progress_folds_and_a_group_for_records_w
     assert!(html.contains("<h3>Work<i>2 parents · "));
     assert!(html.contains("<h3>No parent<i>"));
     let prg1 = entry(&html, "r-PRG-1");
-    assert!(prg1.contains("1 of 3 done"), "{prg1}");
+    assert!(prg1.contains("1 of 3 finished"), "{prg1}");
     assert!(
         prg1.contains("<details class=\"kd\" open>"),
         "a parent with an active child starts open: {prg1}"
@@ -1080,7 +1081,7 @@ fn work_is_a_tree_of_one_line_rows_with_progress_folds_and_a_group_for_records_w
         prg1.contains("<span class=\"ch tri\">"),
         "a parent has a disclosure triangle"
     );
-    assert!(entry(&html, "r-STG-2").contains("1 of 4 done"));
+    assert!(entry(&html, "r-STG-2").contains("1 of 4 finished"));
     assert_eq!(count(&html, " · disagrees"), 2);
     assert!(html.contains("data-f=\"open\""));
     // PRG-1's row holds STG-2's, which holds STP-1.
@@ -1114,7 +1115,7 @@ fn a_row_is_one_line_with_the_status_as_written_beside_a_dot_that_says_its_state
     assert!(alpha.contains("<span class=\"t\">Alpha</span>"));
     assert!(
         alpha.contains(
-            "<span class=\"d o\" title=\"under way\"></span><span class=\"st\">Rolling</span>"
+            "<span class=\"d o\" role=\"img\" aria-label=\"under way\" title=\"under way\"></span><span class=\"st\">Rolling</span>"
         ),
         "{alpha}"
     );
@@ -1124,16 +1125,18 @@ fn a_row_is_one_line_with_the_status_as_written_beside_a_dot_that_says_its_state
     );
     let finished = entry(&html, "r-STP-2");
     assert!(finished.contains(
-        "<span class=\"d g\" title=\"finished\"></span><span class=\"st\">Shipped</span>"
+        "<span class=\"d g\" role=\"img\" aria-label=\"finished\" title=\"finished\"></span><span class=\"st\">Shipped</span>"
     ));
     let dropped = entry(&html, "r-STP-3");
-    assert!(dropped.contains("<span class=\"d r\" title=\"dropped\"></span>"));
+    assert!(dropped.contains(
+        "<span class=\"d r\" role=\"img\" aria-label=\"dropped\" title=\"dropped\"></span>"
+    ));
     let ready = entry(&html, "r-STP-11");
-    assert!(ready.contains("<span class=\"d b\" title=\"ready (not started)\"></span><span class=\"st\">Idea</span>"), "{ready}");
+    assert!(ready.contains("<span class=\"d b\" role=\"img\" aria-label=\"ready (not started)\" title=\"ready (not started)\"></span><span class=\"st\">Idea</span>"), "{ready}");
     let open = entry(&html, "r-CHR-1");
     assert!(
-        open.contains("<span class=\"d n\" title=\"open\"></span>")
-            || open.contains("<span class=\"d b\" title=\"ready (open)\"></span>"),
+        open.contains("<span class=\"d n\" role=\"img\" aria-label=\"open\" title=\"open\"></span>")
+            || open.contains("<span class=\"d b\" role=\"img\" aria-label=\"ready (open)\" title=\"ready (open)\"></span>"),
         "{open}"
     );
     let waiting = entry(&html, "r-STP-10");
@@ -1223,9 +1226,7 @@ fn a_type_with_more_than_ten_records_folds_its_finished_ones() {
     assert!(tickets.contains("5 finished, collapsed"), "{tickets}");
 }
 
-#[test]
-fn a_declared_checklist_shows_its_count_in_the_row_and_its_items_in_the_opened_row() {
-    let config = "schema_version: 2
+const CHECKLIST_CONFIG: &str = "schema_version: 2
 record_types:
   job:
     dir: docs/jobs
@@ -1256,14 +1257,21 @@ record_types:
           waiver_marker: \"waived:\"
           partial_status: Doing
 ";
-    let dir = repo("checklist", config, |dir| {
+
+fn checklist_repo(name: &str) -> common::TempDir {
+    repo(name, CHECKLIST_CONFIG, |dir| {
         write(dir, "src/a.rs", "fn a() {}\n");
         write(
             dir,
             "docs/jobs/JOB-1-j.md",
             "---\nStatus: Doing\n---\n# 1 — Job\n\n## Checks\n\n- First item — evidence: code:src/a.rs\n- Second item\n- Third item\n",
         );
-    });
+    })
+}
+
+#[test]
+fn a_declared_checklist_shows_its_count_in_the_row_and_its_items_in_the_opened_row() {
+    let dir = checklist_repo("checklist");
     let (html, _) = board_page(&dir);
     let job = entry(&html, "r-JOB-1");
     assert!(
@@ -1344,6 +1352,33 @@ fn everything_from_a_record_is_escaped_and_nothing_becomes_a_link() {
 }
 
 #[test]
+fn the_script_keeps_the_open_state_it_had_before_a_filter_and_restores_it_when_cleared() {
+    let (html, _) = board_page(&flat("restore"));
+    let script = html
+        .split("<script>")
+        .nth(1)
+        .unwrap()
+        .split("</script>")
+        .next()
+        .unwrap();
+    assert!(
+        script.contains("saved = snapshot()"),
+        "taken when a filter starts"
+    );
+    assert!(
+        script.contains("restore(saved); saved = null;"),
+        "put back when it is cleared"
+    );
+    let dir = flat("restore-served");
+    let served = Server::start(&dir);
+    let (_, page) = served.get("/");
+    assert!(
+        page.contains("var open = saved !== null ? saved : snapshot();"),
+        "a swap during a filter keeps the state from before it"
+    );
+}
+
+#[test]
 fn the_script_only_filters_and_builds_no_html() {
     let dir = flat("script");
     let (html, _) = board_page(&dir);
@@ -1376,8 +1411,15 @@ struct Server {
 
 impl Server {
     fn start(dir: &Path) -> Server {
+        Server::start_with(dir, &[], &[])
+    }
+
+    /// A server with more arguments and test-seam delays in its environment.
+    fn start_with(dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Server {
         let mut child = common::urzua()
             .args(["board", "--serve", "--port", "0"])
+            .args(args)
+            .envs(envs.iter().copied())
             .current_dir(dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1408,6 +1450,14 @@ impl Server {
         (head.to_string(), body.to_string())
     }
 
+    fn get_with_host(&self, path: &str, host: Option<&str>) -> String {
+        let host = host.map_or(String::new(), |h| format!("Host: {h}\r\n"));
+        self.request(&format!(
+            "GET {path} HTTP/1.1\r\n{host}Connection: close\r\n\r\n"
+        ))
+        .0
+    }
+
     fn get(&self, path: &str) -> (String, String) {
         self.request(&format!(
             "GET {path} HTTP/1.1\r\nHost: a-proxy.example\r\nConnection: close\r\n\r\n"
@@ -1416,7 +1466,7 @@ impl Server {
 
     fn interrupt_and_wait(&mut self) -> bool {
         let pid = self.child.id().to_string();
-        assert!(std::process::Command::new("kill")
+        assert!(common::command_with_stub_gh("kill")
             .args(["-INT", &pid])
             .status()
             .unwrap()
@@ -1818,9 +1868,7 @@ fn ready_lists_leaves_only_and_a_parent_stays_in_work_with_its_count() {
     );
     assert!(html.contains(&format!(">Ready {leaves}</button>")));
     assert!(!entry(&html, "r-PRG-2").contains("data-flags=\"ready\""));
-    assert!(
-        entry(&html, "r-PRG-2").contains("1 of") || entry(&html, "r-PRG-2").contains("0 of 1 done")
-    );
+    assert!(entry(&html, "r-PRG-2").contains("0 of 1 finished"));
 }
 
 #[test]
@@ -1832,6 +1880,11 @@ fn the_three_lists_at_the_top_show_eight_rows_then_one_more_row_that_opens_in_pl
                 dir,
                 &format!("docs/stages/STG-{n}-g.md"),
                 &record("Status: Rolling", "", &format!("# {n} — Gated {n}")),
+            );
+            write(
+                dir,
+                &format!("docs/stages/STG-{}-i.md", n + 20),
+                &record("Status: Idea", "", &format!("# {} — Idle {n}", n + 20)),
             );
         }
     });
@@ -1891,6 +1944,544 @@ fn the_header_area_has_one_short_line_for_the_check_and_none_for_anything_else()
         again.contains("(runs urzua check, about "),
         "after one run the page says how long it took"
     );
+}
+
+fn status_line(head: &str) -> &str {
+    head.lines().next().unwrap_or_default()
+}
+
+// ---------------------------------------------------------------- fixes from review
+
+#[test]
+fn a_record_whose_header_cannot_be_read_is_not_work_in_the_export() {
+    let dir = repo("unreadable", &chain_config(), |dir| {
+        chain_records(dir);
+        write(
+            dir,
+            "docs/steps/STP-20-under-broken.md",
+            &record("Status: Idea", "In: STG-7\n", "# 20 — Under a broken stage"),
+        );
+    });
+    let e = export(&dir);
+    let broken = by_id(&e, "STG-7");
+    assert_eq!(broken["header_readable"], false);
+    assert_eq!(broken["state"], "none");
+    assert_eq!(broken["state_decided_by"], "header-unreadable");
+    assert_eq!(broken["status"], Value::Null);
+    assert_eq!(broken["ready"], false);
+    assert_eq!(broken["waiting_on"], serde_json::json!([]));
+    assert_eq!(broken["parent"], Value::Null);
+    assert_eq!(
+        broken["children"],
+        serde_json::json!([]),
+        "no children derived from it"
+    );
+    assert_eq!(
+        by_id(&e, "STP-20")["parent"],
+        Value::Null,
+        "nor a parent derived to it"
+    );
+    assert!(e["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|r| r["header_readable"] == true || r["ready"] == false));
+}
+
+#[test]
+fn ready_is_work_someone_can_pick_up() {
+    let dir = chain("ready-meaning");
+    let e = export(&dir);
+    assert_eq!(by_id(&e, "STP-1")["state"], "under-way");
+    assert_eq!(by_id(&e, "STP-1")["ready"], false, "under way");
+    assert_eq!(by_id(&e, "PRG-1")["ready"], false, "under way");
+    assert_eq!(
+        by_id(&e, "STP-11")["ready"],
+        true,
+        "not started, waits on nothing"
+    );
+    assert_eq!(
+        by_id(&e, "CHR-1")["ready"],
+        true,
+        "open, in a work type that declares statuses"
+    );
+    assert_eq!(by_id(&e, "STP-10")["ready"], false, "waits");
+    let flat = flat("ready-meaning-flat");
+    let e = export(&flat);
+    assert_eq!(by_id(&e, "MEM-1")["state"], "none");
+    assert_eq!(
+        by_id(&e, "MEM-1")["ready"],
+        false,
+        "a type with no statuses is never ready"
+    );
+    // The Ready list and the Under way list share no record.
+    let (html, _) = board_page(&chain("ready-meaning-page"));
+    let ready = section_of(&html, "ready");
+    let under = section_of(&html, "under-way");
+    for id in ["PRG-1", "STG-2", "STG-4", "STP-1"] {
+        assert!(
+            under.contains(&format!(">{id}</a>")) && !ready.contains(&format!(">{id}</a>")),
+            "{id}"
+        );
+    }
+}
+
+#[test]
+fn an_unstructured_wait_does_not_make_a_record_wait() {
+    let config = FLAT_CONFIG.replace(
+        "known_fields: [Needs, Gates, Area]",
+        "known_fields: [Needs, Gates, Area, Blocked-on]",
+    );
+    let dir = repo("free-text", &config, |dir| {
+        write(
+            dir,
+            "docs/tickets/TCK-1-t.md",
+            &record(
+                "Status: Todo",
+                "Blocked-on: waiting for a review of TCK-2\n",
+                "# 1 — T",
+            ),
+        );
+        write(
+            dir,
+            "docs/tickets/TCK-2-t.md",
+            &record("Status: Todo", "", "# 2 — T"),
+        );
+    });
+    let e = export(&dir);
+    assert_eq!(by_id(&e, "TCK-1")["waiting_on"], serde_json::json!([]));
+    assert_eq!(by_id(&e, "TCK-1")["ready"], true);
+    let roadmap = json(&run(&dir, &["roadmap"]));
+    assert_eq!(
+        roadmap["roadmap"]["records"]["TCK-1"]["blocked"], false,
+        "the roadmap does not count it either"
+    );
+}
+
+#[test]
+fn a_part_of_field_naming_two_records_gives_no_parent_and_says_so() {
+    let dir = repo("ambiguous", &chain_config(), |dir| {
+        chain_records(dir);
+        write(
+            dir,
+            "docs/steps/STP-20-two.md",
+            &record("Status: Idea", "In: STG-1, STG-2\n", "# 20 — Two parents"),
+        );
+    });
+    let e = export(&dir);
+    let two = by_id(&e, "STP-20");
+    assert_eq!(two["parent"], Value::Null);
+    assert_eq!(ids(&two["parent_ambiguous"]), ["STG-1", "STG-2"]);
+    for stage in ["STG-1", "STG-2"] {
+        assert!(
+            !ids(&by_id(&e, stage)["children"]).contains(&"STP-20".to_string()),
+            "{stage}"
+        );
+    }
+    assert_eq!(
+        by_id(&e, "STP-1")["parent_ambiguous"],
+        serde_json::json!([])
+    );
+    let (html, _) = board_page(&dir);
+    let no_parent = html
+        .split("<h3>No parent<i>")
+        .nth(1)
+        .unwrap()
+        .split("</section>")
+        .next()
+        .unwrap();
+    assert!(
+        no_parent.contains("id=\"r-STP-20\""),
+        "in the no-parent group"
+    );
+    assert!(entry(&html, "r-STP-20").contains("names 2 parents"));
+}
+
+#[test]
+fn children_by_state_counts_exactly_the_children_listed() {
+    let dir = repo("child-counts", &chain_config(), |dir| {
+        chain_records(dir);
+        write(
+            dir,
+            "docs/steps/loose-note.md",
+            &record("Status: Idea", "In: STG-2\n", "# A file with no id"),
+        );
+    });
+    let e = export(&dir);
+    for r in e["records"].as_array().unwrap() {
+        let total: u64 = r["children_by_state"]
+            .as_object()
+            .unwrap()
+            .values()
+            .map(|n| n.as_u64().unwrap())
+            .sum();
+        assert_eq!(
+            total as usize,
+            r["children"].as_array().unwrap().len(),
+            "{}",
+            r["path"]
+        );
+    }
+}
+
+#[test]
+fn a_part_of_loop_counts_the_parents_that_are_drawn() {
+    let config = "schema_version: 2
+record_types:
+  node:
+    dir: docs/nodes
+    prefix: NODE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Up]
+    narrative_fields: []
+    pointer_fields:
+      - {name: Up, targets: [node], part_of: true}
+    statuses:
+      values: [Open, Closed]
+      success: [Closed]
+";
+    let dir = repo("loop", config, |dir| {
+        write(
+            dir,
+            "docs/nodes/NODE-1-a.md",
+            &record("Status: Open", "Up: NODE-2\n", "# 1 — A"),
+        );
+        write(
+            dir,
+            "docs/nodes/NODE-2-b.md",
+            &record("Status: Open", "Up: NODE-1\n", "# 2 — B"),
+        );
+        write(
+            dir,
+            "docs/nodes/NODE-3-c.md",
+            &record("Status: Open", "Up: NODE-1\n", "# 3 — C"),
+        );
+    });
+    let (html, _) = board_page(&dir);
+    assert_eq!(
+        count(&html, " data-record=\""),
+        3,
+        "every record is still on the page once"
+    );
+    assert!(
+        html.contains("<h3>Work<i>1 parent · 3 records</i></h3>"),
+        "{}",
+        html.split("<h3>Work")
+            .nth(1)
+            .unwrap()
+            .chars()
+            .take(80)
+            .collect::<String>()
+    );
+}
+
+#[test]
+fn an_export_can_leave_out_all_text_and_the_checklist_evaluation() {
+    let dir = checklist_repo("export-flags");
+    let args = |extra: &[&str]| {
+        let mut all = vec!["export", "--format", "json"];
+        all.extend_from_slice(extra);
+        json(&run(&dir, &all))
+    };
+    let full = args(&[]);
+    let job = by_id(&full, "JOB-1");
+    assert!(job["raw_text"].is_string());
+    assert!(job["sections"][0]["content"].is_string());
+    assert_eq!(job["sections"][0]["items"].as_array().unwrap().len(), 3);
+
+    let no_raw = args(&["--no-raw-text"]);
+    let job = by_id(&no_raw, "JOB-1");
+    assert!(job.get("raw_text").is_none());
+    assert!(
+        job["sections"][0]["content"].is_string(),
+        "--no-raw-text keeps section content"
+    );
+
+    let no_text = args(&["--no-text"]);
+    let job = by_id(&no_text, "JOB-1");
+    assert!(job.get("raw_text").is_none());
+    assert!(
+        job["sections"][0].get("content").is_none(),
+        "--no-text leaves section content out too"
+    );
+    for key in [
+        "name", "heading", "line", "end_line", "ticked", "unticked", "items",
+    ] {
+        assert!(job["sections"][0].get(key).is_some(), "{key}");
+    }
+
+    let no_items = args(&["--no-checklist-items"]);
+    let job = by_id(&no_items, "JOB-1");
+    assert!(job["sections"][0].get("items").is_none());
+    assert!(job["raw_text"].is_string(), "and nothing else changes");
+    assert_eq!(job["state"], by_id(&full, "JOB-1")["state"]);
+}
+
+#[test]
+fn a_link_prefix_with_a_quote_or_a_second_slash_is_refused_and_a_path_is_encoded() {
+    for bad in [
+        "https://h.test/\"><script>alert(1)</script>",
+        "//evil.example/",
+        "https://h.test/'x",
+        "https://h.test/a b",
+    ] {
+        let config = chain_config().replace("https://example.test/blob/main/", bad);
+        let dir = repo("bad-link", &config, chain_records);
+        let out = run(&dir, &["export", "--format", "json"]);
+        assert_eq!(out.status.code(), Some(2), "{bad}");
+        assert!(
+            String::from_utf8_lossy(&out.stdout).contains("link_prefix"),
+            "{bad}"
+        );
+    }
+    let dir = repo("odd-name", &chain_config(), |dir| {
+        chain_records(dir);
+        write(
+            dir,
+            "docs/programmes/PRG-9-a#b?c%d e.md",
+            &record("Status: Idea", "", "# 9 — Odd name"),
+        );
+    });
+    let e = export(&dir);
+    assert_eq!(
+        by_id(&e, "PRG-9")["link"],
+        "https://example.test/blob/main/docs/programmes/PRG-9-a%23b%3Fc%25d%20e.md"
+    );
+}
+
+#[test]
+fn an_idle_connection_is_dropped_in_two_seconds_and_a_full_server_refuses_at_once() {
+    let dir = chain("idle");
+    let server = Server::start(&dir);
+    // One idle client is closed by the server within its head budget.
+    let mut idle = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
+    idle.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let started = Instant::now();
+    let mut buffer = [0u8; 16];
+    let read = idle.read(&mut buffer);
+    assert!(matches!(read, Ok(0)) || read.is_err(), "{read:?}");
+    assert!(
+        started.elapsed() < Duration::from_millis(3500),
+        "{:?}",
+        started.elapsed()
+    );
+
+    // More idle connections than the server takes at once: a real request is answered or refused, never queued.
+    let held: Vec<TcpStream> = (0..48)
+        .map(|_| TcpStream::connect(("127.0.0.1", server.port)).unwrap())
+        .collect();
+    std::thread::sleep(Duration::from_millis(300));
+    let started = Instant::now();
+    let (head, _) = server.get("/stamp");
+    assert!(
+        started.elapsed() < Duration::from_millis(1500),
+        "queued behind idle clients: {:?}",
+        started.elapsed()
+    );
+    let status = status_line(&head);
+    assert!(status.contains("200") || status.contains("503"), "{status}");
+    // Those past the cap were refused outright.
+    let refused = held
+        .into_iter()
+        .filter_map(|mut s| {
+            s.set_read_timeout(Some(Duration::from_millis(200))).ok()?;
+            let mut text = String::new();
+            let _ = s.read_to_string(&mut text);
+            text.starts_with("HTTP/1.1 503").then_some(())
+        })
+        .count();
+    assert!(refused > 0, "no connection was refused with 503");
+    // And once they have timed out, the server answers again.
+    std::thread::sleep(Duration::from_millis(2600));
+    assert!(status_line(&server.get("/stamp").0).contains("200"));
+}
+
+#[test]
+fn check_runs_once_at_a_time_is_cached_and_never_delays_the_page_or_the_stamp() {
+    let dir = chain("check-gate");
+    let server = Server::start_with(&dir, &[], &[("URZUA_BOARD_TEST_CHECK_DELAY_MS", "2500")]);
+    let started = Instant::now();
+    let (texts, quick) = std::thread::scope(|scope| {
+        let runs: Vec<_> = (0..3)
+            .map(|_| scope.spawn(|| server.get("/check").1))
+            .collect();
+        std::thread::sleep(Duration::from_millis(400));
+        // While a run is in flight, the stamp and the page answer at once.
+        let t = Instant::now();
+        let stamp_head = server.get("/stamp").0;
+        let page_head = server.get("/").0;
+        let quick = (t.elapsed(), stamp_head, page_head);
+        (
+            runs.into_iter()
+                .map(|r| r.join().unwrap())
+                .collect::<Vec<_>>(),
+            quick,
+        )
+    });
+    assert!(
+        quick.0 < Duration::from_millis(2000),
+        "the stamp and the page waited on the check: {:?}",
+        quick.0
+    );
+    assert!(status_line(&quick.1).contains("200") && status_line(&quick.2).contains("200"));
+    assert_eq!(texts[0], texts[1]);
+    assert_eq!(
+        texts[1], texts[2],
+        "requests that arrive during a run share its result"
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(5800),
+        "three runs ran one after another: {:?}",
+        started.elapsed()
+    );
+    // The result is served from the cache while the digest is the same.
+    let t = Instant::now();
+    assert_eq!(server.get("/check").1, texts[0]);
+    assert!(
+        t.elapsed() < Duration::from_millis(800),
+        "{:?}",
+        t.elapsed()
+    );
+    // A change to a record makes the next request run again.
+    write(
+        &dir,
+        "docs/steps/STP-1-a.md",
+        &record("Status: Idea", "In: STG-2\n", "# 1 — A, changed"),
+    );
+    let t = Instant::now();
+    let again = server.get("/check").1;
+    assert!(
+        t.elapsed() >= Duration::from_millis(2300),
+        "{:?}",
+        t.elapsed()
+    );
+    assert!(again.starts_with("urzua check: "));
+}
+
+#[test]
+fn the_page_and_a_records_text_are_cached_against_the_digest() {
+    let dir = chain("page-cache");
+    let server = Server::start_with(&dir, &[], &[("URZUA_BOARD_TEST_BUILD_DELAY_MS", "1500")]);
+    // A record's text does not build the view model.
+    let t = Instant::now();
+    let (head, text) = server.get("/record/PRG-1");
+    assert!(
+        status_line(&head).contains("200") && text.contains("Alpha"),
+        "{head}"
+    );
+    assert!(
+        t.elapsed() < Duration::from_millis(1200),
+        "{:?}",
+        t.elapsed()
+    );
+    // The first page builds; the second, unchanged, comes from memory.
+    let t = Instant::now();
+    let (_, first) = server.get("/");
+    assert!(
+        t.elapsed() >= Duration::from_millis(1400),
+        "{:?}",
+        t.elapsed()
+    );
+    let t = Instant::now();
+    let (_, second) = server.get("/");
+    assert!(
+        t.elapsed() < Duration::from_millis(1000),
+        "{:?}",
+        t.elapsed()
+    );
+    assert_eq!(
+        first.split("data-d=\"").nth(1).unwrap()[..64].to_string(),
+        second.split("data-d=\"").nth(1).unwrap()[..64].to_string()
+    );
+    // A change to a record invalidates it, and the new page shows the change.
+    write(
+        &dir,
+        "docs/programmes/PRG-1-alpha.md",
+        &record(
+            "Status: Rolling",
+            "Owner: ann\nLane: north\n",
+            "# 1 — Alpha, cached no more",
+        ),
+    );
+    let t = Instant::now();
+    let (_, third) = server.get("/");
+    assert!(
+        t.elapsed() >= Duration::from_millis(1400),
+        "{:?}",
+        t.elapsed()
+    );
+    assert!(third.contains("Alpha, cached no more"));
+    let (_, text) = server.get("/record/PRG-1");
+    assert!(
+        text.contains("Alpha, cached no more"),
+        "the text read after a change is the new text"
+    );
+}
+
+#[test]
+fn a_request_for_another_host_is_refused_when_allowed_hosts_are_given() {
+    let dir = chain("hosts");
+    let open = Server::start(&dir);
+    assert!(
+        status_line(&open.get_with_host("/stamp", Some("anything.example"))).contains("200"),
+        "no check by default"
+    );
+    assert!(status_line(&open.get_with_host("/stamp", None)).contains("200"));
+    let (head, _) = open.get("/stamp");
+    assert!(
+        !head.to_lowercase().contains("access-control-allow-origin"),
+        "{head}"
+    );
+    drop(open);
+
+    let guarded = Server::start_with(
+        &dir,
+        &[
+            "--allowed-host",
+            "Board.Example",
+            "--allowed-host",
+            "other.test",
+        ],
+        &[],
+    );
+    for host in [
+        "board.example",
+        "board.example:8443",
+        "BOARD.EXAMPLE",
+        "other.test",
+        "localhost",
+        "localhost:3000",
+        "127.0.0.1",
+        "127.0.0.1:18000",
+    ] {
+        assert!(
+            status_line(&guarded.get_with_host("/stamp", Some(host))).contains("200"),
+            "{host}"
+        );
+    }
+    for host in [
+        "evil.example",
+        "board.example.evil.test",
+        "evil.example:80",
+        "[::1]:80",
+        "127.0.0.2",
+    ] {
+        assert!(
+            status_line(&guarded.get_with_host("/stamp", Some(host))).contains("403"),
+            "{host}"
+        );
+    }
+    assert!(
+        status_line(&guarded.get_with_host("/", None)).contains("403"),
+        "no Host header at all"
+    );
+    assert!(
+        status_line(&guarded.get_with_host("/record/PRG-1", Some("evil.example"))).contains("403")
+    );
+    assert!(status_line(&guarded.get_with_host("/check", Some("evil.example"))).contains("403"));
+    let out = run(&dir, &["board", "--allowed-host", "x.test"]);
+    assert_eq!(out.status.code(), Some(2), "--allowed-host needs --serve");
 }
 
 // ---------------------------------------------------------------- this repository's records
@@ -1971,7 +2562,7 @@ fn this_repositorys_records_have_a_state_each_and_the_page_holds_every_one() {
 
 // ---------------------------------------------------------------- the additive guarantee
 
-const NEW_RECORD_KEYS: [&str; 17] = [
+const NEW_RECORD_KEYS: [&str; 18] = [
     "title",
     "title_is_fallback",
     "fields",
@@ -1985,6 +2576,7 @@ const NEW_RECORD_KEYS: [&str; 17] = [
     "children",
     "children_by_state",
     "state_disagrees_with_children",
+    "parent_ambiguous",
     "refers_to",
     "unresolved_refs",
     "referred_by",
@@ -2006,7 +2598,7 @@ fn natural(id: &str) -> (String, u64, String) {
 /// test then says so instead of passing silently.
 fn released_export(root: &Path) -> Option<Value> {
     let bin = std::env::var("URZUA_RELEASED_BIN").unwrap_or_else(|_| "urzua".to_string());
-    let out = std::process::Command::new(&bin)
+    let out = common::command_with_stub_gh(&bin)
         .args(["export", "--format", "json"])
         .current_dir(root)
         .output()

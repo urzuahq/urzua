@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.169'
+Version: '0.170'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:63cc3a95e1a4fc34888865ef417d008d7cd798e5a96ee20e60f083c4f10f58f2, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:b3c446ff6ddde5977a6c3256903bdb49b250e9aff411a7f5137c76d416fb9c72, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1444,8 +1444,10 @@ export:
 ```
 
 `link_prefix` is optional. When declared, each record `urzua export --format json` returns carries a `link`: the
-prefix followed by the record's repository-relative path with `/` separators. The prefix must start with `https://`,
-`http://` or `/` and hold no whitespace or control character; anything else is a load error (`export: ...`). Absent,
+prefix followed by the record's repository-relative path with `/` separators, percent-encoded (so a file name holding `#`,
+`?`, `%` or a space cannot change what the address names). The prefix is `https://` or `http://` and a host, or a path
+starting with a single `/`, in URL-safe characters only: `//`, a quote, an angle bracket, a backslash, whitespace and a control
+character are a load error (`export: ...`), since the value is written into a page's attributes. Absent,
 no record carries a `link`. The engine fetches nothing from it. `urzua board` does not render it.
 
 ## Numbering against open pull requests: `new`
@@ -1679,8 +1681,10 @@ outside it is reported by `pointer.target-type` only, not also by `relation.cros
 
 **Containment: `part_of`.** A reference with a declared target type does not by itself mean "is part of", so
 containment is declared. A `pointer_fields` entry of the map form may add `part_of: true`:
-`{name: Parent, targets: [group], part_of: true}`. A record naming another through that field is part of it; the
-first reference that resolves to a record of a listed type, other than the record itself, is its `parent`.
+`{name: Parent, targets: [group], part_of: true}`. A record naming another through that field is part of it. A `part_of` field names one record: when it
+resolves to more than one record of a listed type (other than the record itself), the record has no `parent`, the export lists
+them in `parent_ambiguous` and none of them lists it as a child; a reference that resolves to a record whose header cannot be
+read names no parent.
 `urzua export --format json` reads `parent`, `children`, `children_by_state` and
 `state_disagrees_with_children` from this declaration alone (`SPEC-1`), `urzua board` draws its tree from it, and
 `roadmap.group_by` follows a record to its parents for a value the record does not carry. A configuration that
@@ -3046,3 +3050,5 @@ proves this configuration produces the three findings.
 > | 2026-11-18 | Bumped to `0.164`. A `pointer_fields` entry may add `part_of: true` to declare containment (it requires `targets`; one per type); `roadmap.group_by` follows a record to its nearest ancestor's value when the record carries none; a new optional `export.link_prefix` makes each exported record carry a `link`. **Why:** `MILE-330` and its amendment of 2026-11-18, and `MILE-344`: a reference with a target type does not say "is part of", and the roadmap's grouping returned `null` under a child whose group field lives on its parent. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e2981c06fd24 -> 63cc3a95e1a4. Reason: config.rs: Config gains a skipped part_of map and an export declaration (ExportDecl with link_prefix, validated at load, new InvalidExport error); every other key and how it is read is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.169 by this merge, the next number above the higher side's 0.168, because `version_bump` requires a new version for the rows this merge combines. Rows added on the branches state versions 0.164 and 0.168, which were true there and are superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-18 | Bumped to `0.170`. A `part_of` field names one record (several give no parent and `parent_ambiguous`); `export.link_prefix` is restricted to `https://` or `http://` and a host, or a path starting with a single `/`, in URL-safe characters, and the exported link percent-encodes the path. **Why:** the review of the board's pull request: a prefix such as `https://h.test/"><script>` or `//evil.example/` was accepted, and a record with two containers listed itself under one of them only. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 63cc3a95e1a4 -> b3c446ff6ddd. Reason: config.rs: export.link_prefix is validated as https:// or http:// and a host, or a path with a single leading /, in URL-safe characters, and link_for percent-encodes the path; nothing else changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

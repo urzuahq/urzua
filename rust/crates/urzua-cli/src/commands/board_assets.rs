@@ -118,6 +118,20 @@ pub(super) const SCRIPT: &str = r#"
   document.documentElement.className += ' js';
   var state = { q: '', filter: '' };
   var q, n, buttons, recs, haystack, shells, sections;
+  var saved = null;
+  function snapshot() {
+    var open = {};
+    Array.prototype.forEach.call(document.querySelectorAll('li[id] > details'), function (d) {
+      open[d.parentElement.id + (d.classList.contains('det') ? ':d' : '')] = d.open;
+    });
+    return open;
+  }
+  function restore(open) {
+    Array.prototype.forEach.call(document.querySelectorAll('li[id] > details'), function (d) {
+      var k = d.parentElement.id + (d.classList.contains('det') ? ':d' : '');
+      if (Object.prototype.hasOwnProperty.call(open, k)) { d.open = open[k]; }
+    });
+  }
   function matches(r, text, k) {
     if (text !== '' && haystack[k].indexOf(text) === -1) { return false; }
     if (state.filter === '') { return true; }
@@ -130,6 +144,8 @@ pub(super) const SCRIPT: &str = r#"
     var text = state.q.trim().toLowerCase();
     var active = text !== '' || state.filter !== '';
     var shown = 0;
+    if (active && saved === null) { saved = snapshot(); }
+    if (!active && saved !== null) { restore(saved); saved = null; }
     shells.forEach(function (r) { r.hidden = active; });
     sections.forEach(function (s) { s.hidden = active; });
     recs.forEach(function (r, k) {
@@ -156,6 +172,7 @@ pub(super) const SCRIPT: &str = r#"
     });
     shells = Array.prototype.slice.call(document.querySelectorAll('.rec, .fold'));
     sections = Array.prototype.slice.call(document.querySelectorAll('section[data-sec]'));
+    saved = null;
     q.value = state.q;
     buttons.forEach(function (b) {
       b.className = b.getAttribute('data-f') === state.filter ? 'on' : '';
@@ -212,25 +229,17 @@ pub(super) const LIVE: &str = r#"
         return r;
       });
     }
-    function key(d) {
-      return d.parentElement.id + (d.classList.contains('det') ? ':d' : '');
-    }
     function swap(text) {
       var doc = new DOMParser().parseFromString(text, 'text/html');
       var fresh = doc.getElementById('board');
       var freshUpd = doc.getElementById('upd');
       var freshMeta = doc.getElementById('meta');
       if (!fresh || !freshUpd || !freshMeta) { throw new Error('not a board page'); }
-      var open = {};
-      Array.prototype.forEach.call(board.querySelectorAll('li[id] > details'), function (d) {
-        open[key(d)] = d.open;
-      });
+      var open = saved !== null ? saved : snapshot();
       var y = window.scrollY;
       var nodes = Array.prototype.map.call(fresh.childNodes, function (c) { return document.importNode(c, true); });
       board.replaceChildren.apply(board, nodes);
-      Array.prototype.forEach.call(board.querySelectorAll('li[id] > details'), function (d) {
-        if (Object.prototype.hasOwnProperty.call(open, key(d))) { d.open = open[key(d)]; }
-      });
+      restore(open);
       wire();
       meta.textContent = freshMeta.textContent;
       digest = freshUpd.getAttribute('data-d');

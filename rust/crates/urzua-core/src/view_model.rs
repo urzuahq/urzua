@@ -109,25 +109,35 @@ pub struct RecordView {
     /// The declaration that decided `state`: the `statuses` list that holds
     /// the status (`success`, `failure`, `progress`; `progress` also for
     /// `not-started`, the set the status is not in), or why no list did
-    /// (`no-progress-declared`, `no-status`, `no-statuses-declared`).
+    /// (`no-progress-declared`, `no-status`, `no-statuses-declared`, and
+    /// `header-unreadable`: the state is then `none`).
     pub state_decided_by: String,
-    /// The records it directly depends on, through the pairs `roadmap.pairs`
-    /// names, that are not finished.
+    /// The ids of the records it directly depends on, through the pairs
+    /// `roadmap.pairs` names, that are not finished. Ids are the records' own
+    /// (as their file names carry them), where `roadmap` and `graph` print an
+    /// id as the referring header wrote it. Empty when the header could not be read.
     pub waiting_on: Vec<String>,
-    /// A record of a work type that is not finished, not dropped and waits on nothing.
+    /// Work someone can pick up: a record of a work type whose state is
+    /// `not-started` or `open` (so its type declares statuses), that waits on
+    /// nothing. Never an under-way, finished or dropped record, one whose
+    /// header could not be read, or one of a type that declares no statuses.
     pub ready: bool,
     /// Moves a gate reserves for a person that its declared transitions allow
     /// from its status; always empty for a finished or dropped record.
     pub gated_moves: Vec<GatedMove>,
     /// The record this one is part of, through the type's `part_of` field.
     pub parent: Option<String>,
+    /// The records the `part_of` field names when it names more than one; the
+    /// record then has no `parent`. Empty otherwise.
+    pub parent_ambiguous: Vec<String>,
     pub children: Vec<String>,
     pub children_by_state: ChildrenByState,
     /// The record's state and its children's disagree: it is finished while a
     /// child is neither finished nor dropped, or not started while a child is
     /// under way or finished. Never for `open`: nothing says it has not begun.
     pub state_disagrees_with_children: bool,
-    /// Per reference field, the records it names that exist.
+    /// Per reference field, the ids of the records it names that exist, as those
+    /// records are named (`graph` prints the id as the header wrote it).
     pub refers_to: BTreeMap<String, Vec<String>>,
     /// Per reference field, the ids it names that no record carries.
     pub unresolved_refs: BTreeMap<String, Vec<String>>,
@@ -189,6 +199,12 @@ fn natural_sorted(mut ids: Vec<String>) -> Vec<String> {
     ids
 }
 
+/// Whether the record's header could be read. A type that declares no header
+/// has none to read, and is not unreadable for it.
+pub fn header_readable(config: &Config, record: &Record) -> bool {
+    config.record_types[&record.record_type].has_no_header() || !record.header.is_unreadable()
+}
+
 /// The status a record states and the state it puts the record in. A type with
 /// no `progress` set cannot say work has begun, so its open records are `Open`.
 fn state_of(
@@ -197,6 +213,13 @@ fn state_of(
     record: &Record,
 ) -> (Option<String>, StateCategory, String) {
     let type_name = &record.record_type;
+    if !header_readable(config, record) {
+        return (
+            None,
+            StateCategory::NoStatuses,
+            "header-unreadable".to_string(),
+        );
+    }
     let field = config.record_types[type_name].relation_field(RelationRole::Status);
     let status = present(record.header.get(field));
     let declared = decls.get(type_name).filter(|d| {
@@ -230,26 +253,55 @@ fn state_of(
     (status, state, decided_by)
 }
 
-/// The record `record` is part of: the first reference in its type's `part_of`
-/// field that resolves to a record of one of the field's declared target
-/// types, other than itself. `None` for a type with no `part_of` field.
+/// Every record the type's `part_of` field names that exists, is of one of the
+/// field's declared target types and is not the record itself, in the order
+/// the field lists them. Empty for a type with no `part_of` field.
+pub fn parents_of<'a>(
+    config: &Config,
+    index: &RecordIndex<'a>,
+    record: &Record,
+) -> Vec<&'a Record> {
+    let Some(field) = config.part_of.get(&record.record_type) else {
+        return Vec::new();
+    };
+    let Some(targets) = config
+        .pointer_targets
+        .get(&record.record_type)
+        .and_then(|t| t.get(field))
+    else {
+        return Vec::new();
+    };
+    let Some(value) = record.header.get(field) else {
+        return Vec::new();
+    };
+    let mut found: Vec<&Record> = Vec::new();
+    for reference in extract_references(value) {
+        let Some(parent) = index.get(&RecordId::new(&reference)).copied() else {
+            continue;
+        };
+        let wanted = parent.path != record.path
+            && targets.contains(&parent.record_type)
+            && header_readable(config, parent)
+            && !found.iter().any(|f| f.path == parent.path);
+        if wanted {
+            found.push(parent);
+        }
+    }
+    found
+}
+
+/// The record `record` is part of. A record is part of one record: when its
+/// `part_of` field resolves to several, it has no parent (`parents_of` lists
+/// them) rather than the first of them.
 pub fn parent_of<'a>(
     config: &Config,
     index: &RecordIndex<'a>,
     record: &Record,
 ) -> Option<&'a Record> {
-    let field = config.part_of.get(&record.record_type)?;
-    let targets = config
-        .pointer_targets
-        .get(&record.record_type)?
-        .get(field)?;
-    let value = record.header.get(field)?;
-    extract_references(value).into_iter().find_map(|reference| {
-        index
-            .get(&RecordId::new(&reference))
-            .copied()
-            .filter(|p| p.path != record.path && targets.contains(&p.record_type))
-    })
+    match parents_of(config, index, record).as_slice() {
+        [only] => Some(only),
+        _ => None,
+    }
 }
 
 /// The records `record` is part of, nearest first. A loop in the declarations
@@ -507,6 +559,23 @@ fn containment(records: &[Record], config: &Config, index: &RecordIndex<'_>) -> 
     Tree { parent, children }
 }
 
+/// The record's title, or its id (its file stem when it has none) flagged as a fallback.
+fn title_of(record: &Record, id: Option<&str>, text: &str) -> (String, bool) {
+    match title_in_text(record, text).filter(|t| !t.is_empty()) {
+        Some(title) => (title, false),
+        None => (
+            id.map(str::to_string).unwrap_or_else(|| {
+                record
+                    .path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default()
+            }),
+            true,
+        ),
+    }
+}
+
 /// Computes every record's view.
 pub fn compute(input: &ViewInput<'_>) -> ViewModel {
     let ViewInput {
@@ -541,34 +610,32 @@ pub fn compute(input: &ViewInput<'_>) -> ViewModel {
                 .map(String::as_str)
                 .unwrap_or_default();
             let (status, state, decided_by) = standings[i].clone();
+            let readable = header_readable(config, record);
             let waiting_on = ids[i]
                 .as_deref()
+                .filter(|_| readable)
                 .and_then(|id| waits.get(RecordId::new(id).as_str()))
                 .map(|deps| natural_sorted(deps.iter().filter_map(|d| display(d)).collect()))
                 .unwrap_or_default();
             let mut by_state = ChildrenByState::default();
+            let mut children: Vec<String> = Vec::new();
             for child in &tree.children[i] {
-                by_state.add(standings[*child].1);
+                if let Some(id) = &ids[*child] {
+                    children.push(id.clone());
+                    by_state.add(standings[*child].1);
+                }
             }
-            let mut children: Vec<String> = tree.children[i]
-                .iter()
-                .filter_map(|c| ids[*c].clone())
+            let children = natural_sorted(children);
+            let named: Vec<String> = parents_of(config, &index, record)
+                .into_iter()
+                .filter_map(record_id)
                 .collect();
-            children = natural_sorted(children);
-            let (title, title_is_fallback) =
-                match title_in_text(record, text).filter(|t| !t.is_empty()) {
-                    Some(title) => (title, false),
-                    None => (
-                        ids[i].clone().unwrap_or_else(|| {
-                            record
-                                .path
-                                .file_stem()
-                                .map(|s| s.to_string_lossy().to_string())
-                                .unwrap_or_default()
-                        }),
-                        true,
-                    ),
-                };
+            let parent_ambiguous = if readable && named.len() > 1 {
+                natural_sorted(named)
+            } else {
+                Vec::new()
+            };
+            let (title, title_is_fallback) = title_of(record, ids[i].as_deref(), text);
             let is_work = roles[&record.record_type].work;
             RecordView {
                 title,
@@ -584,12 +651,15 @@ pub fn compute(input: &ViewInput<'_>) -> ViewModel {
                 } else {
                     Vec::new()
                 },
-                ready: is_work && state.is_open() && waiting_on.is_empty(),
+                ready: is_work
+                    && matches!(state, StateCategory::NotStarted | StateCategory::Open)
+                    && waiting_on.is_empty(),
                 waiting_on,
                 state_disagrees_with_children: disagrees(state, &by_state),
                 children_by_state: by_state,
                 children,
                 parent: tree.parent[i].and_then(|p| ids[p].clone()),
+                parent_ambiguous,
                 refers_to: edge_maps.refers_to[i].clone(),
                 unresolved_refs: edge_maps.unresolved[i].clone(),
                 referred_by: edge_maps.referred_by[i].clone(),

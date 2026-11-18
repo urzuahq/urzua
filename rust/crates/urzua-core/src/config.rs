@@ -535,30 +535,47 @@ impl ExportDecl {
         self.link_prefix.is_none()
     }
 
-    /// `prefix` joined to `path`, or `None` when no prefix is declared.
+    /// `prefix` joined to `path`, or `None` when no prefix is declared. The path
+    /// is percent-encoded, so a file name holding `#`, `?`, `%` or a space
+    /// cannot change what the address names.
     pub fn link_for(&self, path: &std::path::Path) -> Option<String> {
         let prefix = self.link_prefix.as_deref()?;
-        let path = path.to_string_lossy().replace('\\', "/");
-        Some(format!("{prefix}{path}"))
+        let mut encoded = String::new();
+        for byte in path.to_string_lossy().replace('\\', "/").bytes() {
+            if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
+                encoded.push(byte as char);
+            } else {
+                encoded.push_str(&format!("%{byte:02X}"));
+            }
+        }
+        Some(format!("{prefix}{encoded}"))
     }
 }
 
-/// A link prefix is an address a viewer can open: an absolute `http(s)` URL or
-/// a path from the host's root, with no whitespace or control character.
+/// A link prefix is `https://` or `http://` and a host, or a path from the
+/// host's root that does not start `//`, in URL-safe characters only: no quote,
+/// angle bracket, backslash, whitespace or control character, which would let a
+/// configuration value break out of the attribute a viewer writes it into.
 fn validate_export(config: &Config) -> Result<(), ConfigError> {
     let Some(prefix) = config.export.link_prefix.as_deref() else {
         return Ok(());
     };
-    let well_formed = (prefix.starts_with("https://")
-        || prefix.starts_with("http://")
-        || prefix.starts_with('/'))
-        && !prefix.chars().any(|c| c.is_whitespace() || c.is_control());
-    if well_formed {
+    let url_safe = prefix
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "-._~:/?#[]@!$&()*+,;=%".contains(c));
+    let shaped = match prefix
+        .strip_prefix("https://")
+        .or_else(|| prefix.strip_prefix("http://"))
+    {
+        Some(rest) => !rest.is_empty() && !rest.starts_with('/'),
+        None => prefix.starts_with('/') && !prefix.starts_with("//"),
+    };
+    if url_safe && shaped {
         Ok(())
     } else {
         Err(ConfigError::InvalidExport {
             reason: format!(
-                "export.link_prefix '{prefix}' must start with https://, http:// or / and hold no whitespace"
+                "export.link_prefix '{prefix}' must be https:// or http:// and a host, or a path starting with a single /, in URL-safe characters (no quote, angle bracket, whitespace or control character)"
             ),
         })
     }
@@ -7005,6 +7022,16 @@ record_types:
             "h.test/",
             "https://h.test/ x/",
             "javascript:alert(1)//",
+            "https://h.test/\\\"><script>alert(1)</script>",
+            "https://h.test/'x",
+            "https://h.test/<b>",
+            "https://h.test/\\\\x",
+            "https://h.test/a\tb",
+            "//evil.example/",
+            "///evil.example/",
+            "https://",
+            "https:///x",
+            "/ok/\\\"x",
         ] {
             let text = pair_cfg("", &format!("export:\n  link_prefix: \"{bad}\"\n"));
             assert!(
@@ -7013,6 +7040,26 @@ record_types:
             );
         }
         assert!(parse(&pair_cfg("", "export:\n  other: 1\n")).is_err());
+        for good in [
+            "https://h.test/a/b?c=d#e",
+            "http://h.test:8080/",
+            "/docs/",
+            "/",
+        ] {
+            let text = pair_cfg("", &format!("export:\n  link_prefix: \"{good}\"\n"));
+            assert!(parse(&text).is_ok(), "{good}");
+        }
+    }
+
+    #[test]
+    fn a_link_percent_encodes_the_record_path() {
+        let c = parse(&pair_cfg("", "export:\n  link_prefix: https://h.test/b/\n")).unwrap();
+        assert_eq!(
+            c.export
+                .link_for(std::path::Path::new("docs/a b#c?d%e/é.md"))
+                .as_deref(),
+            Some("https://h.test/b/docs/a%20b%23c%3Fd%25e/%C3%A9.md")
+        );
     }
 
     #[test]

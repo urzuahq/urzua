@@ -127,9 +127,10 @@
       "state": "none",
       "state_decided_by": "no-statuses-declared",
       "waiting_on": [],
-      "ready": true,
+      "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -169,9 +170,10 @@
       "state": "none",
       "state_decided_by": "no-statuses-declared",
       "waiting_on": [],
-      "ready": true,
+      "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -225,9 +227,10 @@
       "state": "none",
       "state_decided_by": "no-statuses-declared",
       "waiting_on": [],
-      "ready": true,
+      "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -274,6 +277,7 @@
       "ready": true,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -321,6 +325,7 @@
       "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -367,6 +372,7 @@
       "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -415,6 +421,7 @@
       "ready": true,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -473,6 +480,7 @@
       "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -520,6 +528,7 @@
       "ready": true,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -576,6 +585,7 @@
       "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -632,6 +642,7 @@
       "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -686,6 +697,7 @@
       "ready": true,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,
@@ -741,9 +753,10 @@
       "state": "none",
       "state_decided_by": "no-statuses-declared",
       "waiting_on": [],
-      "ready": true,
+      "ready": false,
       "gated_moves": [],
       "parent": null,
+      "parent_ambiguous": [],
       "children": [],
       "children_by_state": {
         "finished": 0,

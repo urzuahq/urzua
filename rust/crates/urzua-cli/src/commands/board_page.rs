@@ -15,7 +15,6 @@ use urzua_core::view_model::StateCategory;
 
 use super::board_assets::{LIVE, SCRIPT, STYLE};
 
-/// What `urzua check` reported, reduced to the line the page shows.
 pub(crate) struct CheckLine {
     pub status: String,
     pub errors: usize,
@@ -35,7 +34,6 @@ pub(crate) enum CheckNote<'a> {
 }
 
 impl CheckLine {
-    /// The summary as one line of text.
     pub(crate) fn text(&self) -> String {
         format!(
             "urzua check: {} - {} errors, {} warnings, {} info{}",
@@ -52,7 +50,6 @@ impl CheckLine {
     }
 }
 
-/// HTML-escapes text for an element body or a quoted attribute value.
 pub(crate) fn esc(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
@@ -134,7 +131,6 @@ pub(crate) fn is_path_id(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-/// The export, indexed for linking.
 struct Page<'a> {
     e: &'a ExportReport,
     serving: bool,
@@ -202,7 +198,6 @@ impl<'a> Page<'a> {
             .is_some_and(|t| t.work)
     }
 
-    /// A link to a record on this page, or its id as plain text.
     fn link(&self, id: &str) -> String {
         match self.by_id.get(id) {
             Some(&i) => format!("<a href=\"#{}\">{}</a>", esc(&self.anchors[i]), esc(id)),
@@ -217,7 +212,6 @@ impl<'a> Page<'a> {
             .join(", ")
     }
 
-    /// The waits-on text: amber, with the ids as in-page links.
     fn waits(&self, r: &ExportedRecord) -> Option<String> {
         let v = &r.view;
         (v.state.is_open() && !v.waiting_on.is_empty()).then(|| self.links(&v.waiting_on))
@@ -231,6 +225,14 @@ impl<'a> Page<'a> {
         let mut out = String::new();
         if let Some(links) = self.waits(r) {
             let _ = write!(out, "<span class=\"x w\">waits on {links}</span>");
+        }
+        if !v.parent_ambiguous.is_empty() {
+            let _ = write!(
+                out,
+                "<span class=\"x\" title=\"{}\">names {} parents</span>",
+                esc(&v.parent_ambiguous.join(", ")),
+                v.parent_ambiguous.len()
+            );
         }
         if let Some(role) = self.e.type_roles.get(&r.record_type) {
             for name in &role.value_fields {
@@ -258,7 +260,7 @@ impl<'a> Page<'a> {
         if !v.children.is_empty() {
             let _ = write!(
                 out,
-                "<span class=\"x\">{} of {} done{}</span>",
+                "<span class=\"x\">{} of {} finished{}</span>",
                 v.children_by_state.finished,
                 v.children.len(),
                 if v.state_disagrees_with_children {
@@ -303,6 +305,13 @@ impl<'a> Page<'a> {
         let mut out = String::from("<div class=\"more\">");
         if let Some(parent) = &v.parent {
             let _ = write!(out, "<div>part of {}</div>", self.link(parent));
+        }
+        if !v.parent_ambiguous.is_empty() {
+            let _ = write!(
+                out,
+                "<div>names more than one parent, so it has none: {}</div>",
+                self.links(&v.parent_ambiguous)
+            );
         }
         if let Some(links) = self.waits(r) {
             let _ = write!(out, "<div class=\"w\">waits on {links}</div>");
@@ -418,8 +427,6 @@ impl<'a> Page<'a> {
         )
     }
 
-    /// Whether a child row is worth seeing without a tap: under way, ready,
-    /// or waiting.
     fn is_active(&self, i: usize) -> bool {
         let v = &self.record(i).view;
         v.state == StateCategory::UnderWay
@@ -508,10 +515,13 @@ fn dot(r: &ExportedRecord) -> String {
         _ if ready_leaf(r) => ("b", format!("ready ({})", state_word(v.state))),
         state => ("n", state_word(state).to_string()),
     };
-    format!("<span class=\"d {class}\" title=\"{}\"></span>", esc(&word))
+    format!(
+        "<span class=\"d {class}\" role=\"img\" aria-label=\"{}\" title=\"{}\"></span>",
+        esc(&word),
+        esc(&word)
+    )
 }
 
-/// The dot and the status exactly as written.
 fn status_cell(r: &ExportedRecord) -> String {
     let status = r.view.status.as_deref().unwrap_or_default();
     format!("{}<span class=\"st\">{}</span>", dot(r), esc(status))
@@ -524,8 +534,6 @@ fn field_text(value: &urzua_core::view_model::FieldValue) -> String {
     }
 }
 
-/// The checklist items resolved, and how many there are, for a record with a
-/// declared checklist.
 fn checklist_ratio(r: &ExportedRecord) -> Option<(usize, usize)> {
     let items = r.sections.as_ref()?.iter().find_map(|s| s.items.as_ref())?;
     Some((items.iter().filter(|i| i.resolved).count(), items.len()))
@@ -542,7 +550,6 @@ fn head(csp_style: &str, csp_script: &str, serving: bool) -> String {
     )
 }
 
-/// `2026-11-18T06:16:35Z` as `2026-11-18 06:16:35 UTC`.
 fn exact_time(time: &str) -> String {
     match (time.get(..10), time.get(11..19)) {
         (Some(date), Some(clock)) => format!("{date} {clock} UTC"),
@@ -609,7 +616,6 @@ fn notes(page: &Page<'_>, check: &CheckNote<'_>) -> String {
     out
 }
 
-/// The search box and the state filter, with the count each filter selects.
 fn controls(page: &Page<'_>) -> String {
     let readable: Vec<&ExportedRecord> = page.e.records.iter().collect();
     // A record whose header could not be read has no state to count.
@@ -678,7 +684,6 @@ fn with_code(text: &str) -> String {
         .collect()
 }
 
-/// A section label with its count, then its list.
 fn section(
     label: &str,
     count: &str,
@@ -705,7 +710,6 @@ fn section(
     )
 }
 
-/// A short list of one-line rows: the first few, then the rest under "N more".
 fn brief_rows(
     page: &Page<'_>,
     key: &str,
@@ -734,7 +738,6 @@ fn brief_rows(
     out
 }
 
-/// `a`, `a and b`, `a, b and c`.
 fn names_phrase(names: &[&str]) -> String {
     match names {
         [] => String::new(),
@@ -743,7 +746,6 @@ fn names_phrase(names: &[&str]) -> String {
     }
 }
 
-/// "X declares a gate but no transitions, ..." for the types that do, or nothing.
 fn no_transitions_note(page: &Page<'_>) -> String {
     let names: Vec<&str> = page
         .e
@@ -764,7 +766,6 @@ fn no_transitions_note(page: &Page<'_>) -> String {
     )
 }
 
-/// The one line under "Under way" naming the types that declare no progress set.
 fn progress_note(page: &Page<'_>, none_under_way: bool) -> String {
     let names: Vec<&str> = page
         .e
@@ -843,7 +844,6 @@ fn attention(page: &Page<'_>) -> String {
     out
 }
 
-/// The open, readable work records a tree is drawn from.
 struct Tree {
     in_tree: Vec<bool>,
 }
@@ -868,7 +868,6 @@ impl Tree {
             .is_some_and(|&p| self.in_tree[p])
     }
 
-    /// A finished or dropped work record: collapsed, never in the tree.
     fn is_closed_work(&self, page: &Page<'_>, i: usize) -> bool {
         let r = page.record(i);
         r.header_readable && page.is_work(r) && !r.view.state.is_open()
@@ -915,7 +914,6 @@ fn draw(
     Some(page.entry(i, level, &kids))
 }
 
-/// Whether following `part_of` from `i` comes back to it.
 fn in_loop(page: &Page<'_>, i: usize) -> bool {
     let mut at = i;
     for _ in 0..page.e.records.len() {
@@ -934,8 +932,6 @@ fn in_loop(page: &Page<'_>, i: usize) -> bool {
     false
 }
 
-/// Work without containment: one list per type, its finished and dropped
-/// records folded at the end.
 fn work_by_type(page: &Page<'_>, tree: &Tree, seen: &mut HashSet<usize>) -> String {
     let n = page.e.records.len();
     let mut out = String::from("<p class=\"note\">The configuration declares no containment, so work is grouped by type.</p>\n");
@@ -977,10 +973,8 @@ fn work_section(page: &Page<'_>) -> String {
         .type_roles
         .values()
         .any(|t| t.work && t.part_of.is_some());
-    let total = (0..n)
-        .filter(|&i| tree.in_tree[i] || tree.is_closed_work(page, i))
-        .count();
-    if total == 0 {
+    let any_work = (0..n).any(|i| tree.in_tree[i] || tree.is_closed_work(page, i));
+    if !any_work {
         return section("Work", "0", false, "No work record.", "", "");
     }
     let mut seen = HashSet::new();
@@ -996,54 +990,64 @@ fn work_section(page: &Page<'_>) -> String {
     let (no_parent, elsewhere): (Vec<usize>, Vec<usize>) = leaves
         .into_iter()
         .partition(|&i| page.record(i).view.parent.is_none());
-    let mut render = |ids: &[usize]| -> String {
-        ids.iter()
+    // Counts are of what is drawn: a loop in `part_of` draws one member inside
+    // the other, so it is one parent, not two.
+    let mut render = |ids: &[usize]| -> (String, usize) {
+        let drawn: Vec<String> = ids
+            .iter()
             .filter_map(|&i| draw(page, &tree, i, 0, &mut seen))
-            .collect()
+            .collect();
+        (drawn.concat(), drawn.len())
     };
-    let mut out = String::new();
-    let rows = render(&parents);
-    out.push_str(&section(
-        "Work",
-        &format!("{} parents · {total} records", parents.len()),
-        false,
-        "",
-        &rows,
-        "",
-    ));
-    if !no_parent.is_empty() {
-        let rows = render(&no_parent);
-        out.push_str(&section(
-            "No parent",
-            &no_parent.len().to_string(),
-            false,
-            "Records that are not part of another record.",
-            &rows,
-            "",
-        ));
-    }
-    if !elsewhere.is_empty() {
-        let rows = render(&elsewhere);
-        out.push_str(&section(
-            "Part of a record shown elsewhere",
-            &elsewhere.len().to_string(),
-            false,
-            "The record each is part of is finished, dropped, of another kind or unreadable; its row says which.",
-            &rows,
-            "",
-        ));
-    }
+    let (parent_rows, parents_drawn) = render(&parents);
+    let (no_parent_rows, no_parent_drawn) = render(&no_parent);
+    let (elsewhere_rows, elsewhere_drawn) = render(&elsewhere);
     let closed: Vec<usize> = (0..n)
         .filter(|&i| tree.is_closed_work(page, i) && !seen.contains(&i))
         .collect();
+    let total = seen.len() + closed.len();
+    let mut out = section(
+        "Work",
+        &format!(
+            "{parents_drawn} {} · {total} records",
+            if parents_drawn == 1 {
+                "parent"
+            } else {
+                "parents"
+            }
+        ),
+        false,
+        "",
+        &parent_rows,
+        "",
+    );
+    if no_parent_drawn > 0 {
+        out.push_str(&section(
+            "No parent",
+            &no_parent_drawn.to_string(),
+            false,
+            "Records that are not part of another record, or whose part_of names more than one.",
+            &no_parent_rows,
+            "",
+        ));
+    }
+    if elsewhere_drawn > 0 {
+        out.push_str(&section(
+            "Part of a record shown elsewhere",
+            &elsewhere_drawn.to_string(),
+            false,
+            "The record each is part of is finished, dropped, of another kind or unreadable; its row says which.",
+            &elsewhere_rows,
+            "",
+        ));
+    }
     if !closed.is_empty() {
-        let rows = page.fold(&closed, 0);
         out.push_str(&section(
             "Finished and dropped",
             &closed.len().to_string(),
             false,
             "",
-            &rows,
+            &page.fold(&closed, 0),
             "",
         ));
     }
@@ -1108,7 +1112,6 @@ fn unreadable_section(page: &Page<'_>) -> String {
     )
 }
 
-/// The script, with the part only a served page has (polling and Refresh).
 fn script(serving: bool) -> String {
     SCRIPT.replace("/*LIVE*/", if serving { LIVE } else { "" })
 }

@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
-Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:fa51cad556f7798ad0dbad383f1d08e7159a5d87e8ceefd7150db71bfd249560, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:48743ee9681573f99558ed8d98965ccb94912644528f32c32b6dfe33c32087db, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -108,3 +108,4 @@ Cheap to revise before v0 ships to any external user.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 97e837393dfe -> 0dfd50d8a487. Reason: report.rs adds the status_from field to NewReport. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 0dfd50d8a487 -> aff43b81c05d. Reason: report.rs: new's next-action reason names required fields as required and optional ones as optional with their if_empty meaning; comments lose record ids. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` aff43b81c05d -> fa51cad556f7. Reason: report.rs: ExportedRecord flattens a RecordView and raw_text becomes optional, ExportedSectionEntry gains ticked, unticked and items, ExportReport gains type_roles and read, ChecklistItem and ReadStamp are new; no other report changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` fa51cad556f7 -> 48743ee96815. Reason: report.rs: a section's content is optional, absent under --no-text; nothing else changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

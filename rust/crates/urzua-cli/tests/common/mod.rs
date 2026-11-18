@@ -62,7 +62,14 @@ pub fn path_with_stub_gh() -> std::ffi::OsString {
 /// `Command::new(env!("CARGO_BIN_EXE_urzua"))`: `no_real_gh_integration` fails
 /// the build of a test that does.
 pub fn urzua() -> std::process::Command {
-    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_urzua"));
+    command_with_stub_gh(env!("CARGO_BIN_EXE_urzua"))
+}
+
+/// Any program, with no reachable `gh`: a released `urzua` a test compares
+/// against, or a tool such as `kill`, takes the same stubbed `PATH` as the
+/// binary under test.
+pub fn command_with_stub_gh(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
     command.env("PATH", path_with_stub_gh());
     command
 }

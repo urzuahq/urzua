@@ -28,14 +28,23 @@ pub fn run(config_path: Option<PathBuf>, options: &ExportOptions) -> ExitCode {
 
 /// What an export carries beyond the filter.
 pub(crate) struct ExportOptions {
-    /// Each record's `raw_text`. Off drops the key, which is most of a large
-    /// export's size.
+    /// Each record's `raw_text`; off drops the key.
     pub raw_text: bool,
+    /// Each section's `content`; off drops the key, and the section's name,
+    /// heading, lines, counts and items stay.
+    pub section_text: bool,
+    /// The per-item evaluation of each declared checklist, which judges every
+    /// item's evidence against the tree; off drops `items` from the sections.
+    pub checklist_items: bool,
 }
 
 impl Default for ExportOptions {
     fn default() -> Self {
-        ExportOptions { raw_text: true }
+        ExportOptions {
+            raw_text: true,
+            section_text: true,
+            checklist_items: true,
+        }
     }
 }
 
@@ -86,7 +95,11 @@ pub(crate) fn build_with(
         full_text,
         edges: &edges,
     });
-    let checklists = checklists(&session);
+    let checklists = if options.checklist_items {
+        checklists(&session)
+    } else {
+        Checklists::new()
+    };
     let mut exported: Vec<ExportedRecord> = records
         .iter()
         .zip(model.records)
@@ -246,7 +259,7 @@ fn exported_record(
                             heading: s.heading,
                             line: s.line,
                             end_line: s.end_line,
-                            content: s.content,
+                            content: options.section_text.then_some(s.content),
                             ticked,
                             unticked,
                             items,

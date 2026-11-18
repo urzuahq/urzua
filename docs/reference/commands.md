@@ -390,14 +390,14 @@ empty roadmap. Output: `status` and `roadmap` with `schema`, `pairs`, `waves`, `
 
 ```text
 urzua board [--out <path>]
-urzua board --serve [--port <n>]
+urzua board --serve [--port <n>] [--allowed-host <name>]...
 ```
 
 One HTML page of every record, laid out only from the configuration; see [the board](board.md). Without
 `--serve` it writes the file (default `.urzua/cache/board.html`) and prints `status`, `file`, `bytes`,
 `record_count` and `read`. With `--serve` it listens on 127.0.0.1 (a free port unless `--port` names one),
 prints one JSON line with `listening`, `address` and `port`, and answers `GET` until interrupted (the page refreshes itself from `GET /stamp`; see [the board](board.md)). `--port`
-needs `--serve`, and `--out` excludes it. The page is a file or a response, never stdout.
+and `--allowed-host` (a `Host` name to answer besides `localhost` and `127.0.0.1`; others get 403) need `--serve`, and `--out` excludes it. The page is a file or a response, never stdout.
 
 ## mcp
 
@@ -484,12 +484,27 @@ exits 2. [The board](board.md) is built from these keys alone; so can your own v
 
 ```text
 urzua export --format json --no-raw-text
+urzua export --format json --no-text --no-checklist-items
 ```
+
+`--no-raw-text` leaves each record's `raw_text` out. `--no-text` leaves out `raw_text` and each section's `content` as well,
+which is most of an export's size (this repository's 22 MB export is about 3.6 MB with it, against 12.6 MB under
+`--no-raw-text` alone). `--no-checklist-items` skips judging every declared checklist item's evidence against the tree, which is
+about 1.3 of the export's 1.7 seconds here (release build), and leaves `items` out of the sections. Defaults are unchanged; the board reads
+`raw_text` and the items, and not the sections' `content`.
 
 `state` is one of `finished`, `dropped`, `under-way`, `not-started`, `open` or `none`, read from the type's
 `statuses.success`, `failure` and `progress` lists, and `state_decided_by` names the declaration that
 decided it. A type that declares no `statuses.progress` cannot say work has begun, so its records that are neither
-finished nor dropped are `open`; `not-started` needs a declared progress set the status is not in. `waiting_on` is separate from it: a record can be under way and waiting. `parent` and
+finished nor dropped are `open`; `not-started` needs a declared progress set the status is not in. `waiting_on` is separate from it: a record can be under way and waiting. A record whose header cannot be read has
+state `none` (`state_decided_by` `header-unreadable`), is never ready and has no tree.
+`ready` means work someone can pick up: a record of a work type that has not begun (`not-started` or `open`), whose type
+declares statuses, and that waits on nothing. It is not `roadmap.ready`, which lists the open work records the declared pairs
+reach that sit in the first wave with every dependency finished: that includes records already under way and leaves out
+records no pair reaches; the export's `ready` leaves out the former and includes the latter. Neither counts a free-text
+wait (a narrative field naming a record), only the declared pairs. The board lists the ready records that have no children.
+The ids in `waiting_on`, `refers_to`, `referred_by`, `parent` and `children` are the records' own; `roadmap` and `graph` print
+an id as the referring header wrote it. `parent` and
 `children` exist only where a `pointer_fields` entry declares `part_of: true` (see
 [config](config.md#containment-part_of)). `read` names the commit, the branch, whether a record file has
 uncommitted changes, and the time. The full contract is in `SPEC-1`.

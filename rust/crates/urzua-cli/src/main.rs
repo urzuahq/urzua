@@ -297,6 +297,11 @@ enum Command {
         /// With `--serve`: the port to listen on. 0, the default, takes a free one.
         #[arg(long, requires = "serve", default_value_t = 0)]
         port: u16,
+        /// With `--serve`: a `Host` name to answer besides `localhost` and
+        /// `127.0.0.1` (any port); a request for another name gets 403. Give it
+        /// once per name, whenever a proxy with a known name fronts the server.
+        #[arg(long = "allowed-host", value_name = "NAME", requires = "serve")]
+        allowed_hosts: Vec<String>,
     },
 
     /// The order of work, computed from the records: waves, the ready set, the
@@ -330,6 +335,14 @@ enum Command {
         /// derived key stay; the text is most of a large export.
         #[arg(long)]
         no_raw_text: bool,
+        /// Leave out every record's text: `raw_text` and each section's
+        /// `content`. Names, headings, lines, counts and items stay.
+        #[arg(long)]
+        no_text: bool,
+        /// Skip the per-item evaluation of declared checklists (`items` in the
+        /// sections), which judges each item's evidence against the tree.
+        #[arg(long)]
+        no_checklist_items: bool,
     },
 
     /// Read records from another format. Not implemented yet. The format must
@@ -804,9 +817,7 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
         Command::Explain { path, rule, .. } => commands::explain::run(config, path, rule),
         Command::Graph => commands::graph::run(config),
         Command::Roadmap => commands::roadmap::run(config),
-        Command::Board { out, serve, port } => {
-            commands::board::run(config, commands::board::BoardArgs { out, serve, port })
-        }
+        board @ Command::Board { .. } => dispatch_board(config, board),
         Command::Mcp { root } => commands::mcp::run(config, root),
         Command::New {
             record_type,
@@ -816,10 +827,7 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
         Command::Waive(args) => commands::waive::run(config, args),
         Command::Audit => commands::audit::run(config),
         Command::Migrate { target } => dispatch_migrate(config, target),
-        Command::Export {
-            format,
-            no_raw_text,
-        } => dispatch_export(config, format, no_raw_text),
+        export @ Command::Export { .. } => dispatch_export(config, export),
         Command::Import { .. } => not_implemented("import"),
         init @ Command::Init { .. } => dispatch_init(config, init),
         Command::Harness { target } => dispatch_harness(config, target),
@@ -865,16 +873,48 @@ fn panic_if_requested() {
 #[cfg(not(debug_assertions))]
 fn panic_if_requested() {}
 
-fn dispatch_export(config: Option<PathBuf>, format: ExportFormat, no_raw_text: bool) -> ExitCode {
+fn dispatch_export(config: Option<PathBuf>, export: Command) -> ExitCode {
+    let Command::Export {
+        format,
+        no_raw_text,
+        no_text,
+        no_checklist_items,
+    } = export
+    else {
+        unreachable!("dispatch_export is called only for the Export command")
+    };
     match format {
         ExportFormat::Json => commands::export::run(
             config,
             &commands::export::ExportOptions {
-                raw_text: !no_raw_text,
+                raw_text: !(no_raw_text || no_text),
+                section_text: !no_text,
+                checklist_items: !no_checklist_items,
             },
         ),
         ExportFormat::Agdr => not_implemented("export"),
     }
+}
+
+fn dispatch_board(config: Option<PathBuf>, board: Command) -> ExitCode {
+    let Command::Board {
+        out,
+        serve,
+        port,
+        allowed_hosts,
+    } = board
+    else {
+        unreachable!("dispatch_board is called only for the Board command")
+    };
+    commands::board::run(
+        config,
+        commands::board::BoardArgs {
+            out,
+            serve,
+            port,
+            allowed_hosts,
+        },
+    )
 }
 
 fn dispatch_fix(config: Option<PathBuf>, fix: Command) -> ExitCode {
