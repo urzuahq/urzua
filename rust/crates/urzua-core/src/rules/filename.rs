@@ -180,6 +180,12 @@ pub(super) struct H1<'a> {
     pub(super) first_token: &'a str,
 }
 
+/// A record's title as the title rules read it: the first level-one heading
+/// after its header, outside fenced code.
+pub fn record_title(content: &str, header_region: Option<(usize, usize)>) -> Option<String> {
+    first_h1(content, header_region).map(|h| h.text.to_string())
+}
+
 /// Frontmatter is skipped because a YAML comment line inside it starts with
 /// `# ` and would otherwise read as the title. Only a region opening at line
 /// 1 is frontmatter, so a `prefix-lines` header (which sits *after* the H1)

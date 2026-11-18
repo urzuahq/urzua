@@ -22,6 +22,7 @@ mod limits;
 mod lock;
 mod post_command;
 mod presence;
+pub(crate) mod receipt;
 mod record;
 mod run;
 mod settings;

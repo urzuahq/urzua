@@ -187,7 +187,7 @@ pub(super) fn pinned_git(dir: &Path) -> urzua_io::git::GitRun {
     run
 }
 
-fn git_toplevel(dir: &Path) -> Option<PathBuf> {
+pub(super) fn git_toplevel(dir: &Path) -> Option<PathBuf> {
     let out = pinned_git(dir)
         .args(["rev-parse", "--show-toplevel"])
         .output()

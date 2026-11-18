@@ -55,6 +55,18 @@ fn kinds_text(authority: &AuthorityDecl) -> String {
         .join(" or ")
 }
 
+/// Who made the change, as far as the run can tell: the actors file the host
+/// wrote, else, only where `require_evidence` is on and the configuration asks
+/// the person in the agent session (`ADR-102`), the changed records that carry
+/// a receipt row for the move they make. A receipt row is text in the record:
+/// anything able to edit the record can write it, so it lowers the finding to
+/// `info` and says so, and CI, which has the actors file, never reads it.
+#[derive(Clone, Copy, Default)]
+pub struct DeciderEvidence<'a> {
+    pub actors: Option<&'a Actors>,
+    pub receipts: Option<&'a HashSet<PathBuf>>,
+}
+
 /// One gated change found in the diff.
 struct Gated<'a> {
     path: &'a Path,
@@ -243,15 +255,28 @@ fn finding_for(
     judged: &Judged<'_>,
     actors: Option<&Actors>,
     opts: &DeciderRequiredOpts,
+    receipt: bool,
 ) -> Option<Finding> {
     let group = &g.gate.by;
     let gate_text = match judged.label {
         Some(label) => format!("{}, in {label}", g.gate.describe()),
         None => g.gate.describe(),
     };
-    let (message, declared_severity) = match actors {
-        Some(actors) if judged.table.satisfied(g.gate, actors) => return None,
-        Some(actors) => (
+    let receipt = receipt
+        && actors.is_none()
+        && opts.require_evidence
+        && g.variant == "gated-move-without-decider";
+    let (message, declared_severity) = match (actors, receipt) {
+        (Some(actors), _) if judged.table.satisfied(g.gate, actors) => return None,
+        (None, true) => (
+            format!(
+                "{}: {} (gate: {gate_text}), and the record carries a revision-log row recording the move as approved in an agent session: not verified (it is text in the record), and the pull request check, with the actors file, decides whether a login in the decider group '{group}' made it",
+                g.path.display(),
+                g.what,
+            ),
+            Some(FindingSeverity::Info),
+        ),
+        (Some(actors), _) => (
             format!(
                 "{}: {} (gate: {gate_text}), and {} -- none is in the decider group '{group}' (evidence accepted: {})",
                 g.path.display(),
@@ -261,7 +286,7 @@ fn finding_for(
             ),
             None,
         ),
-        None => (
+        (None, _) => (
             format!(
                 "{}: {} (gate: {gate_text}), but no --actors file was given, so who made it is not known and the decider group '{group}' cannot be checked; run `urzua check --base REF --actors FILE` (the gate action writes FILE)",
                 g.path.display(),
@@ -299,10 +324,11 @@ pub fn decider_required(
     records: &[Record],
     config: &Config,
     history: &BaseHistory<'_>,
-    actors: Option<&Actors>,
+    evidence: DeciderEvidence<'_>,
     base: &BaseAuthority,
     opts: &DeciderRequiredOpts,
 ) -> (RuleExecution, Vec<Finding>) {
+    let DeciderEvidence { actors, receipts } = evidence;
     const RULE_ID: &str = RULE_DIFF_DECIDER_REQUIRED;
     let (Some(changed), Some(head)) = (changed, config.authority.as_ref()) else {
         return not_applicable(RULE_ID);
@@ -324,7 +350,8 @@ pub fn decider_required(
         );
         for g in &gated {
             gated_paths.insert(g.path);
-            findings.extend(finding_for(g, &judged, actors, opts));
+            let receipt = receipts.is_some_and(|r| r.contains(g.path));
+            findings.extend(finding_for(g, &judged, actors, opts, receipt));
         }
     }
     let population = census(PopulationUnit::ChangedPath, paths, |path| {
@@ -386,7 +413,10 @@ mod tests {
                 committed: Some(&committed(base)),
                 deleted: &[],
             },
-            who,
+            DeciderEvidence {
+                actors: who,
+                receipts: None,
+            },
             &BaseAuthority::Absent,
             &DeciderRequiredOpts {
                 require_evidence: require,
@@ -406,7 +436,7 @@ mod tests {
                 committed: None,
                 deleted: &[],
             },
-            None,
+            DeciderEvidence::default(),
             &BaseAuthority::Absent,
             &DeciderRequiredOpts::default(),
         );
@@ -541,7 +571,10 @@ mod tests {
                 committed: Some(&HashMap::new()),
                 deleted: &deleted(status),
             },
-            Some(who),
+            DeciderEvidence {
+                actors: Some(who),
+                receipts: None,
+            },
             &BaseAuthority::Absent,
             &DeciderRequiredOpts::default(),
         )

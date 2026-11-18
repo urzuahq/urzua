@@ -106,6 +106,9 @@ struct Context<'a> {
     deleted_records: Vec<rules::DeletedRecord>,
     /// The identities from `--actors` (`MILE-200`).
     actors: Option<urzua_core::authority::Actors>,
+    /// The changed records carrying a receipt row, read only on a run with no
+    /// actors file (`ADR-102`).
+    session_receipts: Option<HashSet<PathBuf>>,
     /// The base revision's `authority` table (`authority.decider_table`).
     base_authority: urzua_core::authority::BaseAuthority,
     /// The checkout's config with the base revision's stricter decider-gate
@@ -378,6 +381,7 @@ impl<'a> Context<'a> {
             committed_statuses: self.committed_statuses.as_ref(),
             deleted_records: &self.deleted_records,
             actors: self.actors.as_ref(),
+            session_receipts: self.session_receipts.as_ref(),
             base_authority: &self.base_authority,
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
@@ -390,6 +394,15 @@ impl<'a> Context<'a> {
             run,
         }
     }
+}
+
+/// The actors file's identities; a run with one never reads the receipt rows
+/// (`ADR-102`).
+fn attach_actors(context: &mut Context<'_>, actors: Option<urzua_core::authority::Actors>) {
+    if actors.is_some() {
+        context.session_receipts = None;
+    }
+    context.actors = actors;
 }
 
 /// `rule`'s setting, only when the rule is enabled.
@@ -632,7 +645,7 @@ pub(crate) fn execute(
         &scope,
         (&mut context, &mut notices),
     );
-    context.actors = actors;
+    attach_actors(&mut context, actors);
     notices.extend(session_notices(
         session,
         &scope,
@@ -1858,6 +1871,8 @@ fn index_with_disclosures<'a>(
 /// What a diff run judges a change against: the committed copies, the added and
 /// changed paths, the fetched pull-request claims and the templates.
 struct DiffInputs {
+    /// The changed records whose gated move carries a receipt row (`ADR-102`).
+    receipts: Option<HashSet<PathBuf>>,
     base_text: HashMap<PathBuf, String>,
     base_drift: HashMap<PathBuf, HashSet<String>>,
     added_row_days: HashMap<PathBuf, rules::RowWindows>,
@@ -2123,6 +2138,7 @@ fn read_diff_inputs(
         )
     });
     Ok(DiffInputs {
+        receipts: crate::harness::receipt::for_check(session, changes),
         base_text,
         base_drift,
         added_row_days,
@@ -2541,6 +2557,7 @@ fn load_context<'a>(
             committed_statuses: diff.committed_statuses,
             deleted_records: diff.deleted_records,
             actors: None,
+            session_receipts: diff.receipts,
             base_authority: diff.base_authority,
             gate_config: diff.gate_config,
             fail_on: diff.fail_on,
