@@ -291,6 +291,36 @@ pub(crate) struct RevisionLogEntry {
     pub(crate) cells: usize,
 }
 
+/// One row of a record's declared revision log, as the revision-log rules
+/// read it: the row's cells joined, its date cell and its 1-based line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogRow {
+    pub row: String,
+    pub date: String,
+    pub line: usize,
+}
+
+/// The rows of `content`'s declared revision log; empty when it has none or
+/// it cannot be read.
+pub fn revision_log_rows(
+    content: &str,
+    log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+) -> Vec<LogRow> {
+    match find_revision_log_entries(content, log_id, shape) {
+        Some(Ok(log)) => log
+            .entries
+            .into_iter()
+            .map(|e| LogRow {
+                row: e.row,
+                date: e.date.trim().to_string(),
+                line: e.line,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 /// A table row's cells, trimmed. `\|` is a literal pipe inside a cell (GFM),
 /// not a separator; the backslash stays in the cell text.
 fn split_cells(row: &str) -> Vec<&str> {

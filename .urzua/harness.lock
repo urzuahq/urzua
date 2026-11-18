@@ -23,26 +23,26 @@
       "event": "PostToolUse",
       "matcher": "Bash",
       "handler": "post-command",
-      "hash": "sha256:3e768799cd613513a209e6b9f05faa86662411f13e40598ea3c69bb4317fb505"
+      "hash": "sha256:a472169e394ab8f78b30f33e459183f053695cdca4f6ecf85b28c9b46031eda3"
     },
     {
       "file": ".claude/settings.json",
       "event": "PreToolUse",
       "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
       "handler": "edit",
-      "hash": "sha256:35a29fee58d9d34d358d57db5d70a3bf2a398371bd266f68760eca8dacb1803d"
+      "hash": "sha256:e373382c0bbbbfa4a36ca75ca2496f304b272eacb78504db95cf695d9c06c95c"
     },
     {
       "file": ".claude/settings.json",
       "event": "SessionStart",
       "handler": "session-start",
-      "hash": "sha256:f8edc82b057acde076d0ee96d34489e9efdaf70919c6fc2e04a1ee1f29cd39b6"
+      "hash": "sha256:96d750cabbd78b310d03f69cb462c9ea001d98a267a59b8d4cf08f587b109dd3"
     }
   ],
   "blocks": [
     {
       "file": "AGENTS.md",
-      "hash": "words-sha256:335056f1cb00d235c4de7ddfd1b586a2525f5bf2525660f2086a803386e5b325"
+      "hash": "words-sha256:32ff4fe2deadf3f8b805f23c9a9218d8014cf55c1a9e9291c6e845c81848e445"
     }
   ]
 }

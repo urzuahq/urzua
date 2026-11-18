@@ -1128,6 +1128,29 @@ checked; that reading, and the simplification itself, are the orchestrator's dec
 Decided by the builder on 2026-11-17, pending maintainer review: an edit whose payload the binary cannot read is
 decided from the session (silent where nothing governs, refused where the configuration is not certainly open).
 
+## Amendment (2026-11-17): an approval given at the agent host's prompt is a person's act, and what it proves
+
+`ADR-102`, amended on 2026-11-17 with the maintainer's acceptance, lets the `acceptance` guardrail put an agent's gated
+move to the person through the agent host's permission prompt instead of refusing it, when the configuration sets
+`in_session: ask`. Approving the prompt writes the edit, with a receipt row in the record's revision log; declining
+writes nothing. Nothing is stored and no hook is added. Approving writes the file with a revision-log row worded as recorded and not verified; declining writes nothing; the person's own edits and the commit check behave as without the mode, except that under a local `require_evidence` the row is honoured at commit as unverified. That shape was accepted by the maintainer on 2026-11-17: "I accept."
+
+1. **A person's act, recorded as unverified.** Approving the prompt is the person's decision to make that move. The
+   receipt row begins "Recorded as approved in an agent session", names the person as the host session reported them
+   and where the name was read (`gh` or `git config`), and ends "not verified; the pull request check does not rely on
+   it". It never says the person edited the file.
+2. **What it does not prove.** Which person answered, or that a person did: a headless permission-prompt tool, a
+   `PermissionRequest` hook, an SDK permission callback or a `permissions.allow` rule can answer instead, and the name is
+   whatever `gh` or `git config` reports. The row is text in the record, which anything able to edit the record can
+   write.
+3. **The local check.** Unchanged, except that under a local `require_evidence`, with no actors file, a gated move whose
+   record carries the row for that move is reported at `info` as unverified instead of as an error. A repository that
+   relies on local `require_evidence` should not turn the mode on.
+4. **The control is unchanged.** `diff.decider-required` on the pull request, with the gate action's actors file naming a
+   login in the decider group, is the control; CI never reads the row.
+
+The reason's wording and its 80-character title cap, the receipt row's exact text, the sanitising list and refusing the git directory to edit tools were decided by the builder and the orchestrator on 2026-11-17, pending maintainer review.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1188,3 +1211,8 @@ decided from the session (silent where nothing governs, refused where the config
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, fifth review): the shell fallback places only plain paths`. **Why:** fifth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, sixth review): without the binary, the hook decides from the session alone`, replacing the shell fallback's payload reading and stating the one accepted limit. **Why:** sixth review of the pull request that moved the harness into the binary; the simplification decided by the orchestrator on 2026-11-17, pending maintainer review; the limit's acceptance quoted from the maintainer for the part he accepted. | **substantive** |
 > | 2026-11-17 | Noted in the fourth- and fifth-review amendments that the shell fallback behaviour they describe was removed by the sixth; in the sixth, the maintainer's sentence stands alone and the gloss is stated as the orchestrator's reading. **Why:** seventh review of the pull request that moved the harness into the binary. | **evidence** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17): an approval given at the agent host's prompt is a person's act, and what it proves`. **Why:** `ADR-102` Consequences require it, and the maintainer accepted the amendment of `ADR-102` on 2026-11-17 ("I'm happy for you to amend ADR 102. I'll give you my acceptance.") that makes the host's prompt the first mechanism; the amendment's content was decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Rewrote the amendment of the same day on approvals given at the agent host's prompt after a security review: the receipt is a local record and names the person as the session reported them, not as verified; the limits of a forgery by shell, what reports it and the one control to rely on are stated in full. **Why:** a security review of the pull request that builds it showed a shell can forge an approval naming a decider; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | In the amendment on approvals given at the agent host's prompt: a gated move with no approval is judged as without the mode, so a person's own edit is not blocked at commit; a pending or invalid approval stays an error. **Why:** the orchestrator withdrew the instruction that made a move with no approval an error, because it blocked a maintainer committing an acceptance he made himself, the pain this work exists to remove. | **substantive** |
+> | 2026-11-17 | Rewrote the amendment on approvals given at the agent host's prompt for the mode with nothing stored. **Why:** Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept." | **substantive** |
+> | 2026-11-18 | Closing note on this pull request's earlier rows: the second and third rows of 2026-11-17 about the amendment on approvals given at the agent host's prompt (the rewrite after a security review, and the change for a gated move with no approval) describe intermediate states the merged change does not contain (a stored approval, its pending, confirmed and invalid states, and a report of approvals a shell command wrote); the latest rewrite describes what ships. **Why:** rows are history and stay; this says which of them never shipped. | **structural** |

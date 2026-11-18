@@ -9,9 +9,9 @@
 /// enabled with `on_unjudged: deny`. A guardrail is read only at a key position
 /// under `harness.guardrails`, in the block form or the one-line `{...}` form,
 /// with only the keys it may carry (`enabled: true|false`,
-/// `on_unjudged: allow|deny`, and for `editor-hook` `pending_pair:
-/// allow|refuse`), a value plain or quoted; any other key or value is not
-/// certain.
+/// `on_unjudged: allow|deny`, for `editor-hook` `pending_pair: allow|refuse`
+/// and for `acceptance` `in_session: refuse|ask`), a value plain or quoted;
+/// any other key or value is not certain.
 ///
 /// Each line is scanned as YAML reads it, in linear time: a quote opens a
 /// quoted scalar only where a value starts (so `it's` stays plain), `#` after a
@@ -51,7 +51,7 @@
 const CERTAIN_ALLOW: &str = r##"LC_ALL=C awk 'function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s}
 function unq(v){if(v~/^"[^"\\]*"$/||v~/^\047[^\047]*\047$/)return substr(v,2,length(v)-2);return v}
 function no(){u=1;exit}
-function item(k,v,  w){if(k in seen)u=1;seen[k]=1;w=unq(v);if(k=="enabled"&&v=="true")en=1;else if(k=="enabled"&&v=="false")en=0;else if(k=="on_unjudged"&&w=="allow"){al=1;as=1}else if(k=="on_unjudged"&&w=="deny"){al=0;as=1}else if(k=="pending_pair"&&nm=="editor-hook"&&(w=="allow"||w=="refuse"))x=1;else u=1}
+function item(k,v,  w){if(k in seen)u=1;seen[k]=1;w=unq(v);if(k=="enabled"&&v=="true")en=1;else if(k=="enabled"&&v=="false")en=0;else if(k=="on_unjudged"&&w=="allow"){al=1;as=1}else if(k=="on_unjudged"&&w=="deny"){al=0;as=1}else if(k=="pending_pair"&&nm=="editor-hook"&&(w=="allow"||w=="refuse"))x=1;else if(k=="in_session"&&nm=="acceptance"&&(w=="refuse"||w=="ask"))x=1;else u=1}
 function shut(){if(blk&&en&&(nm=="editor-hook"?(as&&!al):!al))c=1;blk=0}
 function start(n){shut();nm=n;blk=1;bi="";en=0;al=0;as=0;split("",seen)}
 function scan(l,want,  n,j,ch,lt,gap,st,sg){n=length(l);cut=n+1;lt=q?"x":"";gap=1;bl="";sg=1;for(j=1;j<=n;j++){ch=substr(l,j,1);if(q==1){if(ch=="\047"){if(substr(l,j+1,1)=="\047"){j++;continue}q=0;sg=j;gap=0}continue}if(q==2){if(ch=="\\"){j++;continue}if(ch=="\""){q=0;sg=j;gap=0}continue}if(ch==" "||ch=="\t"){gap=1;continue}if(ch=="#"&&gap){cut=j;break}st=(lt==""||index("[{,",lt)>0||(gap&&index(":-?",lt)>0));if((ch=="\047"||ch=="\"")&&st){q=(ch=="\047")?1:2;if(want)bl=bl substr(l,sg,j-sg+1);continue}if((ch=="["||ch=="{")&&(st||dp>0)){if(++dp>32)u=1}else if((ch=="]"||ch=="}")&&dp>0)dp--;lt=ch;gap=0}if(want&&!q)bl=bl substr(l,sg,cut-sg);return bl}

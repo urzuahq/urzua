@@ -453,6 +453,11 @@ fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, Want)> {
         ("a merge key at the root carrying harness", Some(b"base: &b\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n<<: *b\n".to_vec()), Stricter),
         ("a 400 KB line", Some(long_line), Stricter),
         // Ordinary YAML that must stay open.
+        ("acceptance asking in session, open", Some(g("    acceptance: {enabled: true, on_unjudged: allow, in_session: ask}\n")), Open),
+        ("acceptance asking in session, block, open", Some(g("    acceptance:\n      enabled: true\n      on_unjudged: allow\n      in_session: refuse\n")), Open),
+        ("acceptance asking in session, closed", Some(g("    acceptance: {enabled: true, in_session: ask}\n")), Closed),
+        ("an in-session value it does not know", Some(g("    acceptance: {enabled: true, on_unjudged: allow, in_session: maybe}\n")), Stricter),
+        ("in_session under another guardrail", Some(g("    protected-paths: {enabled: true, on_unjudged: allow, in_session: ask}\n")), Stricter),
         ("editor-hook with pending_pair, one line", Some(g("    editor-hook: {enabled: true, on_unjudged: allow, pending_pair: allow}\n")), Open),
         ("editor-hook with pending_pair, block", Some(g("    editor-hook:\n      enabled: true\n      on_unjudged: allow\n      pending_pair: allow\n")), Open),
         ("a double-quoted allow", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: \"allow\"\n")), Open),

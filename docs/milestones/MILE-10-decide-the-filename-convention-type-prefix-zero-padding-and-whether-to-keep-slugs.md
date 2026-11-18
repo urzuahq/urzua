@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: ADR-36
 Blocked-on: —
-Realized-by: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_skips_a_legacy_shaped_filename@sha256:fcc933b49ab9893dec737244c2cfb1d39b1fefd85463a1e70d512f5769b3b825, code:rust/crates/urzua-core/src/rules/filename.rs@sha256:737789b4240bb8282637dd48e08d66d6cebc47786a829fc2ac6fc4ba42d17207
+Realized-by: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_skips_a_legacy_shaped_filename@sha256:fcc933b49ab9893dec737244c2cfb1d39b1fefd85463a1e70d512f5769b3b825, code:rust/crates/urzua-core/src/rules/filename.rs@sha256:1077cdf0dd6a5db7e2a2093c6cbb8888f5d342b110924e8409dad89294fe3849
 ---
 # 10 — Decide the filename convention: type prefix, zero-padding, and whether to keep slugs
 
@@ -21,7 +21,7 @@ Raised directly; explicitly not decided yet -- BUG-2 already removed the actual 
 
 - `ADR-36` is Accepted and states the filename convention (the type prefix in the filename going forward, zero-padding and slugs both kept, legacy filenames never renamed and never stopping working). — evidence: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md
 - A legacy-shaped filename is skipped rather than reported by `filename_title_consistency` (`filename_title_consistency_skips_a_legacy_shaped_filename`). — evidence: test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_skips_a_legacy_shaped_filename@sha256:fcc933b49ab9893dec737244c2cfb1d39b1fefd85463a1e70d512f5769b3b825
-- The helpers that rule uses no longer assume a fixed number width (the second instance of the `BUG-2` defect class). — evidence: code:rust/crates/urzua-core/src/rules/filename.rs@sha256:737789b4240bb8282637dd48e08d66d6cebc47786a829fc2ac6fc4ba42d17207
+- The helpers that rule uses no longer assume a fixed number width (the second instance of the `BUG-2` defect class). — evidence: code:rust/crates/urzua-core/src/rules/filename.rs@sha256:1077cdf0dd6a5db7e2a2093c6cbb8888f5d342b110924e8409dad89294fe3849
 
 > **Revision log**
 >
@@ -39,3 +39,4 @@ Raised directly; explicitly not decided yet -- BUG-2 already removed the actual 
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` e3647c63a826 -> 504a0bd930dc. Reason: filename.rs: filename.identity-pattern's rename guidance now names exclude_files as the alternative for a file with no number; which files it reports is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` 504a0bd930dc -> e8b463b66dfa. Reason: filename.rs: the exclude_files alternative in the rename guidance moves into its own helper, exclude_files_hint; the message text is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` e8b463b66dfa -> 737789b4240b. Reason: filename.rs: rename guidance names exclude_files for a numberless file, and a file with no identity is counted with the no-identity outcome; findings unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` 737789b4240b -> 1077cdf0dd6a. Reason: filename.rs gains record_title, a public wrapper over first_h1 for the title the title rules read; first_h1 and the title rule are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

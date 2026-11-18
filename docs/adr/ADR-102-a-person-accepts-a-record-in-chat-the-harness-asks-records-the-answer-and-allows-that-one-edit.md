@@ -158,6 +158,17 @@ this mechanism. A person who approves prompts without reading them defeats the p
 gated moves and its reason states the move. An approval proves who approved only as far as the host can tell who is at the
 keyboard, and CI still sees a pull request as authored by whoever's credentials pushed it.
 
+## Amendment (2026-11-18): for the host's prompt, the receipt is written in the approved write and nothing is stored
+
+The amendment of 2026-11-17 described, for the mechanism in which the host asks the person about the edit, a receipt
+written "in a following write" that "both the local git hook and the rule that checks in CI" read. As built, for that
+mechanism: the receipt row is written in the same write the person approves; nothing is stored; the pull request check
+does not read the row; and locally the row is honoured only under `require_evidence`, and only as unverified. This shape
+was described to the maintainer and he answered on 2026-11-17: "I accept."
+
+The typed harness command and its stored one-use approval are not built; they remain as the amendment of 2026-11-17
+describes them, pending their own decision.
+
 ## Reversibility
 
 Easy to walk back: the mode is opt-in, and removing it returns every repository to refuse. The cost of getting it wrong is an
@@ -191,3 +202,4 @@ Receipts already written stay valid records of what happened.
 > | 2026-11-16 | Status changed from Proposed to Accepted. **Why:** Accepted by the maintainer on 2026-11-16. | **substantive** |
 > | 2026-11-16 | Amendment added: an urzua tool that requires the person's interaction is the first mechanism and the chat question the fallback. **Why:** Accepted by the maintainer on 2026-11-16, after a review of agent hosts found that the agent writes a chat question's wording and that something other than a person can answer it. | **substantive** |
 > | 2026-11-17 | Amendment added: the host asks the person about the edit itself as the first mechanism, a typed harness command as the second, and no accept command in the engine. **Why:** Asked on 2026-11-17 to confirm that the host asks about the edit, with no accept command, and that this record be amended, the maintainer answered "I'm happy for you to amend ADR 102. I'll give you my acceptance."; the amendment marks what he said, what was relayed, and what the orchestrator specified pending his review. An adopting repository had met the refusal on a record its maintainer had approved in chat. Recorded by an agent through the shell at the maintainer's instruction. | **substantive** |
+> | 2026-11-18 | Amendment added: for the host's prompt, the receipt row is written in the approved write, nothing is stored, the pull request check does not read the row and locally it is honoured only under `require_evidence`, as unverified; the typed command and its stored approval are not built. **Why:** the maintainer answered "I accept." on 2026-11-17 to a description of that shape; the amendment of 2026-11-17 still described a following write read by CI. | **substantive** |

@@ -153,6 +153,10 @@ pub struct RuleCtx<'a> {
     /// The identities the host supplied (`urzua check --actors`); `None` when
     /// no file was given (`MILE-200`).
     pub actors: Option<&'a crate::authority::Actors>,
+    /// The changed records that carry a receipt row for the gated move they
+    /// make, read only where the configuration asks the person in the agent
+    /// session and there is no actors file (`ADR-102`).
+    pub session_receipts: Option<&'a HashSet<PathBuf>>,
     /// The base revision's `authority` table (`authority.decider_table`);
     /// `Absent` on a run with no `--base`.
     pub base_authority: &'a crate::authority::BaseAuthority,

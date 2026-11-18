@@ -71,7 +71,7 @@ with certainty as open, it lets the call through with a notice. With any other, 
 until urzua is installed or upgraded, because without the binary it cannot tell a protected file from another.
 Read with certainty means: guardrails only at a key position under `harness.guardrails`, in the block form or the
 one-line `{...}` form, with only the keys a guardrail carries (`enabled: true|false`, `on_unjudged: allow|deny`,
-`pending_pair: allow|refuse`), values plain or quoted; any other key or value in a guardrail is not certain. The rest
+`pending_pair: allow|refuse`, `in_session: refuse|ask`), values plain or quoted; any other key or value in a guardrail is not certain. The rest
 of the file is read as YAML reads it: quoted scalars (on one line or several), comments, flow maps and lists (their
 continuation lines at any indentation) and block scalars are ordinary, and so are anchors, aliases, tags and merge
 keys outside `harness`. A key is compared with blanks before its colon trimmed, and the root indentation is the first
@@ -202,6 +202,54 @@ authority:
 See `SPEC-3`, "Who may accept a record", for the full table. In CI the same table is enforced on a
 pull request by the `diff.decider-required` rule, fed by the gate action's `actors` input
 ([CI](ci.md)).
+
+### Asking the person about a gated edit
+
+By default the `acceptance` guardrail refuses an agent's move to a status the `authority` table reserves, and a
+person makes the move outside the agent. Set `in_session: ask` to have the person asked instead, through the agent
+host's own permission prompt (`ADR-102`, amendments of 2026-11-17):
+
+```yaml
+harness:
+  guardrails:
+    acceptance: {enabled: true, in_session: ask}   # refuse (default) | ask
+```
+
+The person is asked only when all of these hold: an agent's Write, Edit or MultiEdit moves one existing record from one
+status into another that exactly one gate reserves; the path as written is the record's path; the Claude Code permission
+mode is `default`; the call comes from the main session; no override is named for the call; and the session's name (the
+`gh` login, else `git config user.name`) is a login in the gate's decider group. Anything else is answered exactly as
+without the mode, or refused with what to do (a move more than one gate reserves goes through a pull request).
+
+The prompt's reason opens with urzua's own sentence, built only from values checked against the configuration (the
+record's id in its type's form, the status it leaves and enters as declared values, the gate and the group) and saying
+that the whole file as shown, body included, is what is approved. A second sentence says that approving also writes a
+row recording this as approved in an agent session, unverified, and names the date field it fills. The record's title,
+as the title rules read it, follows, marked as the agent's text and cleaned. The edit shown is the agent's edit with the
+blank date fields the entered status requires set to today and this row added to the revision log, in the file's own
+line endings:
+
+`Recorded as approved in an agent session, not verified: ADR-1 Status moved from 'Proposed' to 'Accepted' (gate: ...); by Alice, as the host session reported them (name read from gh); the pull request check does not rely on it.`
+
+Approving writes that file; declining writes nothing. Nothing is stored and no hook is added.
+
+**The local commit check.** Unchanged, with one addition: where `require_evidence` is on and there is no actors file, a
+gated move whose record carries a receipt row for that move is reported at `info`, saying it is recorded as approved in an
+agent session and not verified, where it would otherwise be an error. A receipt row for a gated move is a row of the record's declared revision log, read as that log with its date and class columns, that is in the head copy and not in the base copy the check compares against (the record at the merge base), whose narrative begins "Recorded as approved in an agent session, not verified" followed by this record's id, the status the move leaves and the status it enters (`<id> <field> moved from '<from>' to '<to>'`), and whose date is the date the check reads for that row's change: the day of the commit that added it (the later of its author and committer days), or the evaluation date while it is uncommitted. The row is text and unverified: the name in it is not checked. With `require_evidence` off nothing changes.
+CI, which has the actors file, never reads the row.
+
+**The git directory.** Wherever `protected-paths` is on, with the mode on or off, the edit tools are refused any write
+under a git directory: the repository's `.git`, a `.git` pointer file, and the resolved git and common directory of the
+path's repository wherever they are (a separate git directory, a symlinked `.git`, a submodule's, a bare repository's).
+The refusal comes before anything else, including an edit the hook cannot place. An agent can therefore no longer edit
+`.git/info/exclude`.
+
+**Limits.** The receipt row is text in the record: anything able to edit the record can write it, so a repository that
+relies on local `require_evidence` should not turn the mode on. A prompt can be answered by something other than a person,
+and the payload does not show it: a headless run with a permission-prompt tool, a `PermissionRequest` hook, an SDK
+permission callback, or a `permissions.allow` rule; the adapter reads only `permission_mode` and `agent_id`. The name is
+whatever `gh` or `git config` reports. **The pull request check, with the gate action's actors file naming a login in the
+decider group, is the control.**
 
 `outside_writes` decides how a write outside the session's repository is judged: `allow` (leave it to
 that repository), `shared` (also judge a file of a linked worktree of the same repository by the
