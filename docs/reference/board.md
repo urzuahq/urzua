@@ -28,12 +28,25 @@ it is listening, then runs in the foreground until interrupted. Without `--port`
 - It re-reads the records on every request, so a second request shows a record changed since the first. Every
   response carries `Cache-Control: no-store`.
 - It does not check the `Host` header, since a proxy presents its own name; every address in the page is relative.
-- It writes nothing. To expose it to another device, put a proxy in front of the port.
-- Interrupt it (Ctrl-C or `SIGTERM`) to stop it. It holds no state, so there is nothing to flush; the process ends
-  by the signal's default action.
+- It writes nothing. The address is local only: to reach it from another device, put a proxy in front of the port.
+- Interrupt it (Ctrl-C) or stop it (`SIGTERM`) to end it. It holds no state, so there is nothing to flush, and the
+  process ends by the signal's default action rather than by exiting 0 (the standard library installs no handler, and
+  this crate forbids unsafe code). A service manager treats `SIGTERM` as a clean stop of a service it asked to stop.
 
-Each request runs the same read as the file: the records, the export's view model and a `urzua check`. On a large
-corpus that takes as long as `urzua check` does.
+As a user service, in `~/.config/systemd/user/urzua-board.service`, with the repository as the working directory:
+
+```text
+[Service]
+WorkingDirectory=%h/code/your-repository
+ExecStart=/usr/local/bin/urzua board --serve --port 8787
+```
+
+Then `systemctl --user enable --now urzua-board`.
+
+A request for `/` reads the records and builds the page from the export alone: on this repository's 722 records
+that is a second or two in a release build. `urzua check` takes ten times as long, so the served page does not run it:
+it links `GET /check`, which computes the summary for that request and says when it did and how long it took.
+The file `urzua board` writes carries the summary, computed when it was written.
 
 ## What the page shows
 
@@ -43,8 +56,8 @@ In this order:
    (`statuses.transitions`) to a status that an `authority.gates` entry for their type names. A type with a gate and no
    declared transitions lists nothing, and a line says its next move cannot be read. Then *under way*, then *ready*.
 2. **The read stamp**: the commit, the branch, whether any record file has uncommitted changes, and the time, and that
-   the page shows the working tree. And one line from `urzua check`: its status and the unwaived errors, warnings
-   and infos.
+   the page shows the working tree. And one line from `urzua check` (its status and the unwaived errors, warnings and
+   infos) in the file; a served page links `/check` for it instead.
 3. **Work**: the records of the types in `roadmap.work_types` (every type when it is absent) that are not finished or
    dropped. Where a type declares a [`part_of` field](config.md#containment-part_of) they are a tree: each parent a
    collapsible section with its own status, the count of its children by state beside it, and a mark where its status and
@@ -56,10 +69,17 @@ In this order:
 5. **Finished and dropped**, collapsed under their count.
 6. **Headers that could not be read**, shown with their text; their state and links are unknown.
 
-Each record shows its id, title, status and state as a word and a mark (finished, dropped, under way, not started; the
-mark *waiting* beside it when it waits on records, named as links; *ready*), its checklist count where its type
-declares one, the fields its type gives declared values (`field_values`), and its reference fields as links within the
-page. No other header field is shown. Opening a record shows what refers to it and its text, as plain text. Nothing is
+Each record shows its id, title, status and state as a word and a mark (*finished*, *dropped*, *under way*, *not
+started*, *open*; the mark *waiting* beside it when it waits on records, named as links; *ready*), its checklist
+count where its type declares one, the fields its type gives declared values (`field_values`), and its reference
+fields as links within the page. A containment field and the field a record states its waits through appear once, as
+*part of* and *waits on*, not again under the reference fields. No other header field is shown.
+
+The state comes only from what the configuration declares. A type that declares no `statuses.progress` cannot say work
+has begun, so its records that are neither finished nor dropped are *open*, and the *Under way* heading says once which
+types declare no progress set, so nothing can be listed for them: add `statuses.progress` under the type's `statuses` to
+name the statuses that mean work has begun. *Not started* is used only for a type that declares a progress set, for a
+status outside it. Opening a record shows what refers to it and its text, as plain text. Nothing is
 left off the page: its entries number as many as `urzua export` returns records.
 
 A search over id and title and a filter by state run as a small inline script. With script disabled the page reads

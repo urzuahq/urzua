@@ -32,9 +32,14 @@ pub enum StateCategory {
     /// The status is in the type's `statuses.progress` and in neither of the above.
     #[serde(rename = "under-way")]
     UnderWay,
-    /// Anything else of a type that declares statuses.
+    /// A status outside the type's declared `statuses.progress` set, neither
+    /// finished nor dropped. Only a type that declares a progress set has it.
     #[serde(rename = "not-started")]
     NotStarted,
+    /// Neither finished nor dropped, and the type declares no progress set (or
+    /// the record states no status), so nothing says whether work has begun.
+    #[serde(rename = "open")]
+    Open,
     /// The type declares no statuses.
     #[serde(rename = "none")]
     NoStatuses,
@@ -64,6 +69,7 @@ pub struct ChildrenByState {
     pub under_way: usize,
     #[serde(rename = "not-started")]
     pub not_started: usize,
+    pub open: usize,
     pub none: usize,
 }
 
@@ -74,6 +80,7 @@ impl ChildrenByState {
             StateCategory::Dropped => self.dropped += 1,
             StateCategory::UnderWay => self.under_way += 1,
             StateCategory::NotStarted => self.not_started += 1,
+            StateCategory::Open => self.open += 1,
             StateCategory::NoStatuses => self.none += 1,
         }
     }
@@ -99,8 +106,10 @@ pub struct RecordView {
     /// The value of the status field, `null` when the record states none.
     pub status: Option<String>,
     pub state: StateCategory,
-    /// The declaration that decided `state`: the `statuses` list a status was
-    /// found in, or why none was (`default`, `no-status`, `no-statuses-declared`).
+    /// The declaration that decided `state`: the `statuses` list that holds
+    /// the status (`success`, `failure`, `progress`; `progress` also for
+    /// `not-started`, the set the status is not in), or why no list did
+    /// (`no-progress-declared`, `no-status`, `no-statuses-declared`).
     pub state_decided_by: String,
     /// The records it directly depends on, through the pairs `roadmap.pairs`
     /// names, that are not finished.
@@ -116,7 +125,7 @@ pub struct RecordView {
     pub children_by_state: ChildrenByState,
     /// The record's state and its children's disagree: it is finished while a
     /// child is neither finished nor dropped, or not started while a child is
-    /// under way or finished.
+    /// under way or finished. Never for `open`: nothing says it has not begun.
     pub state_disagrees_with_children: bool,
     /// Per reference field, the records it names that exist.
     pub refers_to: BTreeMap<String, Vec<String>>,
@@ -139,6 +148,13 @@ pub struct TypeRole {
     pub value_fields: Vec<String>,
     /// Whether the type declares statuses at all.
     pub statuses_declared: bool,
+    /// Whether the type declares a `statuses.progress` set, which is what lets
+    /// a record be `under-way` or `not-started` instead of `open`.
+    pub progress_declared: bool,
+    /// The fields through which a record of the type states what it waits on:
+    /// the forward field of each pair in `roadmap.pairs` that the type carries.
+    /// `waiting_on` already lists what they name that is unfinished.
+    pub waits_through: Vec<String>,
     /// A gate reserves a move to some status of the type, but the type
     /// declares no transitions, so the next move cannot be read.
     pub gated_without_transitions: bool,
@@ -173,7 +189,8 @@ fn natural_sorted(mut ids: Vec<String>) -> Vec<String> {
     ids
 }
 
-/// The status a record states and the state it puts the record in.
+/// The status a record states and the state it puts the record in. A type with
+/// no `progress` set cannot say work has begun, so its open records are `Open`.
 fn state_of(
     config: &Config,
     decls: &HashMap<String, StatusDecl>,
@@ -196,7 +213,7 @@ fn state_of(
         );
     };
     let Some(value) = status.as_deref() else {
-        return (status, StateCategory::NotStarted, "no-status".to_string());
+        return (status, StateCategory::Open, "no-status".to_string());
     };
     let by = |list: &str| format!("record_types.{type_name}.statuses.{list}");
     let (state, decided_by) = if decl.success.iter().any(|v| v == value) {
@@ -205,8 +222,10 @@ fn state_of(
         (StateCategory::Dropped, by("failure"))
     } else if decl.is_progress_status(value) {
         (StateCategory::UnderWay, by("progress"))
+    } else if decl.progress.is_empty() {
+        (StateCategory::Open, "no-progress-declared".to_string())
     } else {
-        (StateCategory::NotStarted, "default".to_string())
+        (StateCategory::NotStarted, by("progress"))
     };
     (status, state, decided_by)
 }
@@ -251,7 +270,9 @@ pub fn ancestors<'a>(config: &Config, index: &RecordIndex<'a>, record: &Record) 
 /// Whether a parent's own state and its children's disagree.
 fn disagrees(state: StateCategory, children: &ChildrenByState) -> bool {
     match state {
-        StateCategory::Finished => children.under_way + children.not_started + children.none > 0,
+        StateCategory::Finished => {
+            children.under_way + children.not_started + children.open + children.none > 0
+        }
         StateCategory::NotStarted => children.under_way + children.finished > 0,
         _ => false,
     }
@@ -366,12 +387,25 @@ fn roles(config: &Config, decls: &HashMap<String, StatusDecl>) -> BTreeMap<Strin
                     .as_ref()
                     .is_none_or(|types| types.contains(name)),
                 part_of: config.part_of.get(name).cloned(),
+                waits_through: config
+                    .relation_pairs
+                    .iter()
+                    .filter(|p| config.roadmap.pairs.contains(&p.name))
+                    .filter(|p| p.types.as_ref().is_none_or(|t| t.contains(name)))
+                    .filter(|p| {
+                        type_config
+                            .declared_fields()
+                            .contains(&crate::values::FieldName::new(&p.forward))
+                    })
+                    .map(|p| p.forward.clone())
+                    .collect(),
                 value_fields: type_config
                     .field_values
                     .as_ref()
                     .map(|v| v.keys().cloned().collect())
                     .unwrap_or_default(),
                 statuses_declared: decl.is_some_and(|d| !d.values.is_empty()),
+                progress_declared: decl.is_some_and(|d| !d.progress.is_empty()),
                 gated_without_transitions: gated && decl.is_none_or(|d| !d.has_transitions()),
             };
             (name.clone(), role)
@@ -643,6 +677,12 @@ mod tests {
         assert!(disagrees(StateCategory::NotStarted, &by(0, 1, 1)));
         assert!(disagrees(StateCategory::NotStarted, &by(1, 0, 1)));
         assert!(!disagrees(StateCategory::NotStarted, &by(0, 0, 2)));
+        assert!(!disagrees(StateCategory::Open, &by(1, 1, 1)));
+        let open_child = ChildrenByState {
+            open: 1,
+            ..ChildrenByState::default()
+        };
+        assert!(disagrees(StateCategory::Finished, &open_child));
         assert!(!disagrees(StateCategory::UnderWay, &by(0, 0, 2)));
         assert!(!disagrees(StateCategory::NoStatuses, &by(1, 1, 1)));
     }

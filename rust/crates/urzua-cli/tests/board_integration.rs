@@ -331,7 +331,11 @@ fn a_state_is_decided_by_a_declared_list_and_says_which() {
             "under-way",
             "record_types.programme.statuses.progress",
         ),
-        ("PRG-2", "not-started", "default"),
+        (
+            "PRG-2",
+            "not-started",
+            "record_types.programme.statuses.progress",
+        ),
         (
             "PRG-3",
             "finished",
@@ -339,7 +343,7 @@ fn a_state_is_decided_by_a_declared_list_and_says_which() {
         ),
         ("STP-3", "dropped", "record_types.step.statuses.failure"),
         ("STP-2", "finished", "record_types.step.statuses.success"),
-        ("CHR-1", "not-started", "default"),
+        ("CHR-1", "open", "no-progress-declared"),
     ];
     for (id, state, by) in expect {
         let r = by_id(&e, id);
@@ -360,6 +364,65 @@ fn a_state_is_decided_by_a_declared_list_and_says_which() {
 }
 
 #[test]
+fn without_a_progress_set_a_record_that_is_neither_finished_nor_dropped_is_open() {
+    let config = chain_config().replace("      progress: [Rolling, Shipped]\n", "");
+    let dir = repo("open", &config, chain_records);
+    let e = export(&dir);
+    for (id, state, by) in [
+        ("PRG-1", "open", "no-progress-declared"),
+        ("STG-2", "open", "no-progress-declared"),
+        (
+            "PRG-3",
+            "finished",
+            "record_types.programme.statuses.success",
+        ),
+        ("STP-3", "dropped", "record_types.step.statuses.failure"),
+        ("STG-7", "open", "no-status"),
+    ] {
+        let r = by_id(&e, id);
+        assert_eq!(
+            (r["state"].as_str(), r["state_decided_by"].as_str()),
+            (Some(state), Some(by)),
+            "{id}"
+        );
+    }
+    assert_eq!(e["type_roles"]["programme"]["progress_declared"], false);
+    assert_eq!(
+        by_id(&e, "STG-2")["children_by_state"]["open"],
+        2,
+        "STP-1 and STP-10"
+    );
+    assert_eq!(
+        by_id(&e, "PRG-2")["state_disagrees_with_children"],
+        false,
+        "nothing says an open parent has not begun"
+    );
+    assert_eq!(
+        by_id(&e, "PRG-3")["state_disagrees_with_children"],
+        true,
+        "finished, child open"
+    );
+    assert!(e["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|r| r["state"] != "under-way" && r["state"] != "not-started"));
+    let (html, _) = board_page(&dir);
+    assert!(html.contains("Under way (0)"));
+    assert!(
+        html.contains("Nothing can be listed as under way for charter, programme, stage, step"),
+        "{}",
+        html.split("Under way (0)")
+            .nth(1)
+            .unwrap()
+            .chars()
+            .take(400)
+            .collect::<String>()
+    );
+    assert!(html.contains("statuses.progress"));
+}
+
+#[test]
 fn a_finished_status_in_the_progress_list_is_finished_not_under_way() {
     let dir = chain("progress");
     let e = export(&dir);
@@ -375,6 +438,10 @@ fn waiting_and_ready_are_separate_and_a_record_can_be_under_way_and_waiting() {
     assert_eq!(ids(&d["waiting_on"]), ["STP-1"], "STP-2 is finished");
     assert_eq!(d["ready"], false);
     assert_eq!(by_id(&e, "STG-3")["state"], "not-started");
+    assert_eq!(
+        e["type_roles"]["stage"]["waits_through"],
+        serde_json::json!(["Needs"])
+    );
     assert_eq!(ids(&by_id(&e, "STG-3")["waiting_on"]), ["STG-2"]);
     assert_eq!(by_id(&e, "STP-1")["ready"], true);
     assert_eq!(by_id(&e, "PRG-3")["ready"], false, "finished");
@@ -844,7 +911,7 @@ fn assert_self_contained(html: &str) {
         .chain(attribute_values(html, "src"))
     {
         assert!(
-            value.starts_with('#') || value.starts_with("record/"),
+            value.starts_with('#') || value.starts_with("record/") || value == "check",
             "address {value}"
         );
     }
@@ -961,6 +1028,7 @@ fn work_is_a_tree_with_parents_counts_marks_and_a_group_for_records_with_no_pare
         "counts beside the parent"
     );
     assert_eq!(count(&html, "status and children disagree"), 2);
+    assert!(html.contains("<option value=\"open\">open</option>"));
     // PRG-1's section holds STG-2's, which holds STP-1.
     let prg1 = html.find("id=\"r-PRG-1\"").unwrap();
     let stg2 = html.find("id=\"r-STG-2\"").unwrap();
@@ -1001,6 +1069,46 @@ fn without_containment_work_is_grouped_by_type_and_other_types_are_compact_rows(
         "a declared-value field shows"
     );
     assert!(html.contains("Related: <a href=\"#r-TCK-4\">TCK-4</a>"));
+}
+
+fn entry<'a>(html: &'a str, anchor: &str) -> &'a str {
+    let at = html.find(&format!("id=\"{anchor}\"")).unwrap();
+    let rest = &html[at..];
+    let end = rest[1..].find("<li ").map_or(rest.len(), |i| i + 1);
+    &rest[..end]
+}
+
+#[test]
+fn the_containment_field_and_the_waiting_pairs_field_are_shown_once() {
+    let (html, _) = board_page(&chain("once"));
+    let step = entry(&html, "r-STP-10");
+    assert!(
+        step.contains("part of: <a href=\"#r-STG-2\">STG-2</a>"),
+        "{step}"
+    );
+    assert!(
+        step.contains("waits on: <a href=\"#r-STP-1\">STP-1</a>"),
+        "{step}"
+    );
+    assert!(
+        !step.contains("<div>In:"),
+        "the containment field is not listed again: {step}"
+    );
+    assert!(
+        !step.contains("<div>Needs:"),
+        "the waiting pair's field is not listed again: {step}"
+    );
+    let (html, _) = board_page(&flat("once-flat"));
+    let ticket = entry(&html, "r-TCK-3");
+    assert!(
+        ticket.contains("waits on: <a href=\"#r-TCK-2\">TCK-2</a>")
+            && !ticket.contains("<div>Needs:"),
+        "{ticket}"
+    );
+    // A finished record shows no wait, so its field is the one place its dependencies appear.
+    let (html, _) = board_page(&chain("once-finished"));
+    let closed = html.split("id=\"closed-records\"").nth(1).unwrap();
+    assert!(!entry(closed, "r-STP-2").contains("waits on"));
 }
 
 #[test]
@@ -1157,6 +1265,23 @@ fn the_server_answers_get_only_re_reads_every_request_and_stops_on_interrupt() {
         "the second request reads the changed record"
     );
 
+    assert!(
+        body.contains("<a href=\"check\">Run it</a>"),
+        "the served page links the check instead of running it"
+    );
+    assert!(!body.contains("urzua check: findings-present") && !body.contains("urzua check: ok"));
+    let (head, line) = server.get("/check");
+    assert!(
+        head.starts_with("HTTP/1.1 200") && head.to_lowercase().contains("cache-control: no-store"),
+        "{head}"
+    );
+    assert!(
+        line.starts_with("urzua check: ")
+            && line.contains("(computed 20")
+            && line.contains(" took "),
+        "{line}"
+    );
+
     let (head, text) = server.get("/record/PRG-1");
     assert!(
         head.starts_with("HTTP/1.1 200") && text.contains("Alpha renamed between requests"),
@@ -1231,7 +1356,14 @@ fn this_repositorys_records_have_a_state_each_and_the_page_holds_every_one() {
     let e = json(&lean);
     let records = e["records"].as_array().unwrap();
     assert!(records.len() > 600);
-    let states = ["finished", "dropped", "under-way", "not-started", "none"];
+    let states = [
+        "finished",
+        "dropped",
+        "under-way",
+        "not-started",
+        "open",
+        "none",
+    ];
     for r in records {
         assert!(
             states.contains(&r["state"].as_str().unwrap()),
@@ -1262,7 +1394,9 @@ fn this_repositorys_records_have_a_state_each_and_the_page_holds_every_one() {
     for r in records.iter().filter(|r| r["ready"] == true) {
         assert!(e["type_roles"][r["type"].as_str().unwrap()]["work"] == true);
         assert!(r["waiting_on"].as_array().unwrap().is_empty());
-        assert!(["not-started", "under-way", "none"].contains(&r["state"].as_str().unwrap()));
+        assert!(
+            ["not-started", "under-way", "open", "none"].contains(&r["state"].as_str().unwrap())
+        );
     }
     let head = String::from_utf8(
         common::isolated_git()
@@ -1283,4 +1417,171 @@ fn this_repositorys_records_have_a_state_each_and_the_page_holds_every_one() {
     assert_self_contained(&html);
     assert_eq!(count(&html, " data-record=\""), records.len());
     assert!(html.len() < 4 * 1024 * 1024, "{} bytes", html.len());
+}
+
+// ---------------------------------------------------------------- the additive guarantee
+
+const NEW_RECORD_KEYS: [&str; 17] = [
+    "title",
+    "title_is_fallback",
+    "fields",
+    "status",
+    "state",
+    "state_decided_by",
+    "waiting_on",
+    "ready",
+    "gated_moves",
+    "parent",
+    "children",
+    "children_by_state",
+    "state_disagrees_with_children",
+    "refers_to",
+    "unresolved_refs",
+    "referred_by",
+    "link",
+];
+
+/// The id's number, so `MILE-2` sorts before `MILE-10`.
+fn natural(id: &str) -> (String, u64, String) {
+    match id.rsplit_once('-') {
+        Some((prefix, n)) if n.parse::<u64>().is_ok() => {
+            (prefix.to_string(), n.parse().unwrap(), String::new())
+        }
+        _ => (id.to_string(), 0, String::new()),
+    }
+}
+
+/// The export of a released build, when one is on `PATH` (or named by
+/// `URZUA_RELEASED_BIN`) and predates the view model. CI has none, and the
+/// test then says so instead of passing silently.
+fn released_export(root: &Path) -> Option<Value> {
+    let bin = std::env::var("URZUA_RELEASED_BIN").unwrap_or_else(|_| "urzua".to_string());
+    let out = std::process::Command::new(&bin)
+        .args(["export", "--format", "json"])
+        .current_dir(root)
+        .output()
+        .ok()?;
+    let v: Value = serde_json::from_slice(&out.stdout).ok()?;
+    (out.status.success() && v.get("type_roles").is_none()).then_some(v)
+}
+
+#[test]
+fn this_repositorys_export_without_the_new_keys_equals_the_released_builds() {
+    let root = own_root();
+    let Some(old) = released_export(&root) else {
+        eprintln!("skipped: no released `urzua` that predates the view model is on PATH (set URZUA_RELEASED_BIN)");
+        return;
+    };
+    let new = export(&root);
+
+    let strip = |records: &Value| -> Vec<Value> {
+        records
+            .as_array()
+            .unwrap()
+            .iter()
+            .cloned()
+            .map(|mut r| {
+                for key in NEW_RECORD_KEYS {
+                    r.as_object_mut().unwrap().remove(key);
+                }
+                if let Some(sections) = r["sections"].as_array_mut() {
+                    for s in sections {
+                        for key in ["ticked", "unticked", "items"] {
+                            s.as_object_mut().unwrap().remove(key);
+                        }
+                    }
+                }
+                r
+            })
+            .collect()
+    };
+    let (old_records, new_records) = (strip(&old["records"]), strip(&new["records"]));
+
+    // The one documented change: numeric order of ids within a type.
+    let key = |r: &Value| {
+        (
+            r["type"].as_str().unwrap().to_string(),
+            natural(r["id"].as_str().unwrap_or("")),
+            r["path"].as_str().unwrap().to_string(),
+        )
+    };
+    let mut expected_order: Vec<&Value> = old_records.iter().collect();
+    expected_order.sort_by_key(|r| key(r));
+    let new_order: Vec<&str> = new_records
+        .iter()
+        .map(|r| r["path"].as_str().unwrap())
+        .collect();
+    let expected: Vec<&str> = expected_order
+        .iter()
+        .map(|r| r["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        new_order, expected,
+        "records are in numeric order within a type, and in no other way reordered"
+    );
+    let old_order: Vec<&str> = old_records
+        .iter()
+        .map(|r| r["path"].as_str().unwrap())
+        .collect();
+    assert_ne!(
+        old_order, new_order,
+        "the released order is by path, so the numeric order differs on this repository"
+    );
+
+    // Everything else, record for record, keyed by path.
+    let by_path = |records: &[Value]| -> std::collections::BTreeMap<String, Value> {
+        records
+            .iter()
+            .map(|r| (r["path"].as_str().unwrap().to_string(), r.clone()))
+            .collect()
+    };
+    let (old_map, new_map) = (by_path(&old_records), by_path(&new_records));
+    assert_eq!(
+        old_map.keys().collect::<Vec<_>>(),
+        new_map.keys().collect::<Vec<_>>()
+    );
+    for (path, old_record) in &old_map {
+        assert_eq!(old_record, &new_map[path], "{path}");
+    }
+    for key in ["status", "record_count", "types", "roadmap", "notices"] {
+        assert_eq!(old.get(key), new.get(key), "top-level `{key}`");
+    }
+}
+
+/// Writes the pages the phone-width check measures into `URZUA_BOARD_REVIEW_DIR`:
+/// both fixtures, the chain one with a record that waits on many and one with
+/// long ids. Run with `--ignored`; it asserts nothing.
+#[test]
+#[ignore]
+fn write_pages_for_the_phone_width_check() {
+    let Some(out) = std::env::var_os("URZUA_BOARD_REVIEW_DIR") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    let chain_dir = chain("review-chain");
+    let many: Vec<String> = (1..=14).map(|n| format!("STP-{}", n + 1000)).collect();
+    for n in 1..=14 {
+        write(
+            &chain_dir,
+            &format!("docs/steps/STP-{}-x.md", n + 1000),
+            &record(
+                "Status: Rolling",
+                "In: STG-2\n",
+                &format!("# {} — Long running step number {n}", n + 1000),
+            ),
+        );
+    }
+    write(
+        &chain_dir,
+        "docs/steps/STP-2000-waits.md",
+        &record(
+            "Status: Idea",
+            &format!("In: STG-2\nNeeds: {}\n", many.join(", ")),
+            "# 2000 — Waits on fourteen",
+        ),
+    );
+    common::commit_all(&chain_dir, 0);
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(out.join("chain.html"), board_page(&chain_dir).0).unwrap();
+    std::fs::write(out.join("flat.html"), board_page(&flat("review-flat")).0).unwrap();
 }

@@ -38,17 +38,18 @@ li.rec { margin: .35rem 0; }
 .stamp, .check, .note { color: var(--muted); margin: .25rem 0; }
 .stamp strong, .check strong { color: var(--text); }
 .rec > details, .rec > .row { background: var(--surface); border-radius: 4px; padding: .4rem .6rem; }
-summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: .25rem .6rem; align-items: baseline; }
+summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: .25rem .6rem; align-items: baseline; min-width: 0; }
+summary > * { min-width: 0; }
 .id { font-weight: 600; }
 .status { color: var(--muted); }
 .mark {
   display: inline-block; padding: 0 .45rem; border-radius: 3px; font-size: .8rem;
-  border: 1px solid currentColor; border-left-width: .5rem; white-space: nowrap;
+  border: 1px solid currentColor; border-left-width: .5rem; max-width: 100%;
 }
 .m-finished { border-color: var(--finished); }
 .m-dropped { border-color: var(--dropped); }
 .m-under-way { border-color: var(--under-way); }
-.m-not-started, .m-none { border-color: var(--line); color: var(--muted); }
+.m-not-started, .m-open, .m-none { border-color: var(--line); color: var(--muted); }
 .m-waiting { background: var(--waiting); border-color: var(--waiting); color: var(--waiting-text); }
 .m-ready { border-color: var(--ready); color: var(--link); }
 .m-disagree { border-color: var(--dropped); border-left-width: 1px; font-weight: 600; }

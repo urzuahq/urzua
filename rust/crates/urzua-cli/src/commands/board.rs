@@ -4,8 +4,9 @@
 //! page is a file or a response, never stdout.
 //!
 //! The server is a read-only, foreground, standard-library one: it answers
-//! `GET /` and each record's text at `GET /record/<id>`, and nothing else, on 127.0.0.1 only, and re-reads the records on
-//! every request.
+//! `GET /`, `GET /check` (the `urzua check` summary, which the page does not
+//! wait for) and each record's text at `GET /record/<id>`, and nothing else, on
+//! 127.0.0.1 only, and re-reads the records on every request.
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
@@ -17,7 +18,7 @@ use urzua_core::report::{
     ExportReport, Failure, FindingSeverity, Notice, ReadStamp, Report, ReportStatus,
 };
 
-use super::board_page::{is_path_id, render, CheckLine};
+use super::board_page::{is_path_id, render, CheckLine, CheckNote};
 use super::check::{self, CheckArgs};
 use super::export::{self, ExportOptions, RecordFilter};
 use crate::emit;
@@ -87,7 +88,35 @@ pub fn run(config_path: Option<PathBuf>, args: BoardArgs) -> ExitCode {
     })
 }
 
-/// The page, and the export it was drawn from.
+/// `urzua check` over the repository, reduced to the counts the page shows.
+fn check_line(config_path: &Option<PathBuf>) -> Option<CheckLine> {
+    let report = check::execute(config_path.clone(), CheckArgs::default()).ok()?;
+    let count = |severity: FindingSeverity| {
+        report
+            .findings
+            .iter()
+            .filter(|f| f.waived.is_none() && f.severity == severity)
+            .count()
+    };
+    Some(CheckLine {
+        status: serde_json::to_value(report.status)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_default(),
+        errors: count(FindingSeverity::Error),
+        warnings: count(FindingSeverity::Warning),
+        infos: count(FindingSeverity::Info),
+        waived: report
+            .findings
+            .iter()
+            .filter(|f| f.waived.is_some())
+            .count(),
+    })
+}
+
+/// The page, and the export it was drawn from. The file carries the check
+/// summary, computed when it is written. A served page does not wait for one:
+/// `check` takes as long as it takes, so the page links `GET /check`.
 fn build_page(
     config_path: &Option<PathBuf>,
     serving: bool,
@@ -97,32 +126,29 @@ fn build_page(
         &RecordFilter::default(),
         &ExportOptions::default(),
     )?;
-    let check = check::execute(config_path.clone(), CheckArgs::default())
-        .ok()
-        .map(|report| {
-            let count = |severity: FindingSeverity| {
-                report
-                    .findings
-                    .iter()
-                    .filter(|f| f.waived.is_none() && f.severity == severity)
-                    .count()
-            };
-            CheckLine {
-                status: serde_json::to_value(report.status)
-                    .ok()
-                    .and_then(|v| v.as_str().map(str::to_string))
-                    .unwrap_or_default(),
-                errors: count(FindingSeverity::Error),
-                warnings: count(FindingSeverity::Warning),
-                infos: count(FindingSeverity::Info),
-                waived: report
-                    .findings
-                    .iter()
-                    .filter(|f| f.waived.is_some())
-                    .count(),
-            }
-        });
-    Ok((render(&export, check.as_ref(), serving), export))
+    let line = (!serving).then(|| check_line(config_path)).flatten();
+    let note = match (&line, serving) {
+        (_, true) => CheckNote::Linked,
+        (Some(line), false) => CheckNote::Line(line),
+        (None, false) => CheckNote::Unavailable,
+    };
+    Ok((render(&export, &note, serving), export))
+}
+
+/// The one line `GET /check` answers: the summary, when it was computed and
+/// how long it took.
+fn check_text(config_path: &Option<PathBuf>) -> String {
+    let started = Instant::now();
+    let line = check_line(config_path);
+    let seconds = started.elapsed().as_secs();
+    match line {
+        Some(line) => format!(
+            "{} (computed {}, took {seconds} s)\n",
+            line.text(),
+            urzua_io::read_instant()
+        ),
+        None => "urzua check: could not be run\n".to_string(),
+    }
 }
 
 fn write_file(config_path: Option<PathBuf>, out: Option<PathBuf>) -> Result<ExitCode, Failure> {
@@ -178,6 +204,8 @@ enum Request {
     Page,
     /// The text of the record with this id.
     RecordText(String),
+    /// The `urzua check` summary, computed for the request.
+    Check,
     NotFound,
     WrongMethod,
     Malformed,
@@ -224,6 +252,7 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Request> {
     let path = target.split(['?', '#']).next().unwrap_or_default();
     Ok(match path.strip_prefix("/record/") {
         _ if path == "/" => Request::Page,
+        _ if path == "/check" => Request::Check,
         Some(id) if is_path_id(id) => Request::RecordText(id.to_string()),
         _ => Request::NotFound,
     })
@@ -275,6 +304,7 @@ fn answer(mut stream: TcpStream, config_path: &Option<PathBuf>) -> std::io::Resu
                 &format!("the records could not be read: {failure}\n"),
             ),
         },
+        Request::Check => respond(&mut stream, "200 OK", TEXT, "", &check_text(config_path)),
         Request::Page => match build_page(config_path, true) {
             Ok((page, _)) => respond(&mut stream, "200 OK", "text/html; charset=utf-8", "", &page),
             Err(failure) => respond(

@@ -1,0 +1,51 @@
+schema_version: 2
+record_types:
+  task:
+    dir: docs/tasks
+    prefix: TASK
+    required_fields: [Status, Kind, Date, Author, Stable-Id]
+    header_shape: yaml-frontmatter
+    field_values:
+      Kind: [feature, fix]
+    revision_log:
+      classes: [major, minor]
+      tool_class: minor
+    statuses:
+      values: [Open, InProgress, Done, WontDo]
+      success: [Done]
+      failure: [WontDo]
+      initial: [Open]
+      transitions: {Open: [InProgress, Done, WontDo], InProgress: [Open, Done, WontDo], Done: [InProgress]}
+      require:
+        - {when: [Done], when_field: {Kind: [fix]}, fields: [Author]}
+      delivery:
+        delivered_tiers: [Implemented, Verified]
+        unevidenced_tiers: [Not started]
+        not_done: [Open, InProgress]
+        set_status: Done
+        items:
+          section: Acceptance
+          clause_separator: " — "
+          evidence_marker: "evidence:"
+          waiver_marker: "waived:"
+          partial_status: InProgress
+          resolving_tiers: [Implemented, Verified, Decided]
+    sections: {from: headings, depth: 2, required: [{name: Acceptance}]}
+  note:
+    dir: docs/notes
+    required_fields: [Stable-Id]
+embodiment:
+  drift: Drift detected
+  tiers:
+    - {state: Verified, evidence: test, claims_built: true}
+    - {state: Implemented, evidence: code, claims_built: true}
+    - {state: Decided, evidence: record}
+    - {state: Specified, evidence: spec}
+  none: Not started
+authority:
+  deciders:
+    owners: {logins: [someone]}
+    leads: {logins: [other]}
+  gates:
+    - {type: task, to: [Done], by: owners}
+    - {type: task, to: [Done, WontDo], by: leads}

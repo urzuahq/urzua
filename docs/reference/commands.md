@@ -306,17 +306,43 @@ values and its `actions`.
 With `--types`: a summary, one compact entry per declared record type in name order (`name`, `at`,
 `prefix`, `dirs`, `cannot_create` when `urzua new` refuses the type, `required` and `optional` field
 names, `states`, `references` with `"any"` for an unconstrained field and `none` when no type
-satisfies every declaration, and the number of `conditions`), then `path_gates` as declared; a default keeps its
-marker object; `next_action` is `urzua explain --type <name>` when a type is declared.
+satisfies every declaration), then `path_gates` as declared; a default keeps its marker object;
+`next_action` is `urzua explain --type <name>` when a type is declared. Each of these keys is printed
+for a type only when the type declares it, copied from the same declaration `--type` shows:
+
+- `conditions`: the `declared: when ...` sentence of each `statuses.require` and `statuses.forbid` entry.
+- `gates`: each `authority.gates` entry naming the type, as its own entry with its `to` and `by` as
+  declared, in declaration order; no logins. Entries are not merged and no rule for combining them is
+  stated.
+- `field_values`: each field that declares `field_values`, with its values.
+- `revision_log_classes`: the classes the type declares under `revision_log.classes`.
+- `checklist`: the type declares `statuses.delivery.items`: its `section`; `categories`, the evidence
+  categories the engine accepts before a locator's path; `tiers`, for each category that a tier under
+  `embodiment.tiers` declares (`evidence:`), that tier's state (a category absent from `tiers` has no
+  tier declared for it; that says nothing about whether it may be cited); and `resolving_tiers`.
+
+The summary also carries one `note` (when a type is declared): these are declarations, whether a gate
+or a condition is acted on depends on what the configuration enables, which `--types --full` and
+`urzua check` show, and `--type <name>` says what counts as a missing value for a condition.
+
+The summary prints each array of scalars and each object whose values are all scalars or arrays of
+scalars on one line; `--full`, `--type` and every other command print one element per line.
 
 With `--types --full`, or `--type <name>` for one type (always full; `--type <name> --full` and
 `--full` alone exit 2 and name the command to run): every declaration, each with `at`
-(`key.path:line`): `create_command` (shell-quoted) or `cannot_create`, `prefix`, `dirs`, `template`,
-`header_fields` (a `pointer` gives its own `targets`, each pair's `target_types` with the pair's name,
+(`key.path:line`): `create_command` (shell-quoted) or `cannot_create`, `prefix`, `dirs`, `template`
+(the conventional path `.urzua/templates/<type>.md`, a default, with `readable_when_run`: whether
+`urzua new`'s own read of that file, the one it uses to scaffold, returned text when the command ran;
+a file that is absent or cannot be read as UTF-8 is not used by `urzua new`), `header_fields` (a `pointer` gives its own `targets`, each pair's `target_types` with the pair's name,
 and `effective_targets`; a field a relation pair declares lists that pair as declared), `states`
 (with `new_writes`, the status `urzua new` writes, and `expiry`, the claim periods with the rule
 setting's level as written), `conditions` (keys, a `declared: ...` sentence, `counts_as_missing` for a
-requirement), `gates` (only gates declared for the type by name), `aliases` (each alias with its
+requirement), `checklist` (when the type declares `statuses.delivery.items`: the `section` and
+`evidence_marker`, the engine's `evidence_categories`, for each category the tier an
+`embodiment.tiers` entry declares for it with its line, or `tier: null` with a `note` that no
+`embodiment.tiers` entry declares that category, the `resolving_tiers` declared or, marked as a
+default, the type's `delivered_tiers`, side by side and not joined, and a `note` that `urzua check`
+says which items of a record resolve; no resolution rule is described), `gates` (only gates declared for the type by name), `aliases` (each alias with its
 anchor's line, once per alias), and every other declared key raw under its own name.
 `create_command` can still be refused for the given title (the identity pattern is fitted to the real
 number and title) or by a path gate; `urzua new` says why.
@@ -460,9 +486,10 @@ exits 2. [The board](board.md) is built from these keys alone; so can your own v
 urzua export --format json --no-raw-text
 ```
 
-`state` is one of `finished`, `dropped`, `under-way`, `not-started` or `none`, read from the type's
+`state` is one of `finished`, `dropped`, `under-way`, `not-started`, `open` or `none`, read from the type's
 `statuses.success`, `failure` and `progress` lists, and `state_decided_by` names the declaration that
-decided it. `waiting_on` is separate from it: a record can be under way and waiting. `parent` and
+decided it. A type that declares no `statuses.progress` cannot say work has begun, so its records that are neither
+finished nor dropped are `open`; `not-started` needs a declared progress set the status is not in. `waiting_on` is separate from it: a record can be under way and waiting. `parent` and
 `children` exist only where a `pointer_fields` entry declares `part_of: true` (see
 [config](config.md#containment-part_of)). `read` names the commit, the branch, whether a record file has
 uncommitted changes, and the time. The full contract is in `SPEC-1`.

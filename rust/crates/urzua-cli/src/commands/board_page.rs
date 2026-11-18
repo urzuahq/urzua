@@ -24,6 +24,33 @@ pub(crate) struct CheckLine {
     pub waived: usize,
 }
 
+/// What the page says about `urzua check`.
+pub(crate) enum CheckNote<'a> {
+    /// The summary, computed when the page was written.
+    Line(&'a CheckLine),
+    /// A served page does not wait for a check: it links the path that runs one.
+    Linked,
+    Unavailable,
+}
+
+impl CheckLine {
+    /// The summary as one line of text.
+    pub(crate) fn text(&self) -> String {
+        format!(
+            "urzua check: {} - {} errors, {} warnings, {} info{}",
+            self.status,
+            self.errors,
+            self.warnings,
+            self.infos,
+            if self.waived > 0 {
+                format!(" ({} waived)", self.waived)
+            } else {
+                String::new()
+            }
+        )
+    }
+}
+
 /// HTML-escapes text for an element body or a quoted attribute value.
 pub(crate) fn esc(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -72,6 +99,7 @@ fn state_word(state: StateCategory) -> &'static str {
         StateCategory::Dropped => "dropped",
         StateCategory::UnderWay => "under way",
         StateCategory::NotStarted => "not started",
+        StateCategory::Open => "open",
         StateCategory::NoStatuses => "no status",
     }
 }
@@ -82,6 +110,7 @@ fn state_key(state: StateCategory) -> &'static str {
         StateCategory::Dropped => "dropped",
         StateCategory::UnderWay => "under-way",
         StateCategory::NotStarted => "not-started",
+        StateCategory::Open => "open",
         StateCategory::NoStatuses => "none",
     }
 }
@@ -211,6 +240,7 @@ impl<'a> Page<'a> {
             (c.dropped, "dropped"),
             (c.under_way, "under way"),
             (c.not_started, "not started"),
+            (c.open, "open"),
             (c.none, "no status"),
         ]
         .into_iter()
@@ -272,7 +302,16 @@ impl<'a> Page<'a> {
                 }
             }
         }
-        for (field, ids) in &v.refers_to {
+        let role = self.e.type_roles.get(&r.record_type);
+        let shown_once = |field: &String| {
+            let parent =
+                v.parent.is_some() && role.is_some_and(|t| t.part_of.as_ref() == Some(field));
+            let waits = v.state.is_open()
+                && !v.waiting_on.is_empty()
+                && role.is_some_and(|t| t.waits_through.contains(field));
+            parent || waits
+        };
+        for (field, ids) in v.refers_to.iter().filter(|(f, _)| !shown_once(f)) {
             let _ = write!(out, "<div>{}: {}</div>", esc(field), self.links(ids));
         }
         for (field, ids) in &v.unresolved_refs {
@@ -400,7 +439,7 @@ fn head(csp_style: &str, csp_script: &str) -> String {
     )
 }
 
-fn stamp(page: &Page<'_>, check: Option<&CheckLine>) -> String {
+fn stamp(page: &Page<'_>, check: &CheckNote<'_>) -> String {
     let read = &page.e.read;
     let commit = read
         .commit
@@ -423,18 +462,13 @@ fn stamp(page: &Page<'_>, check: Option<&CheckLine>) -> String {
         changes
     );
     match check {
-        Some(c) => {
-            let _ = writeln!(
-                out,
-                "<p class=\"check\">urzua check: <strong>{}</strong> &mdash; {} errors, {} warnings, {} info{}</p>",
-                esc(&c.status),
-                c.errors,
-                c.warnings,
-                c.infos,
-                if c.waived > 0 { format!(" ({} waived)", c.waived) } else { String::new() }
-            );
+        CheckNote::Line(c) => {
+            let _ = writeln!(out, "<p class=\"check\">{}</p>", esc(&c.text()));
         }
-        None => out.push_str("<p class=\"check\">urzua check: could not be run.</p>\n"),
+        CheckNote::Linked => out.push_str(
+            "<p class=\"check\">urzua check: not run for this page, because it takes as long as <code>urzua check</code> does. <a href=\"check\">Run it</a> for the summary.</p>\n",
+        ),
+        CheckNote::Unavailable => out.push_str("<p class=\"check\">urzua check: could not be run.</p>\n"),
     }
     out
 }
@@ -444,7 +478,7 @@ fn controls(total: usize) -> String {
         "<div class=\"controls\"><input id=\"q\" type=\"search\" placeholder=\"Search id and title\" aria-label=\"Search id and title\">\
 <select id=\"s\" aria-label=\"Filter by state\"><option value=\"\">Any state</option>\
 <option value=\"finished\">finished</option><option value=\"under-way\">under way</option>\
-<option value=\"not-started\">not started</option><option value=\"dropped\">dropped</option>\
+<option value=\"not-started\">not started</option><option value=\"open\">open</option><option value=\"dropped\">dropped</option>\
 <option value=\"none\">no status</option></select><span id=\"shown\" class=\"note\">{total} of {total} records shown</span></div>\n"
     )
 }
@@ -519,6 +553,21 @@ fn attention(page: &Page<'_>) -> String {
             esc(r.view.status.as_deref().unwrap_or_default())
         )
     }));
+    let without_progress: Vec<&str> = page
+        .e
+        .type_roles
+        .iter()
+        .filter(|(_, role)| role.statuses_declared && !role.progress_declared)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    if !without_progress.is_empty() {
+        let _ = writeln!(
+            out,
+            "<p class=\"note\">Nothing can be listed as under way for {}: no <code>statuses.progress</code> is declared for {}. Add it to the type's <code>statuses</code> in the configuration to name the statuses that mean work has begun; their records are shown as open until then.</p>",
+            esc(&without_progress.join(", ")),
+            if without_progress.len() == 1 { "it" } else { "them" }
+        );
+    }
     out.push_str(&brief(page, "Ready", &ready, |r| {
         format!("<span class=\"status\">{}</span>", esc(&r.record_type))
     }));
@@ -739,7 +788,7 @@ fn unreadable_section(page: &Page<'_>) -> String {
 }
 
 /// The whole page.
-pub(crate) fn render(export: &ExportReport, check: Option<&CheckLine>, serving: bool) -> String {
+pub(crate) fn render(export: &ExportReport, check: &CheckNote<'_>, serving: bool) -> String {
     let page = Page::new(export, serving);
     let mut out = head(&csp_hash(STYLE), &csp_hash(SCRIPT));
     out.push_str("<body>\n<header class=\"top\"><h1>urzua board</h1>\n");
