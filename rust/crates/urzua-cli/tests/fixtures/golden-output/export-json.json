@@ -24,6 +24,7 @@
           "finished": 0,
           "none": 0,
           "not-started": 0,
+          "open": 0,
           "under-way": 0
         },
         "fields": {
@@ -77,6 +78,7 @@
           "finished": 0,
           "none": 0,
           "not-started": 0,
+          "open": 0,
           "under-way": 0
         },
         "fields": {
@@ -124,6 +126,7 @@
           "finished": 0,
           "none": 0,
           "not-started": 0,
+          "open": 0,
           "under-way": 0
         },
         "fields": {
@@ -189,6 +192,7 @@
           "finished": 0,
           "none": 0,
           "not-started": 0,
+          "open": 0,
           "under-way": 0
         },
         "fields": {},
@@ -221,15 +225,19 @@
       "adr": {
         "gated_without_transitions": false,
         "part_of": null,
+        "progress_declared": false,
         "statuses_declared": false,
         "value_fields": [],
+        "waits_through": [],
         "work": true
       },
       "note": {
         "gated_without_transitions": false,
         "part_of": null,
+        "progress_declared": false,
         "statuses_declared": false,
         "value_fields": [],
+        "waits_through": [],
         "work": true
       }
     },
