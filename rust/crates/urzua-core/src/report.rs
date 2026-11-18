@@ -1608,7 +1608,9 @@ pub struct ReadStamp {
     pub uncommitted_record_changes: bool,
     /// The configuration file has uncommitted changes (modified, staged, or
     /// new and not committed). The configuration read is the working tree's.
-    pub uncommitted_config_changes: bool,
+    /// `null` when the file cannot be placed inside the repository or git
+    /// cannot be asked.
+    pub uncommitted_config_changes: Option<bool>,
     /// UTC, `YYYY-MM-DDTHH:MM:SSZ`, to the second.
     pub time: String,
 }

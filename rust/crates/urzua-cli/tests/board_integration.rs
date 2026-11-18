@@ -417,8 +417,12 @@ fn without_a_progress_set_a_record_that_is_neither_finished_nor_dropped_is_open(
         .next()
         .unwrap();
     assert!(
-        note.contains("Nothing is under way. charter declares no <code>statuses.progress</code>: until it does, its records in Draft show as open and a parent&#39;s state cannot disagree with its children."),
+        note.contains("<p class=\"note\">Nothing is under way. "),
         "{note}"
+    );
+    assert!(
+        !note.contains("charter"),
+        "a type that declares no initial status is not named: {note}"
     );
     for name in ["programme", "stage", "step"] {
         assert!(
@@ -903,17 +907,36 @@ fn csp_source(content: &str) -> String {
     format!("'sha256-{out}'")
 }
 
-fn assert_self_contained(html: &str) {
-    assert_page(html, false);
+/// Every `link` the export gives its records: the only addresses outside the
+/// page that the page may carry.
+fn links(export: &Value) -> Vec<String> {
+    export["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r["link"].as_str().map(str::to_string))
+        .collect()
+}
+
+fn html_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn assert_self_contained(html: &str, links: &[String]) {
+    assert_page(html, false, links);
 }
 
 /// A served page: the same, plus the one request it may make, to its own
 /// server, and nothing else.
-fn assert_served(html: &str) {
-    assert_page(html, true);
+fn assert_served(html: &str, links: &[String]) {
+    assert_page(html, true, links);
 }
 
-fn assert_page(html: &str, served: bool) {
+fn assert_page(html: &str, served: bool, links: &[String]) {
     assert_well_formed(html);
     assert!(html.contains("<meta charset=\"utf-8\">"));
     assert!(html.contains("<meta name=\"viewport\""));
@@ -929,8 +952,7 @@ fn assert_page(html: &str, served: bool) {
         .into_iter()
         .chain(attribute_values(html, "src"))
     {
-        let anchor = format!(" href=\"{value}\" target=\"_blank\" rel=\"noopener noreferrer\"");
-        let record_link = value.starts_with("https://") && html.contains(&anchor);
+        let record_link = links.iter().any(|l| html_escape(l) == value);
         assert!(
             value.starts_with('#')
                 || value.starts_with("record/")
@@ -939,7 +961,7 @@ fn assert_page(html: &str, served: bool) {
             "address {value}"
         );
         if record_link {
-            scanned = scanned.replace(&anchor, "");
+            scanned = scanned.replace(&format!(" href=\"{value}\""), "");
         }
     }
     for forbidden in [
@@ -1011,7 +1033,7 @@ fn the_page_holds_every_record_and_is_a_self_contained_well_formed_document() {
     for (name, dir) in [("chain", chain("page-chain")), ("flat", flat("page-flat"))] {
         let e = export(&dir);
         let (html, answer) = board_page(&dir);
-        assert_self_contained(&html);
+        assert_self_contained(&html, &links(&e));
         let records = e["record_count"].as_u64().unwrap() as usize;
         assert_eq!(
             count(&html, " data-record=\""),
@@ -1069,10 +1091,8 @@ fn what_needs_a_person_is_the_gated_moves_the_transitions_allow() {
     );
     let under_way = section_of(&html, "under-way");
     assert!(
-        under_way.contains(
-            "charter declares no <code>statuses.progress</code>: until it does, its records in Draft show as open and a parent&#39;s state cannot disagree with its children."
-        ),
-        "{under_way}"
+        !under_way.contains("charter"),
+        "a type that declares no initial status is not named: {under_way}"
     );
     assert!(
         !under_way.contains("programme"),
@@ -1360,7 +1380,7 @@ fn everything_from_a_record_is_escaped_and_nothing_becomes_a_link() {
     );
     common::commit_all(&dir, 0);
     let (html, _) = board_page(&dir);
-    assert_self_contained(&html);
+    assert_self_contained(&html, &links(&export(&dir)));
     assert!(html.contains("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;quoted&#39; &quot;double&quot;"));
     assert!(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
     assert!(!html.contains("<script>alert"));
@@ -1523,7 +1543,7 @@ fn the_server_answers_get_only_re_reads_every_request_and_stops_on_interrupt() {
         head.to_lowercase().contains("content-type: text/html"),
         "{head}"
     );
-    assert_served(&body);
+    assert_served(&body, &links(&export(&dir)));
     assert_eq!(count(&body, " data-record=\""), 18);
     assert!(body.contains("Alpha"));
 
@@ -1707,7 +1727,7 @@ fn the_stamp_changes_with_a_record_or_the_configuration_and_is_stable_otherwise(
 fn a_served_page_updates_itself_and_a_file_does_not() {
     let dir = chain("live");
     let (file, _) = board_page(&dir);
-    assert_self_contained(&file);
+    assert_self_contained(&file, &links(&export(&dir)));
     assert!(
         file.contains("static file, generated 20"),
         "the header says it is a file"
@@ -1720,7 +1740,7 @@ fn a_served_page_updates_itself_and_a_file_does_not() {
 
     let server = Server::start(&dir);
     let (_, page) = server.get("/");
-    assert_served(&page);
+    assert_served(&page, &links(&export(&dir)));
     assert!(page.contains("<button type=\"button\" id=\"refresh\" class=\"rf\">Refresh</button>"));
     assert!(
         page.contains("id=\"upd\"") && page.contains("title=\"20") && page.contains(">updated 20"),
@@ -2574,7 +2594,7 @@ fn this_repositorys_records_have_a_state_each_and_the_page_holds_every_one() {
     let answer = json(&out);
     assert_eq!(answer["record_count"], e["record_count"]);
     let html = std::fs::read_to_string(&*target).unwrap();
-    assert_self_contained(&html);
+    assert_self_contained(&html, &links(&e));
     assert_eq!(count(&html, " data-record=\""), records.len());
     assert!(html.len() < 4 * 1024 * 1024, "{} bytes", html.len());
 }
@@ -3071,6 +3091,186 @@ fn the_read_stamp_says_apart_when_the_configuration_has_uncommitted_changes() {
         time(&first).len(),
         20,
         "the stamp is to the second, so two runs within a second print one time"
+    );
+}
+
+#[test]
+fn a_record_link_may_be_any_prefix_the_configuration_allows_and_nothing_else_is() {
+    for (prefix, starts) in [
+        ("http://example.test/raw/", "http://example.test/raw/docs/"),
+        ("/files/", "/files/docs/"),
+    ] {
+        let dir = repo(
+            "link-shapes",
+            &chain_config().replace("https://example.test/blob/main/", prefix),
+            chain_records,
+        );
+        let e = export(&dir);
+        let linked = links(&e);
+        assert!(!linked.is_empty() && linked.iter().all(|l| l.starts_with(starts)));
+        let (html, _) = board_page(&dir);
+        assert_self_contained(&html, &linked);
+        assert_eq!(
+            count(&html, "rel=\"noopener noreferrer\""),
+            linked.len(),
+            "{prefix}"
+        );
+    }
+}
+
+#[test]
+#[should_panic(expected = "address https://evil.test/x")]
+fn an_address_the_export_did_not_give_is_refused_by_the_page_check() {
+    let dir = chain("foreign-link");
+    let (html, _) = board_page(&dir);
+    let foreign = html.replace(
+        "</main>",
+        "<a href=\"https://evil.test/x\" target=\"_blank\" rel=\"noopener noreferrer\">x</a></main>",
+    );
+    assert_self_contained(&foreign, &links(&export(&dir)));
+}
+
+fn export_from(cwd: &Path, args: &[&str]) -> Value {
+    let out = run(cwd, args);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    json(&out)
+}
+
+#[test]
+fn the_configuration_stamp_survives_a_relative_or_linked_config_and_is_null_when_it_cannot_be_placed(
+) {
+    let dir = chain("config-path");
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    write(&dir, ".urzua/config.yaml", &format!("{config}\n# edited\n"));
+    let sub = dir.join("docs");
+    let relative = export_from(
+        &sub,
+        &[
+            "export",
+            "--format",
+            "json",
+            "--config",
+            "../.urzua/config.yaml",
+        ],
+    );
+    assert_eq!(relative["read"]["uncommitted_config_changes"], true);
+
+    let dotted = export_from(
+        &sub,
+        &[
+            "export",
+            "--format",
+            "json",
+            "--config",
+            "./programmes/../../.urzua/config.yaml",
+        ],
+    );
+    assert_eq!(dotted["read"]["uncommitted_config_changes"], true);
+
+    std::os::unix::fs::symlink(dir.join(".urzua/config.yaml"), dir.join("alias.yaml")).unwrap();
+    let linked = export_from(
+        &sub,
+        &["export", "--format", "json", "--config", "../alias.yaml"],
+    );
+    assert_eq!(linked["read"]["uncommitted_config_changes"], true);
+
+    let outside = common::TempDir::new("urzua-board-config-outside");
+    write(
+        &outside,
+        "config.yaml",
+        &std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap(),
+    );
+    let elsewhere = export_from(
+        &dir,
+        &[
+            "export",
+            "--format",
+            "json",
+            "--config",
+            outside.join("config.yaml").to_str().unwrap(),
+        ],
+    );
+    assert!(
+        elsewhere["read"]["uncommitted_config_changes"].is_null(),
+        "a configuration outside the repository is not a guess of false: {}",
+        elsewhere["read"]
+    );
+    let (page, _) = {
+        let target = dir.join("out/outside.html");
+        let out = run(
+            &dir,
+            &[
+                "board",
+                "--out",
+                target.to_str().unwrap(),
+                "--config",
+                outside.join("config.yaml").to_str().unwrap(),
+            ],
+        );
+        assert!(out.status.success());
+        (std::fs::read_to_string(&target).unwrap(), json(&out))
+    };
+    assert!(!page.contains("uncommitted configuration changes"));
+}
+
+#[test]
+fn a_type_that_declares_no_initial_status_is_never_named_by_the_progress_note() {
+    let statuses = "    statuses:
+      values: [Open, Shipped]
+      success: [Shipped]
+";
+    let dir = repo("progress-no-initial", &two_type_config(statuses), |dir| {
+        write(
+            dir,
+            "docs/staged/STD-1-a.md",
+            &record("Status: Open", "", "# 1 — A"),
+        );
+    });
+    let (html, answer) = board_page(&dir);
+    assert!(
+        !html.contains("statuses.progress"),
+        "{}",
+        section_of(&html, "under-way")
+    );
+    assert!(answer.get("notices").is_none(), "{answer}");
+    assert_eq!(
+        export(&dir)["type_roles"]["staged"]["unplaced_statuses"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn a_backtick_in_a_type_or_status_name_does_not_turn_the_note_into_code() {
+    let statuses = "    statuses:
+      values: [Idea, \"Ro`lling\", Shipped]
+      success: [Shipped]
+      initial: [Idea]
+      transitions:
+        Idea: [\"Ro`lling\"]
+        \"Ro`lling\": [Shipped]
+";
+    let dir = repo("progress-tick", &two_type_config(statuses), |dir| {
+        write(
+            dir,
+            "docs/staged/STD-1-a.md",
+            &record("Status: Idea", "", "# 1 — A"),
+        );
+    });
+    let (html, answer) = board_page(&dir);
+    let note = section_of(&html, "under-way");
+    assert!(
+        note.contains("its records in Ro&#39;lling show as open")
+            && note.matches("<code>").count() == 1,
+        "{note}"
+    );
+    assert_eq!(
+        answer["notices"][0]["detail"]["statuses"],
+        serde_json::json!(["Ro`lling"]),
+        "the notice keeps the name as declared"
     );
 }
 

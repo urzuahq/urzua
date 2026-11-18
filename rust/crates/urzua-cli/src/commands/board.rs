@@ -231,9 +231,6 @@ fn write_file(config_path: Option<PathBuf>, out: Option<PathBuf>) -> Result<Exit
     }))
 }
 
-/// A type that declares statuses between its start and its end but no
-/// `statuses.progress` shows those records as open; an agent reading only this
-/// answer learns it here, as the page's *Under way* label says it.
 fn progress_notices(export: &ExportReport) -> Vec<Notice> {
     progress_gaps(export)
         .into_iter()

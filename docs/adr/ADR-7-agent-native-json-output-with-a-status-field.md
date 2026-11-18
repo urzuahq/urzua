@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
-Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:d2a0b8266ddc3bcaaba21d2da699b49fb6b22904baa1c85780fbddadffe35a0d, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:0732259ac7fd3f9cac50e766de40f28931b53de47a74a5b4dab66725defb78d0, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -110,3 +110,4 @@ Cheap to revise before v0 ships to any external user.
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` aff43b81c05d -> fa51cad556f7. Reason: report.rs: ExportedRecord flattens a RecordView and raw_text becomes optional, ExportedSectionEntry gains ticked, unticked and items, ExportReport gains type_roles and read, ChecklistItem and ReadStamp are new; no other report changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` fa51cad556f7 -> 48743ee96815. Reason: report.rs: a section's content is optional, absent under --no-text; nothing else changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 48743ee96815 -> d2a0b8266ddc. Reason: report.rs: ReadStamp gains the boolean uncommitted_config_changes beside uncommitted_record_changes; nothing this record's claim rests on changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` d2a0b8266ddc -> 0732259ac7fd. Reason: report.rs: ReadStamp's new uncommitted_config_changes is an Option<bool> (null when the file cannot be placed in the repository or git cannot be asked); nothing this record's claim rests on changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

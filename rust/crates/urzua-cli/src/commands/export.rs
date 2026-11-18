@@ -206,10 +206,31 @@ pub(crate) fn git_identity(repo_root: &Path) -> (Option<String>, Option<String>)
     )
 }
 
+/// Whether the configuration file differs from the commit. `None` when the
+/// file cannot be placed inside the repository (a path that does not resolve,
+/// or a link out of it) or git cannot be asked: never a guess of `false`.
+fn config_changed(repo_root: &Path, config_path: &Path) -> Option<bool> {
+    let root = std::fs::canonicalize(repo_root).ok()?;
+    let file = std::fs::canonicalize(config_path).ok()?;
+    let relative = file.strip_prefix(&root).ok()?;
+    let pathspec = format!(":(literal){}", relative.to_string_lossy());
+    let out = urzua_io::git::stdout_in(
+        repo_root,
+        &[
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            &pathspec,
+        ],
+    )
+    .ok()?;
+    Some(!String::from_utf8_lossy(&out).trim().is_empty())
+}
+
 /// The commit and branch the working tree is on, whether any file under a
-/// record directory or the configuration file differs from the commit, and when
-/// this was read. A failure
-/// to ask git is an absent value, never a guess.
+/// record directory or the configuration file differs from the commit, and
+/// when this was read. A failure to ask git is an absent value, never a guess.
 fn read_stamp(repo_root: &Path, config_path: &Path, config: &Config) -> ReadStamp {
     let git = |args: &[&str]| git_line(repo_root, args);
     let mut status = vec!["status", "--porcelain", "--untracked-files=all", "--"];
@@ -219,20 +240,11 @@ fn read_stamp(repo_root: &Path, config_path: &Path, config: &Config) -> ReadStam
         .flat_map(|t| t.all_dirs())
         .collect();
     status.extend(&dirs);
-    let config_file = config_path.strip_prefix(repo_root).unwrap_or(config_path);
-    let config_file = config_file.to_string_lossy();
     ReadStamp {
         commit: git(&["rev-parse", "HEAD"]),
         branch: git(&["symbolic-ref", "--short", "-q", "HEAD"]),
         uncommitted_record_changes: !dirs.is_empty() && git(&status).is_some(),
-        uncommitted_config_changes: git(&[
-            "status",
-            "--porcelain",
-            "--untracked-files=all",
-            "--",
-            &config_file,
-        ])
-        .is_some(),
+        uncommitted_config_changes: config_changed(repo_root, config_path),
         time: urzua_io::read_instant(),
     }
 }

@@ -47,9 +47,7 @@
       "value_fields": [],
       "statuses_declared": true,
       "progress_declared": false,
-      "unplaced_statuses": [
-        "Open"
-      ],
+      "unplaced_statuses": [],
       "waits_through": [
         "Depends-on"
       ],

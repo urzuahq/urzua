@@ -487,8 +487,8 @@ impl<'a> Page<'a> {
         format!("<li {}>{body}{detail}</li>", self.attrs(i, level, parent))
     }
 
-    /// The finished and dropped records under `ids`, at any depth, that are not
-    /// among `ids`: collapsed somewhere on the page along with them.
+    /// Counts finished and dropped work records below `ids` at any depth, which
+    /// may be collapsed in another fold rather than this one.
     fn closed_below(&self, ids: &[usize]) -> usize {
         let mut seen: HashSet<usize> = ids.iter().copied().collect();
         let mut stack: Vec<usize> = ids.to_vec();
@@ -651,7 +651,7 @@ fn top(page: &Page<'_>, digest: Option<&str>) -> String {
     } else {
         ""
     };
-    let config_changes = if read.uncommitted_config_changes {
+    let config_changes = if read.uncommitted_config_changes == Some(true) {
         ", uncommitted configuration changes"
     } else {
         ""
@@ -832,18 +832,25 @@ fn names_phrase(names: &[&str]) -> String {
     }
 }
 
+/// A name in a note, which `with_code` splits at backticks: a backtick in a
+/// type or status name would pair with the note's own and turn text into code.
+fn without_backticks(name: &str) -> String {
+    name.replace('`', "'")
+}
+
 fn no_transitions_note(page: &Page<'_>) -> String {
-    let names: Vec<&str> = page
+    let names: Vec<String> = page
         .e
         .type_roles
         .iter()
         .filter(|(_, role)| role.gated_without_transitions)
-        .map(|(name, _)| name.as_str())
+        .map(|(name, _)| without_backticks(name))
         .collect();
     if names.is_empty() {
         return String::new();
     }
     let one = names.len() == 1;
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
     format!(
         "{} {} a gate but no transitions, so the next move of {} records cannot be read.",
         names_phrase(&names),
@@ -875,7 +882,10 @@ pub(crate) fn progress_gap_sentence(type_name: &str, statuses: &[String]) -> Str
 fn progress_note(page: &Page<'_>, none_under_way: bool) -> String {
     let sentences: Vec<String> = progress_gaps(page.e)
         .into_iter()
-        .map(|(name, statuses)| progress_gap_sentence(name, statuses))
+        .map(|(name, statuses)| {
+            let statuses: Vec<String> = statuses.iter().map(|s| without_backticks(s)).collect();
+            progress_gap_sentence(&without_backticks(name), &statuses)
+        })
         .collect();
     if sentences.is_empty() {
         return String::new();

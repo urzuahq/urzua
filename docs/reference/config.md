@@ -199,7 +199,7 @@ requires `targets`, and a type declares at most one.
 | `success`, `failure` | Which values are a good or a bad outcome. |
 | `implementable` | Statuses whose records code may legitimately keep citing. |
 | `claim_retained` | Statuses that keep a record's evidence claim even though it is no longer current. |
-| `initial` | Statuses a record may be filed in. Declared only with `transitions`; one without the other is a load error. |
+| `initial` | Statuses a record may be filed in. Declared only with `transitions`; one without the other is a load error. `urzua board` names a type that has statuses between its start and its end but no `statuses.progress` only when `initial` is declared, since without it a start status cannot be told from an in-between one. |
 | `transitions` | `{From: [To, ...]}`: the lawful moves. |
 | `require`, `forbid` | Lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields: [field, ...]}`: fields that must, or must not (absent or blank), hold a value when the status is one of `when` and each `when_field` field holds one of its values. Declare `when`, `when_field` or both. `status.required-field-missing` is on at `error` wherever some type declares a `require` entry, and `status.forbidden-field-present` wherever one declares a `forbid` entry; a rule you name under `rules:` keeps the level you give, and `urzua doctor` warns of an entry whose rule you turned off. A finding says whether the field is `missing from the header` or `empty`, and names the values the field may hold when the type declares `field_values` for it. |
 | `pending` | The type's placeholder vocabulary: whole values (`unknown`) and `{pattern: <regex>}` entries that count as missing. |

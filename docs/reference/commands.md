@@ -507,7 +507,7 @@ The ids in `waiting_on`, `refers_to`, `referred_by`, `parent` and `children` are
 an id as the referring header wrote it. `parent` and
 `children` exist only where a `pointer_fields` entry declares `part_of: true` (see
 [config](config.md#containment-part_of)). `read` names the commit, the branch, whether a record file has
-uncommitted changes (`uncommitted_record_changes`), whether the configuration file has (`uncommitted_config_changes`), and the time, to the second. The full contract is in `SPEC-1`.
+uncommitted changes (`uncommitted_record_changes`), whether the configuration file has (`uncommitted_config_changes`, `null` when the file cannot be placed inside the repository or git cannot be asked), and the time, to the second. The full contract is in `SPEC-1`.
 
 ## index
 

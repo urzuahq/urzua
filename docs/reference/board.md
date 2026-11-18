@@ -68,7 +68,7 @@ The file `urzua board` writes carries the summary, computed when it was written.
 
 A plain, dense list. The header is one line: the name, then the read stamp in monospace (branch, short commit, time, and
 that the page shows the working tree, with a note when a record file has uncommitted changes and, separately, when the
-configuration file has: the configuration changes what the page shows even when no record did). Under it, one line from
+configuration file has (the key is `null` in the export when the file cannot be placed inside the repository): the configuration changes what the page shows even when no record did). Under it, one line from
 `urzua check` (its status and the unwaived errors, warnings and infos) in the file; a served page links `/check`
 for it instead. Then a search box over id and title, and a filter by state with the count each selects: All, Needs you,
 Under way, Ready, and the states records are in (a scrolling row at phone width).
@@ -107,7 +107,7 @@ again among the reference fields.
 
 The state comes only from what the configuration declares. A type that declares no `statuses.progress` cannot say work
 has begun, so its records that are neither finished nor dropped are *open*. The *Under way* label names each such type that
-declares a status which is none of `initial`, `success` and `failure` (a type with only those has nothing to declare), with
+declares a status which is none of `initial`, `success` and `failure` (a type with only those has nothing to declare, and a type that declares no `initial` is never named: without it the board cannot tell a start status from an in-between one, so it does not guess), with
 those statuses, and says that a parent's state cannot disagree with its children until a progress set is declared: add `statuses.progress` under the type's `statuses` to
 name the statuses that mean work has begun. *Not started* is used only for a type that declares a progress set, for a
 status outside it. Nothing is left off the page: its rows number as many as `urzua export` returns records.

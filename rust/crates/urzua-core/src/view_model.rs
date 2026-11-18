@@ -164,7 +164,9 @@ pub struct TypeRole {
     /// The declared statuses that are none of `initial`, `success` and
     /// `failure`, for a type that declares statuses and no `statuses.progress`:
     /// the ones a progress set would say are under way. Empty when a progress
-    /// set is declared or every status is placed.
+    /// set is declared, every status is placed, or the type declares no
+    /// `initial`: without it a start status cannot be told from an in-between
+    /// one.
     pub unplaced_statuses: Vec<String>,
     /// The fields through which a record of the type states what it waits on:
     /// the forward field of each pair in `roadmap.pairs` that the type carries.
@@ -427,7 +429,7 @@ fn gated_moves(
 }
 
 fn unplaced_statuses(decl: &StatusDecl) -> Vec<String> {
-    if !decl.progress.is_empty() {
+    if !decl.progress.is_empty() || decl.initial.is_empty() {
         return Vec::new();
     }
     decl.values
