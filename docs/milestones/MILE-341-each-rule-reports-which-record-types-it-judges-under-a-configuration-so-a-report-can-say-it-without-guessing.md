@@ -13,7 +13,7 @@ Each rule exposes, from its own code, which record types it would judge under a 
 
 ## Why
 
-`urzua explain --types` was built to say which rules apply to each type. Five reviews on 2026-11-17 found that statement false in a new way each round: a rule listed for a type whose records it never reads, a rule that does read them left out, a type named like a setting key tied to a rule through that key. The cause was the same every time: which records a rule judges is decided inside the rule, and any table or walk kept outside the rules drifts from it. The command now says nothing about which rules apply and points at `urzua check`. An adopting repository's agent reported that this does not hurt in practice, so this is not urgent; it is the only sound way to bring the statement back.
+`urzua explain --types` was built to say which rules apply to each type. Five reviews on 2026-11-17 found that statement false in a new way each round: a rule listed for a type whose records it never reads, a rule that does read them left out, a type named like a setting key tied to a rule through that key. The cause was the same every time: which records a rule judges is decided inside the rule, and any table or walk kept outside the rules drifts from it. As released in 0.4.9 the command says nothing about which rules apply and points at `urzua check`. An adopting repository's agent reported that this does not hurt in practice, so this is not urgent; it is the way to bring the statement back that the reviews did not rule out.
 
 ## Done means
 

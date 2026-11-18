@@ -13,7 +13,7 @@ A pull request that changes the harness bundle can bring this repository's own i
 
 ## Why
 
-The files `urzua harness install` writes into this repository (`.claude/`, the plugin's hooks, `.urzua/harness.lock`) are protected paths, so an agent may not edit them. A test reads them and fails when they differ from what the current bundle renders. So every change to the bundle leaves its pull request red until someone outside the agent applies the regenerated files. On 2026-11-17 one pull request needed ten such patches, each written by the agent to a file and applied by the orchestrator through the shell. While that test was red it also hid five other failing repository-wide tests for seven review rounds, because nobody read past the known failure.
+The files `urzua harness install` writes into this repository (`.claude/`, the plugin's hooks, `.urzua/harness.lock`) are protected paths, so an agent may not edit them. A test reads them and fails when they differ from what the current bundle renders. So every change to the bundle leaves its pull request red until someone outside the agent applies the regenerated files. On 2026-11-17 one pull request needed ten such patches, each written by the agent to a file and applied by the orchestrator through the shell. While that test was red it also hid five other failing repository-wide tests for seven review rounds, because the known failure was taken to be the only one.
 
 ## Done means
 
