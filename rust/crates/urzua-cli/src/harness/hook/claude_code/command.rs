@@ -10,17 +10,50 @@
 /// under `harness.guardrails`, in the block form or the one-line `{...}` form,
 /// with only the keys it may carry (`enabled: true|false`,
 /// `on_unjudged: allow|deny`, and for `editor-hook` `pending_pair:
-/// allow|refuse`), a value plain or quoted. Anything the real parser might
-/// reject or read differently is not certain, so the command refuses: a quoted
-/// key, an anchor, alias, tag or merge key, a second document, unbalanced
-/// brackets, an unterminated quote, a tab in indentation, a repeated key or a
-/// child indented unlike its siblings in a guardrail block, a value on the next
-/// line, or the guardrails written inline. The name of a guardrail elsewhere (in
-/// a value, another section) is not read. Plain POSIX awk (no `match` arrays,
-/// no interval expressions, `\047` for a quote) fed on stdin so no path is
-/// read as an assignment: mawk, gawk and busybox awk give the same answer on
-/// every shape the tests feed.
-const CERTAIN_ALLOW: &str = r##"awk 'function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s} function unq(v){if(v~/^"[^"\\]*"$/||v~/^\047[^\047]*\047$/)return substr(v,2,length(v)-2);return v} function item(k,v,  w){if(k in seen)u=1;seen[k]=1;w=unq(v);if(k=="enabled"&&v=="true")en=1;else if(k=="enabled"&&v=="false")en=0;else if(k=="on_unjudged"&&w=="allow"){al=1;as=1}else if(k=="on_unjudged"&&w=="deny"){al=0;as=1}else if(k=="pending_pair"&&nm=="editor-hook"&&(w=="allow"||w=="refuse"))x=1;else u=1} function shut(){if(blk&&en&&(nm=="editor-hook"?(as&&!al):!al))c=1;blk=0} function start(n){shut();nm=n;blk=1;bi="";en=0;al=0;as=0;split("",seen)} {l=$0;sub(/\r$/,"",l);if(NR==1)sub(/^\357\273\277/,"",l);if(l~/^[ \t]*#/)next;p=index(l," #");q=index(l,"\t#");if(q&&(!p||q<p))p=q;if(p)l=substr(l,1,p-1);if(l~/^[ \t]*$/)next;ws=l;sub(/[^ \t].*/,"",ws);if(index(ws,"\t"))u=1;i=length(ws);t=trim(l);if(NR>1&&t~/^(---|[.][.][.])/)u=1;if(NR==1&&t=="---")next;if(t~/:[ \t]+[&*!]/||t~/^-[ \t]+[&*!]/||t~/[[{,][ \t]*[&*!][^ \t,]/||t~/^[&*!]/||index(t,"<<:"))u=1;if(gsub(/\[/,"[",t)!=gsub(/\]/,"]",t)||gsub(/\{/,"{",t)!=gsub(/\}/,"}",t))u=1;k="";v="";if(match(t,/^[^:]*:([ \t]|$)/)){k=substr(t,1,RLENGTH);sub(/:[ \t]*$/,"",k);v=trim(substr(t,RLENGTH+1))};if(k~/^["\047]/)u=1;if(v~/^"/&&v!~/^"[^"\\]*"$/)u=1;if(v~/^\047/&&v!~/^\047[^\047]*\047$/)u=1;if(i==0){shut();ing=0;inh=0;hi="";if(k=="harness"){if(v!="")u=1;else inh=1};next};if(!inh)next;if(hi=="")hi=i;if(i<hi){u=1;next};if(i==hi){shut();ing=0;if(k=="guardrails"){if(v!="")u=1;else{ing=1;gi=""}};next};if(!ing)next;if(gi=="")gi=i;if(i<gi){u=1;next};if(i==gi){shut();if(v~/acceptance|protected-paths|editor-hook/||gsub(/\{/,"{",v)>1)u=1;if(k=="acceptance"||k=="protected-paths"||k=="editor-hook"){start(k);if(v~/^[{].*[}]$/){b=v;sub(/^[{]/,"",b);sub(/[}]$/,"",b);n=split(b,parts,",");for(j=1;j<=n;j++){e=trim(parts[j]);if(match(e,/^[^:]*:[ \t]+/)){kk=substr(e,1,RLENGTH);sub(/:[ \t]*$/,"",kk);item(kk,trim(substr(e,RLENGTH+1)))}else u=1};shut()}else if(v!="")u=1};next};if(!blk)next;if(bi=="")bi=i;if(i!=bi){u=1;next};if(v=="")u=1;item(k,v)} END{shut();if(!u&&!c)print "allow"}' < "$k" 2>/dev/null"##;
+/// allow|refuse`), a value plain or quoted.
+///
+/// Each line is scanned as YAML reads it: a quote opens a quoted scalar only
+/// where a value starts (so `it's` stays plain), `#` after a blank starts a
+/// comment only outside quotes, and brackets count flow depth only where a
+/// value starts or inside a flow, carried across lines. The lines of a block
+/// scalar (`|`, `>`) and of a multi-line flow collection are content, never
+/// keys, so quoted scalars and flow collections anywhere outside the guardrails
+/// are ordinary YAML. Not certain, so refused, wherever it appears: an anchor,
+/// alias, tag or merge key outside quotes, a second document, a quote or flow
+/// left open at the end of a line or of the file, a flow continuation line not
+/// indented past its opening line, a tab in indentation, and a document whose
+/// root is not a block mapping. Not certain at a key position that can name
+/// `harness`, `guardrails` or a guardrail: a quoted key, a complex or flow
+/// key, or a list item. In a guardrail block: a repeated key, a child indented
+/// unlike its siblings, or a value on the next line. The guardrails written
+/// inline at the `harness:` level are refused too. Plain POSIX awk (no `match`
+/// arrays, no interval expressions, `\047` for a quote) fed on stdin so no
+/// path is read as an assignment; written over lines here and joined into one
+/// for the command. mawk, gawk and busybox awk give the same answer on every
+/// shape the tests feed.
+const CERTAIN_ALLOW: &str = r##"awk 'function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s}
+function unq(v){if(v~/^"[^"\\]*"$/||v~/^\047[^\047]*\047$/)return substr(v,2,length(v)-2);return v}
+function item(k,v,  w){if(k in seen)u=1;seen[k]=1;w=unq(v);if(k=="enabled"&&v=="true")en=1;else if(k=="enabled"&&v=="false")en=0;else if(k=="on_unjudged"&&w=="allow"){al=1;as=1}else if(k=="on_unjudged"&&w=="deny"){al=0;as=1}else if(k=="pending_pair"&&nm=="editor-hook"&&(w=="allow"||w=="refuse"))x=1;else u=1}
+function shut(){if(blk&&en&&(nm=="editor-hook"?(as&&!al):!al))c=1;blk=0}
+function start(n){shut();nm=n;blk=1;bi="";en=0;al=0;as=0;split("",seen)}
+function scan(l,  n,j,ch,lt,gap,st){n=length(l);bl="";cut=l;lt="";gap=1;q=0;for(j=1;j<=n;j++){ch=substr(l,j,1);if(q==1){if(ch=="\047"){if(substr(l,j+1,1)=="\047"){j++;bl=bl "xx";continue}q=0;bl=bl ch}else bl=bl "x";continue}if(q==2){if(ch=="\\"){j++;bl=bl "xx";continue}if(ch=="\""){q=0;bl=bl ch}else bl=bl "x";continue}if(ch==" "||ch=="\t"){gap=1;bl=bl ch;continue}if(ch=="#"&&gap){cut=substr(l,1,j-1);break}st=(lt==""||index("[{,",lt)>0||(gap&&index(":-?",lt)>0));if((ch=="\047"||ch=="\"")&&st)q=(ch=="\047")?1:2;else if((ch=="["||ch=="{")&&(st||dp>0))dp++;else if((ch=="]"||ch=="}")&&dp>0)dp--;bl=bl ch;lt=ch;gap=0}return bl}
+function hz(s){if(s~/:[ \t]+[&*!]/||s~/^(-[ \t]+)+[&*!]/||s~/[[{,][ \t]*[&*!][^ \t,]/||s~/^[&*!]/||s~/<<[ \t]*:/)u=1}
+{l=$0;sub(/\r$/,"",l);if(NR==1)sub(/^\357\273\277/,"",l);ws=l;sub(/[^ \t].*/,"",ws);i=length(ws);t0=substr(l,i+1);
+if(bs){if(t0==""||i>bk)next;bs=0}
+if(t0==""||t0~/^#/)next;
+if(index(ws,"\t"))u=1;
+if(dp>0){if(i<=fi)u=1;s=trim(scan(t0));if(q)u=1;hz(s);next}
+s=trim(scan(t0));if(q)u=1;t=trim(cut);if(t=="")next;hz(s);if(dp>0)fi=i;
+if(i==0&&t~/^(---|[.][.][.])([ \t]|$)/){if(seen0||t!="---")u=1;seen0=1;next}seen0=1;
+if(s~/(^|:|-)[ \t]+[|>][-+0-9]*$/||s~/^[|>][-+0-9]*$/){tt=t;d=0;while(match(tt,/^-[ \t]+/)){d+=RLENGTH;tt=substr(tt,RLENGTH+1)}bs=1;bk=(tt~/^[|>]/)?i:i+d}
+k="";v="";if(match(t,/^[^:]*:([ \t]|$)/)){k=substr(t,1,RLENGTH);sub(/:[ \t]*$/,"",k);v=trim(substr(t,RLENGTH+1))};qk=(k~/^["\047]/||t~/^[?{[]/);
+if(i==0){shut();ing=0;inh=0;hi="";if(qk)u=1;if(t~/^-/){if(lk==""||lk=="harness"||lv!="")u=1;next}lk=k;lv=v;if(k=="harness"){if(v!="")u=1;else inh=1};next};
+if(!inh)next;if(hi=="")hi=i;if(i<hi){u=1;next};
+if(i==hi){shut();ing=0;if(qk||t~/^-/)u=1;if(k=="guardrails"){if(v!="")u=1;else{ing=1;gi=""}};next};
+if(!ing)next;if(gi=="")gi=i;if(i<gi){u=1;next};
+if(i==gi){shut();if(qk||t~/^-/)u=1;if(v~/acceptance|protected-paths|editor-hook/||gsub(/\{/,"{",v)>1)u=1;if(k=="acceptance"||k=="protected-paths"||k=="editor-hook"){start(k);if(v~/^[{].*[}]$/){b=v;sub(/^[{]/,"",b);sub(/[}]$/,"",b);n=split(b,parts,",");for(j=1;j<=n;j++){e=trim(parts[j]);if(match(e,/^[^:]*:[ \t]+/)){kk=substr(e,1,RLENGTH);sub(/:[ \t]*$/,"",kk);item(kk,trim(substr(e,RLENGTH+1)))}else u=1};shut()}else if(v!="")u=1};next};
+if(!blk)next;if(bi=="")bi=i;if(i!=bi){u=1;next};if(v=="")u=1;item(k,v)}
+END{if(dp>0||q)u=1;shut();if(!u&&!c)print "allow"}' < "$k" 2>/dev/null"##;
 
 /// The configurations that govern the session, found without the binary: from
 /// `CLAUDE_PROJECT_DIR` and from the working directory, each resolved to its
@@ -55,7 +88,8 @@ const FIX: &str = "Install urzua (https://github.com/urzuahq/urzua/blob/main/doc
 /// post-command and session-start hooks only ever report. `$w` holds no quote
 /// or backslash, so it is safe inside the JSON.
 pub fn hook_command(event: &str) -> Option<String> {
-    let find = FIND_CONFIG.replace("$(CERTAIN)", &format!("$({CERTAIN_ALLOW})"));
+    let certain = CERTAIN_ALLOW.replace('\n', " ");
+    let find = FIND_CONFIG.replace("$(CERTAIN)", &format!("$({certain})"));
     // `command -v` finds the binary without running it, so a missing one
     // writes nothing to stderr. The fallback reads the payload only to drain
     // it, so the host's write never meets a closed pipe.

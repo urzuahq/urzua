@@ -71,9 +71,12 @@ with certainty as open, it lets the call through with a notice. With any other, 
 until urzua is installed or upgraded, because without the binary it cannot tell a protected file from another.
 Read with certainty means: guardrails only at a key position under `harness.guardrails`, in the block form or the
 one-line `{...}` form, with only the keys a guardrail carries (`enabled: true|false`, `on_unjudged: allow|deny`,
-`pending_pair: allow|refuse`), values plain or quoted. A quoted key, an anchor, alias or tag, unbalanced brackets, a
-tab in indentation, a repeated key, a child indented unlike its siblings, `on_unjudged:` with its value on the next
-line, or a file that is not plain text is not certain, and is refused. So with the binary missing the hook closes
+`pending_pair: allow|refuse`), values plain or quoted. The rest of the file is read as YAML reads it: quoted
+scalars, comments, flow maps and lists (on one line or several) and block scalars anywhere else are ordinary and do
+not matter. Not certain, and refused: an anchor, alias, tag or merge key, a second document, a quote or bracket left
+open, a tab in indentation, a quoted, complex or list-item key where `harness`, `guardrails` or a guardrail could be
+named, a repeated key or a child indented unlike its siblings in a guardrail, `on_unjudged:` with its value on the
+next line, or a file that is not plain text. So with the binary missing the hook closes
 the gate in a governed session, and it cannot see beyond the session's directory.
 
 With urzua missing or too old, the hook decides from the session's directory only. A session rooted in a

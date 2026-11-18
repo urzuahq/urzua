@@ -369,7 +369,7 @@ fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, bool)> {
     let mut nul = g("    protected-paths: {enabled: false}\n");
     nul.insert(10, 0);
     // (name, config, the engine reads it as open)
-    vec![
+    let mut out = vec![
         ("an escaped key", Some(g("    \"protected\\x2dpaths\":\n      enabled: true\n")), false),
         ("a quoted key", Some(g("    \"protected-paths\":\n      enabled: true\n")), false),
         ("broken YAML", Some(format!("{TYPES}schema_version: [\nharness:\n  guardrails:\n    protected-paths: {{enabled: false}}\n{GATE}").into_bytes()), false),
@@ -379,11 +379,56 @@ fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, bool)> {
         ("a repeated key", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: deny\n      on_unjudged: allow\n")), false),
         ("a child deeper than its siblings", Some(g("    protected-paths:\n      enabled: false\n        on_unjudged: allow\n")), false),
         ("the configuration a directory", None, false),
+        ("an anchor outside the guardrails", Some(format!("{TYPES}x: &a [1]\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
+        ("a merge key outside the guardrails", Some(format!("{TYPES}base: {{a: 1}}\nx:\n  <<: {{a: 1}}\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
+        ("a quoted scalar left open", Some(format!("{TYPES}x: 'abc\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
+        ("a flow list continued at the margin", Some(format!("{TYPES}x: [a,\nharness: b]\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
+        ("a quoted harness key", Some(format!("{TYPES}\"harness\":\n  guardrails:\n    protected-paths: {{enabled: true}}\n{GATE}").into_bytes()), false),
+        ("a complex harness key", Some(format!("{TYPES}? harness\n: guardrails: {{protected-paths: {{enabled: true}}}}\n{GATE}").into_bytes()), false),
+        ("the whole document a flow map", Some(b"{schema_version: 2, harness: {guardrails: {protected-paths: {enabled: true}}}}\n".to_vec()), false),
+        ("harness a list", Some(format!("{TYPES}harness:\n- guardrails\n{GATE}").into_bytes()), false),
+        ("a list item among the guardrails", Some(g("    - protected-paths: {enabled: true}\n")), false),
         ("editor-hook with pending_pair, one line", Some(g("    editor-hook: {enabled: true, on_unjudged: allow, pending_pair: allow}\n")), true),
         ("editor-hook with pending_pair, block", Some(g("    editor-hook:\n      enabled: true\n      on_unjudged: allow\n      pending_pair: allow\n")), true),
         ("a double-quoted allow", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: \"allow\"\n")), true),
         ("a single-quoted allow", Some(g("    protected-paths: {enabled: true, on_unjudged: 'allow'}\n")), true),
         ("a guardrail's name in a value", Some(format!("description: Records the acceptance of a decision\n{TYPES}harness:\n  guardrails:\n    session-start: {{enabled: true}}\n{GATE}").into_bytes()), true),
+    ];
+    for (name, before) in open_elsewhere() {
+        out.push((
+            name,
+            Some(format!("{before}{OPEN_TAIL}").into_bytes()),
+            true,
+        ));
+    }
+    out
+}
+
+const OPEN_TAIL: &str = "harness:\n  guardrails:\n    editor-hook: {enabled: true}\n";
+
+/// Ordinary YAML outside the guardrails, each followed by an open
+/// `harness.guardrails`: none of it may make the configuration uncertain.
+fn open_elsewhere() -> Vec<(&'static str, String)> {
+    let placeholders: Vec<String> = (0..40)
+        .map(|n| {
+            format!("'Describe step {n} (e.g.: `run it`) \u{2014} then; check {{x}} [y], z #{n}'")
+        })
+        .collect();
+    vec![
+        ("a flow map with a single-quoted value in a list item", "x:\n  - {a: 'b', c: d}\n".into()),
+        ("a flow map with one single-quoted value in a list item", "x:\n  - {name: 'a'}\n".into()),
+        ("a section list item with a quoted name", "x:\n  - {name: 'TL;DR', shape: y-statement}\n".into()),
+        ("a flow map in a list item", "x:\n  - {a: b, c: d}\n".into()),
+        ("a flow map with a single-quoted value", "x: {a: 'b'}\n".into()),
+        ("a block list item with a quoted value", "x:\n  - name: 'TL;DR'\n".into()),
+        ("flow maps with double-quoted and unquoted values, nested in lists", "a:\n  b:\n    - c:\n        - {d: \"e\", f: g}\n        - {h: 'i', j: \"k\"}\n    - [l, 'm', \"n\"]\n".into()),
+        ("quoted strings holding punctuation", "a: 'x;y#z: {w} [v], u'\nb: \"x;y#z: {w} [v], u\"\nc: 'it''s'\nd: [ '}', \"]\", '{[' ]\n".into()),
+        ("a multi-line flow list", "a: [one,\n    'two: 2',\n    \"three, 3\"]\nb: {c: d,\n    e: 'f'}\n".into()),
+        ("a long inline list of quoted placeholders", format!("placeholders: [{}]\n", placeholders.join(", "))),
+        ("a literal block scalar with guardrail-looking lines", "notes: |\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n  it's [ { '\n".into()),
+        ("a folded block scalar with guardrail-looking lines", "notes: >-\n  acceptance: {enabled: true}\n  editor-hook:\n    on_unjudged: deny\n".into()),
+        ("comments holding quotes and brackets", "# it's a \"comment\" [with {brackets}\na: b # don't [ {\n".into()),
+        ("a plain scalar with an apostrophe", "a: it's plain\nb: x [y\n".into()),
     ]
 }
 
@@ -544,4 +589,199 @@ fn without_urzua_silence_is_stdout_and_stderr_and_post_command_says_one_short_li
             "{out}"
         );
     }
+}
+
+/// Every configuration people actually write that this repository holds: its
+/// own, the acceptance corpora and fixtures, what `urzua init` writes for each
+/// profile and in adopt mode, and the YAML examples in the reference docs that
+/// load. On each, the fallback must give the binary's own unjudged answer.
+fn real_configs() -> Vec<(String, Vec<u8>)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let mut out = vec![(
+        ".urzua/config.yaml".to_string(),
+        std::fs::read(root.join(".urzua/config.yaml")).unwrap(),
+    )];
+    let mut stack = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("tests")];
+    let mut found = Vec::new();
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "yaml" || x == "yml") {
+                let text = std::fs::read_to_string(&p).unwrap_or_default();
+                let config = text
+                    .lines()
+                    .any(|l| l.starts_with("schema_version:") || l.starts_with("record_types:"));
+                if config {
+                    found.push(p);
+                }
+            }
+        }
+    }
+    found.sort();
+    for p in found {
+        let name = p
+            .strip_prefix(&root)
+            .unwrap_or(&p)
+            .to_string_lossy()
+            .to_string();
+        out.push((name, std::fs::read(&p).unwrap()));
+    }
+    let help = common::urzua().args(["init", "--help"]).output().unwrap();
+    let help = String::from_utf8_lossy(&help.stdout).to_string();
+    let profiles: Vec<String> = help
+        .split("built-in profiles:")
+        .nth(1)
+        .and_then(|r| r.lines().next())
+        .unwrap_or("")
+        .split(',')
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
+    assert!(
+        !profiles.is_empty(),
+        "the profiles `urzua init` offers: {help}"
+    );
+    let mut runs: Vec<(String, Vec<String>)> = profiles
+        .iter()
+        .map(|p| {
+            (
+                format!("init --types {p}"),
+                vec!["--types".to_string(), p.clone()],
+            )
+        })
+        .collect();
+    runs.push((
+        format!("init --types {}", profiles.join(",")),
+        vec!["--types".to_string(), profiles.join(",")],
+    ));
+    runs.push(("init (adopt)".to_string(), Vec::new()));
+    for (name, args) in runs {
+        let dir = common::TempDir::new("urzua-fallback-init");
+        git(&dir, &["init", "-q"]);
+        if args.is_empty() {
+            std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+            std::fs::write(
+                dir.join("docs/adr/ADR-1-use-postgres.md"),
+                "---\nStatus: Accepted\nDate: 2026-01-01\n---\n# ADR-1: Use postgres\n",
+            )
+            .unwrap();
+            git(&dir, &["add", "-A"]);
+        }
+        let res = common::urzua()
+            .arg("init")
+            .args(&args)
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        let config = std::fs::read(dir.join(".urzua/config.yaml"))
+            .unwrap_or_else(|_| panic!("{name} wrote a configuration: {res:?}"));
+        out.push((name, config));
+    }
+    let mut docs: Vec<PathBuf> = std::fs::read_dir(root.join("docs/reference"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "md"))
+        .collect();
+    docs.push(root.join("README.md"));
+    docs.sort();
+    for doc in docs {
+        let text = std::fs::read_to_string(&doc).unwrap();
+        let mut block: Option<String> = None;
+        let mut indent = 0;
+        let mut n = 0;
+        for line in text.lines() {
+            let t = line.trim_start();
+            match &mut block {
+                None if t == "```yaml" || t == "```yml" => {
+                    indent = line.len() - t.len();
+                    block = Some(String::new());
+                }
+                Some(b) if t.starts_with("```") => {
+                    n += 1;
+                    let parsed = yaml_serde::from_str::<yaml_serde::Value>(b);
+                    if parsed.is_ok_and(|v| v.is_mapping()) {
+                        let name = format!(
+                            "{} yaml block {n}",
+                            doc.file_name().unwrap().to_string_lossy()
+                        );
+                        out.push((name, b.clone().into_bytes()));
+                    }
+                    block = None;
+                }
+                Some(b) => {
+                    b.push_str(line.get(indent..).unwrap_or(t));
+                    b.push('\n');
+                }
+                None => {}
+            }
+        }
+    }
+    out
+}
+
+/// The fallback's answer for one configuration: 2 refuses, 1 lets the call
+/// through with its notice, 0 is silent.
+fn fallback_rank(out: &str) -> u8 {
+    if denied(out) {
+        2
+    } else {
+        u8::from(!out.trim().is_empty())
+    }
+}
+
+/// Real configurations on which the fallback may refuse where the binary
+/// would not, each with why. Empty: on valid configurations people write,
+/// "not certain" is a bug.
+const LEGITIMATELY_UNCERTAIN: &[(&str, &str)] = &[];
+
+#[test]
+fn without_urzua_every_real_configuration_is_read_as_the_binary_reads_it() {
+    let cmds = commands();
+    let configs = real_configs();
+    assert!(
+        configs.len() > 30,
+        "the corpus found the configurations: {}",
+        configs.len()
+    );
+    let mut disagreements = Vec::new();
+    for (name, config) in &configs {
+        let dir = repo_with("real", Some(config));
+        let payload = ordinary_payload(&dir);
+        // The binary's own decision where the engine gives no verdict.
+        let out = common::run_hook(&dir, "edit", &payload, Some(&["false"]), Some(&dir), &[]);
+        let binary = fallback_rank(&String::from_utf8(out.stdout).unwrap());
+        for combo in combos() {
+            let (out, _) = run(
+                &cmds["PreToolUse"],
+                &combo,
+                &dir.to_string_lossy(),
+                &dir,
+                &payload,
+                false,
+            );
+            let fallback = fallback_rank(&out);
+            assert!(
+                fallback >= binary,
+                "{name} {:?} {:?}: the fallback ({fallback}) is more permissive than the binary ({binary})",
+                combo.shell, combo.awk
+            );
+            let excused = LEGITIMATELY_UNCERTAIN.iter().any(|(n, _)| n == name);
+            if fallback != binary && !excused {
+                disagreements.push(format!(
+                    "{name} {:?} {:?}: binary {binary}, fallback {fallback}",
+                    combo.shell, combo.awk
+                ));
+            }
+        }
+    }
+    assert!(
+        disagreements.is_empty(),
+        "{} configurations read: {}",
+        configs.len(),
+        disagreements.join("\n")
+    );
+    eprintln!("{} real configurations read alike", configs.len());
 }
