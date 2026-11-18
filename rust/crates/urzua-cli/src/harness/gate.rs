@@ -34,6 +34,23 @@ use urzua_core::rules;
 pub(super) struct Denial {
     pub guardrail: &'static str,
     pub reason: String,
+    /// Set for a move into a gated status, the one denial a person may answer
+    /// in the session when `acceptance.in_session` is `ask`.
+    pub gated_move: Option<GatedMove>,
+}
+
+/// A move of one record into a status a gate reserves, as read from the
+/// record and the configuration.
+#[derive(Debug, Clone)]
+pub(super) struct GatedMove {
+    pub rel: PathBuf,
+    pub record_type: String,
+    pub field: String,
+    /// The status it leaves; `None` for a record filed straight at the gated one.
+    pub from: Option<String>,
+    pub to: String,
+    pub group: String,
+    pub gate: String,
 }
 
 fn status_of(config: &Config, rel: &Path, text: &str) -> Option<(String, String)> {
@@ -184,9 +201,13 @@ pub(super) fn engine_owned(override_log: Option<&str>) -> Vec<String> {
     let mut owned: Vec<String> = [
         ".urzua/cache",
         super::lock::LOCK_PATH,
+        // The whole git directory: its hooks, its config, the hook's claims
+        // under `urzua`, and the `commondir` files that say where all of those
+        // are. The walk for hard links never enters `.git`
+        // itself, so the parts a link could reach are named as well.
+        ".git",
         ".git/hooks",
         ".git/config",
-        // The hook's double-registration claims (`harness/hook/once.rs`).
         ".git/urzua",
     ]
     .iter()
@@ -203,9 +224,66 @@ pub(super) fn engine_owned(override_log: Option<&str>) -> Vec<String> {
 /// The engine-owned entry that covers `rel`, compared with Unicode case folding.
 fn owned_entry(config: &Config, rel: &Path) -> Option<String> {
     let folded = fold_path(&rel.to_string_lossy());
+    // A `.git` anywhere on the path: a nested or linked worktree's pointer
+    // file, or a git directory below the root.
+    if folded.split('/').any(|c| c == ".git") {
+        return Some(".git".to_string());
+    }
     engine_owned(config.override_log.as_deref())
         .into_iter()
         .find(|e| rules::path_matches_entry(Path::new(&folded), &fold_path(e)))
+}
+
+/// The refusal of an edit-tool write inside the git directory or the common
+/// directory of the repository that holds `path`, wherever those are: a
+/// separate git directory, a symlinked `.git`, a submodule's or a bare
+/// repository's. Its hooks and config are there, and a `commondir` file there
+/// says where they are. Only while `protected-paths` is on.
+pub(super) fn git_dir_denial(config: &Config, path: &Path) -> Option<Denial> {
+    if !config.harness.as_ref()?.enabled("protected-paths") {
+        return None;
+    }
+    git_dir_refusal(path)
+}
+
+/// [`git_dir_denial`] whatever the configuration says; the caller has read
+/// that `protected-paths` is on.
+pub(super) fn git_dir_refusal(path: &Path) -> Option<Denial> {
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().ok()?.join(path)
+    };
+    // The nearest directory that exists, and the rest of the path below it.
+    let mut dir = abs.parent()?.to_path_buf();
+    while !dir.is_dir() {
+        dir = dir.parent()?.to_path_buf();
+    }
+    let rest = abs.strip_prefix(&dir).ok()?.to_path_buf();
+    let real = dir.canonicalize().ok()?.join(rest);
+    let out = urzua_io::git::GitRun::new()
+        .dash_c(&dir)
+        .args(["rev-parse", "--absolute-git-dir", "--git-common-dir"])
+        .discard_stderr()
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let text = String::from_utf8(out.stdout).ok()?;
+    let inside = text.lines().find_map(|line| {
+        let p = PathBuf::from(line);
+        let p = if p.is_absolute() { p } else { dir.join(p) };
+        let p = p.canonicalize().ok()?;
+        (real.starts_with(&p)).then_some(p)
+    })?;
+    Some(Denial {
+        gated_move: None,
+        guardrail: "protected-paths",
+        reason: format!(
+            "{} is inside the git directory {} (its hooks, config and the files that say where they are); an agent's edit through the edit tools is refused. A person edits it outside the agent harness",
+            path.display(),
+            inside.display()
+        ),
+    })
 }
 
 /// The path-gate entries of the table (every protected path).
@@ -322,6 +400,7 @@ fn judge_leaving(
         ),
     };
     Some(Denial {
+        gated_move: None,
         guardrail: "acceptance",
         reason: format!(
             "this edit {what}, taking it out of a gated status, which has a deletion's outcome and which the authority table reserves for a decider ({}); an agent cannot make it through the edit tools",
@@ -342,6 +421,7 @@ pub(super) fn judge(
     if harness.enabled("protected-paths") {
         if let Some(gate) = protected_gate(authority, rel) {
             return Some(Denial {
+                gated_move: None,
                 guardrail: "protected-paths",
                 reason: format!(
                     "{} is a protected path ({}); only that decider group may change it, and an agent's edit through the edit tools is refused",
@@ -354,9 +434,10 @@ pub(super) fn judge(
     if harness.enabled("protected-paths") {
         if let Some(entry) = owned_entry(config, rel) {
             return Some(Denial {
+                gated_move: None,
                 guardrail: "protected-paths",
                 reason: format!(
-                    "{} is kept by urzua itself ({entry}: the post-command baselines, the harness lock, the override log, the git hooks and configuration); an agent's edit through the edit tools is refused, because a change there would disarm a report or a review. urzua writes it; a person edits it outside the agent harness",
+                    "{} is kept by urzua itself ({entry}: the post-command baselines, the harness lock, the override log, the git directory and any .git pointer file); an agent's edit through the edit tools is refused, because a change there would disarm a report or a review. urzua writes it; a person edits it outside the agent harness",
                     rel.display()
                 ),
             });
@@ -373,8 +454,9 @@ pub(super) fn judge(
         let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
         // An edit that leaves the status where it was is not a move; any other
         // edit to a gated status, a record filed straight at it included, is.
-        let from = match status_before(repo_root, config, rel) {
-            Some(Some(before)) if same_status(&before, &status) => return None,
+        let before = status_before(repo_root, config, rel);
+        let from = match &before {
+            Some(Some(before)) if same_status(before, &status) => return None,
             Some(Some(before)) => format!("moves {} from {field} '{before}' to '{status}'", rel.display()),
             Some(None) => format!("files {} already at {field} '{status}'", rel.display()),
             None => format!(
@@ -382,7 +464,18 @@ pub(super) fn judge(
                 rel.display()
             ),
         };
+        // A copy that could not be read is no move a person can be shown.
+        let gated_move = before.map(|from| GatedMove {
+            rel: rel.to_path_buf(),
+            record_type: record_type.clone(),
+            field: field.to_string(),
+            from,
+            to: status.clone(),
+            group: gate.by.clone(),
+            gate: gate_summary(gate),
+        });
         return Some(Denial {
+            gated_move,
             guardrail: "acceptance",
             reason: format!(
                 "this edit {from}, a move the authority table reserves for a decider ({}); an agent cannot make it through the edit tools",

@@ -35,6 +35,24 @@ pub const EVENTS: &[&str] = &["edit", "post-command", "session-start"];
 pub const PROJECT_ENV: &str = "CLAUDE_PROJECT_DIR";
 
 const EDIT_TOOLS: [&str; 4] = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
+/// The edit tools whose input can carry a whole file, so a gated move can be
+/// put to the person with its receipt.
+const ASKABLE_TOOLS: [&str; 3] = ["Write", "Edit", "MultiEdit"];
+/// The permission modes in which Claude Code shows the person the prompt a
+/// hook's `ask` raises for an edit. Only Manual (`default`) is listed: in the
+/// others the host approves edits without asking (`acceptEdits`, `auto`,
+/// `bypassPermissions`), denies every prompt (`dontAsk`) or does not edit
+/// (`plan`, whose blocks a session with bypass available does not enforce),
+/// and a mode the adapter does not know is read as approving without asking.
+const ASKING_MODES: [&str; 1] = ["default"];
+/// The modes the adapter knows and refuses a gated edit in, for the message.
+const NO_PROMPT_MODES: [&str; 5] = [
+    "acceptEdits",
+    "auto",
+    "dontAsk",
+    "bypassPermissions",
+    "plan",
+];
 /// The verdicts that let an edit through with nothing to say: judged and
 /// allowed, or a file no record type governs.
 const QUIET: [&str; 2] = ["allow", "not-governed"];
@@ -126,6 +144,20 @@ impl Run {
                 ("hookEventName", s("PreToolUse")),
                 ("permissionDecision", s("deny")),
                 ("permissionDecisionReason", s(message)),
+            ]),
+        )]));
+    }
+
+    /// The host's ask-the-person decision, with the tool input rewritten to
+    /// write `content` (the edit with its receipt).
+    fn ask(&mut self, message: &str, updated: J) {
+        self.print(&obj(vec![(
+            "hookSpecificOutput",
+            obj(vec![
+                ("hookEventName", s("PreToolUse")),
+                ("permissionDecision", s("ask")),
+                ("permissionDecisionReason", s(message)),
+                ("updatedInput", updated),
             ]),
         )]));
     }
@@ -534,6 +566,18 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
         "file_path"
     };
     let raw = inp.get(key);
+    if tool == "NotebookEdit" && !j_truthy(raw) {
+        // A notebook call that names its file under another key cannot be
+        // placed, so it is judged as an edit nobody could judge.
+        if let Some(other) = ["file_path", "path"]
+            .iter()
+            .find_map(|k| inp.get(k).filter(|v| j_truthy(Some(v))))
+        {
+            let named = shown(Some(other));
+            let message = format!("urzua harness: urzua did NOT judge this edit (NotebookEdit names its file under a key other than notebook_path: {named}), so it cannot be placed. Name the notebook in notebook_path, or edit the file with Write or Edit.");
+            return run.unjudged_edit(&message, cwd, vec![named], false);
+        }
+    }
     if !EDIT_TOOLS.contains(&tool) || !j_truthy(raw) {
         return;
     }
@@ -558,6 +602,7 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
     let mut request = run.request("edit", Some(tool), cwd);
     request["paths"] = serde_json::json!([path]);
     request["content"] = to_value(&content);
+    request["ask"] = ask_of(payload, tool);
     let verdict = match engine(&run.event, &request, cwd) {
         Ok(v) => v,
         Err(_) => {
@@ -566,7 +611,12 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
         }
     };
     let (kind, message) = (vtext(&verdict, "verdict"), vtext(&verdict, "message"));
-    if kind == "block" {
+    if kind == "ask" {
+        match ask_input(tool, inp, &path, verdict.get("content").and_then(|c| c.as_str())) {
+            Ok(updated) => run.ask(message, updated),
+            Err(e) => run.deny(&format!("urzua harness (acceptance): refused. The edit could not be put to the person ({e}); retry the edit, or a person in the gate's group makes the move outside the agent harness.")),
+        }
+    } else if kind == "block" {
         run.deny(message);
     } else if ALLOWED_NOTES.contains(&kind) {
         run.note(message);
@@ -637,4 +687,67 @@ fn judge_simple(run: &mut Run, request: serde_json::Value, cwd: Option<&str>) {
         return run.relay_post_command(person, agent);
     }
     run.relay_post_command("", message);
+}
+
+/// Whether Claude Code will show the person a prompt for this call, read from
+/// the payload: `permission_mode`, and `agent_id`, which Claude Code sets only
+/// for a call made inside a subagent (or a teammate), never in the main session.
+fn ask_of(payload: &J, tool: &str) -> serde_json::Value {
+    let mode = payload.get("permission_mode").and_then(J::as_str);
+    let subagent = j_truthy(payload.get("agent_id"));
+    let why_not = if subagent {
+        Some("This call comes from a subagent, which cannot put the question to the person. Hand back to the main session and make this edit there; the person is asked to approve it then.".to_string())
+    } else if !ASKABLE_TOOLS.contains(&tool) {
+        Some(format!("A {tool} cannot carry the receipt of the move. Make the move with Write or Edit of the record, which puts it to the person."))
+    } else {
+        match mode {
+            Some(m) if ASKING_MODES.contains(&m) => None,
+            Some(m) if NO_PROMPT_MODES.contains(&m) => Some(format!("The session is in the permission mode '{m}', in which Claude Code approves or refuses an edit without showing the person a prompt, so the person cannot be asked here. Ask the person to switch to the Manual (default) permission mode and retry this edit, or a person in the gate's group makes the move outside the agent harness.")),
+            Some(m) => Some(format!("The session's permission mode '{m}' is one this adapter does not list, so it is treated as approving edits without asking. Ask the person to switch to the Manual (default) permission mode and retry this edit, or a person in the gate's group makes the move outside the agent harness.")),
+            None => Some("The host did not report the session's permission mode, so whether the person would see a prompt is not known. Ask the person to switch to the Manual (default) permission mode and retry this edit, or a person in the gate's group makes the move outside the agent harness.".to_string()),
+        }
+    };
+    serde_json::json!({
+        "available": why_not.is_none(),
+        "why_not": why_not.unwrap_or_default(),
+    })
+}
+
+/// The tool input that writes `content` over the whole of `path`: the receipt
+/// is outside the span the agent edited, so an Edit or MultiEdit becomes one
+/// replacement of the file's whole text.
+fn ask_input(tool: &str, inp: &J, path: &str, content: Option<&str>) -> Result<J, String> {
+    let content = content.ok_or("the engine sent no content")?;
+    let mut updated = inp.clone();
+    match tool {
+        "Write" => updated.set("content", s(content)),
+        "Edit" | "MultiEdit" => {
+            let current = read_text(path)?;
+            if current.is_empty() {
+                return Err(format!("{path} is empty"));
+            }
+            let edit = |with_path: bool| {
+                let mut m = Vec::new();
+                if with_path {
+                    m.push(("file_path", s(path)));
+                }
+                m.extend([
+                    ("old_string", s(&current)),
+                    ("new_string", s(content)),
+                    ("replace_all", J::Bool(false)),
+                ]);
+                obj(m)
+            };
+            updated = if tool == "Edit" {
+                edit(true)
+            } else {
+                obj(vec![
+                    ("file_path", s(path)),
+                    ("edits", J::Arr(vec![edit(false)])),
+                ])
+            };
+        }
+        other => return Err(format!("{other} cannot carry the receipt")),
+    }
+    Ok(updated)
 }

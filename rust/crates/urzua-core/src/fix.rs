@@ -1089,6 +1089,27 @@ fn locate_revision_log(
     Ok(log)
 }
 
+/// `content` with one tool-authored row appended to its revision log, in the
+/// log's own layout. Fails, changing nothing, as [`append_log_rows`] does.
+pub fn append_revision_row(
+    content: &str,
+    log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+    today: &str,
+    narrative: &str,
+) -> Result<String, String> {
+    let mut doc = LineDoc::parse(content);
+    append_log_rows(
+        &mut doc,
+        log_id,
+        shape,
+        today,
+        &[narrative.to_string()],
+        "record the approval",
+    )?;
+    Ok(doc.to_string())
+}
+
 /// Appends one tool-authored row per narrative after the revision log's last
 /// row, in the log's own layout. Fails, changing nothing, when the log is
 /// missing, unreadable or has no row to append after.

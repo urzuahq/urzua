@@ -165,6 +165,25 @@ pub enum PendingPair {
     Allow,
 }
 
+/// How the `acceptance` guardrail meets an agent's gated move: refuse it, or
+/// ask the person at the keyboard through the agent host (`ADR-102`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InSession {
+    #[default]
+    Refuse,
+    Ask,
+}
+
+impl InSession {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            InSession::Refuse => "refuse",
+            InSession::Ask => "ask",
+        }
+    }
+}
+
 impl PendingPair {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -188,6 +207,8 @@ pub struct Guardrail {
     /// `post-command` only: the level of a gated change whose content is the
     /// one on `base`; `None` is `info`.
     pub base_match: Option<crate::report::FindingSeverity>,
+    /// `acceptance` only; `None` is `refuse`.
+    pub in_session: Option<InSession>,
 }
 
 /// The post-command comparison ref when `base` is not declared: the remote's
@@ -255,6 +276,8 @@ impl GuardrailInfo {
     fn keys(&self) -> &'static [&'static str] {
         if self.name == "editor-hook" {
             &["enabled", "on_unjudged", "pending_pair"]
+        } else if self.name == "acceptance" {
+            &["enabled", "on_unjudged", "in_session"]
         } else if self.name == "post-command" {
             &["enabled", "base", "base_match"]
         } else if self.takes_on_unjudged {
@@ -293,6 +316,7 @@ impl HarnessDecl {
             pending_pair: None,
             base: None,
             base_match: None,
+            in_session: None,
         };
         for (k, val) in body {
             match k.as_str().unwrap_or("?") {
@@ -322,6 +346,10 @@ impl HarnessDecl {
                             "harness.guardrails.editor-hook.pending_pair must be refuse or allow",
                         )),
                     })
+                }
+                "in_session" if name == "acceptance" => {
+                    read_in_session(&mut guardrail, val)
+                        .map_err(D::Error::custom)?
                 }
                 "base" if name == "post-command" => match val.as_str().map(str::trim) {
                     // A leading '-' would reach git as an option.
@@ -373,6 +401,14 @@ impl HarnessDecl {
         self.guardrails
             .get("editor-hook")
             .and_then(|g| g.pending_pair)
+            .unwrap_or_default()
+    }
+
+    /// The effective `acceptance.in_session`: the declared value, else `refuse`.
+    pub fn in_session(&self) -> InSession {
+        self.guardrails
+            .get("acceptance")
+            .and_then(|g| g.in_session)
             .unwrap_or_default()
     }
 
@@ -482,6 +518,16 @@ impl<'de> Deserialize<'de> for HarnessDecl {
         }
         Ok(decl)
     }
+}
+
+/// `acceptance.in_session` into `guardrail`.
+fn read_in_session(guardrail: &mut Guardrail, val: &yaml_serde::Value) -> Result<(), String> {
+    guardrail.in_session = Some(match val.as_str() {
+        Some("refuse") => InSession::Refuse,
+        Some("ask") => InSession::Ask,
+        _ => return Err("harness.guardrails.acceptance.in_session must be refuse or ask".into()),
+    });
+    Ok(())
 }
 
 /// `harness.adapters`: a list of non-blank adapter names.
@@ -626,6 +672,25 @@ mod tests {
 
     fn parse(yaml: &str) -> Result<HarnessDecl, yaml_serde::Error> {
         yaml_serde::from_str(yaml)
+    }
+
+    #[test]
+    fn acceptance_asks_in_the_session_only_when_it_says_so() {
+        let off = parse("guardrails:\n  acceptance: {enabled: true}\n").unwrap();
+        assert_eq!(off.in_session(), InSession::Refuse);
+        let on = parse("guardrails:\n  acceptance: {enabled: true, in_session: ask}\n").unwrap();
+        assert_eq!(on.in_session(), InSession::Ask);
+        assert!(on.problems.is_empty(), "{:?}", on.problems);
+        let e = parse("guardrails:\n  acceptance: {enabled: true, in_session: yes}\n")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("harness.guardrails.acceptance.in_session"),
+            "{e}"
+        );
+        let other =
+            parse("guardrails:\n  acceptance: {enabled: true, approval_minutes: 5}\n").unwrap();
+        assert_eq!(other.unknown_keys.len(), 1);
     }
 
     #[test]
