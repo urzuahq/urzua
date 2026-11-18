@@ -348,19 +348,27 @@ fn ordinary_payload(dir: &Path) -> String {
     serde_json::json!({"tool_name": "Write", "cwd": dir.to_string_lossy(), "tool_input": {"file_path": dir.join("notes.txt").to_string_lossy(), "content": "x"}}).to_string()
 }
 
-/// How strictly the real engine treats `payload`: a refusal, a notice, silence.
-fn engine_rank(dir: &Path, payload: &str) -> u8 {
-    let out = common::run_hook(dir, "edit", payload, None, Some(dir), &[]);
-    let o = String::from_utf8(out.stdout).unwrap();
-    if denied(&o) {
-        2
-    } else {
-        u8::from(!o.trim().is_empty())
-    }
+/// What a shape must give: the binary's own unjudged decision, and the
+/// fallback's.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Want {
+    /// Both let the call through, the fallback with its notice.
+    Open,
+    /// Both refuse.
+    Closed,
+    /// The binary lets it through and the fallback refuses: a documented limit
+    /// of reading YAML with awk, never the other way round.
+    Stricter,
 }
 
-fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, bool)> {
+const OPEN_TAIL: &str = "harness:\n  guardrails:\n    editor-hook: {enabled: true}\n";
+const CLOSED_TAIL: &str = "harness:\n  guardrails:\n    protected-paths: {enabled: true}\n";
+
+fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, Want)> {
+    use Want::*;
     let g = |body: &str| format!("{TYPES}harness:\n  guardrails:\n{body}{GATE}").into_bytes();
+    let o = |before: &str| format!("{before}{OPEN_TAIL}").into_bytes();
+    let b = |s: &[&[u8]]| s.concat();
     let utf16: Vec<u8> = String::from_utf8(g("    protected-paths: {enabled: false}\n"))
         .unwrap()
         .encode_utf16()
@@ -368,95 +376,148 @@ fn shapes() -> Vec<(&'static str, Option<Vec<u8>>, bool)> {
         .collect();
     let mut nul = g("    protected-paths: {enabled: false}\n");
     nul.insert(10, 0);
-    // (name, config, the engine reads it as open)
-    let mut out = vec![
-        ("an escaped key", Some(g("    \"protected\\x2dpaths\":\n      enabled: true\n")), false),
-        ("a quoted key", Some(g("    \"protected-paths\":\n      enabled: true\n")), false),
-        ("broken YAML", Some(format!("{TYPES}schema_version: [\nharness:\n  guardrails:\n    protected-paths: {{enabled: false}}\n{GATE}").into_bytes()), false),
-        ("UTF-16", Some(utf16), false),
-        ("a NUL byte", Some(nul), false),
-        ("a tab in indentation", Some(format!("{TYPES}harness:\n\tguardrails:\n\t\tprotected-paths: {{enabled: false}}\n{GATE}").into_bytes()), false),
-        ("a repeated key", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: deny\n      on_unjudged: allow\n")), false),
-        ("a child deeper than its siblings", Some(g("    protected-paths:\n      enabled: false\n        on_unjudged: allow\n")), false),
-        ("the configuration a directory", None, false),
-        ("a second document", Some(format!("{TYPES}harness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n---\nharness:\n  guardrails:\n    protected-paths: {{enabled: true}}\n{GATE}").into_bytes()), false),
-        ("an anchor outside the guardrails", Some(format!("{TYPES}x: &a [1]\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
-        ("a merge key outside the guardrails", Some(format!("{TYPES}base: {{a: 1}}\nx:\n  <<: {{a: 1}}\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
-        ("a quoted scalar left open", Some(format!("{TYPES}x: 'abc\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
-        ("a flow list continued at the margin", Some(format!("{TYPES}x: [a,\nharness: b]\nharness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n{GATE}").into_bytes()), false),
-        ("a quoted harness key", Some(format!("{TYPES}\"harness\":\n  guardrails:\n    protected-paths: {{enabled: true}}\n{GATE}").into_bytes()), false),
-        ("a complex harness key", Some(format!("{TYPES}? harness\n: guardrails: {{protected-paths: {{enabled: true}}}}\n{GATE}").into_bytes()), false),
-        ("the whole document a flow map", Some(b"{schema_version: 2, harness: {guardrails: {protected-paths: {enabled: true}}}}\n".to_vec()), false),
-        ("harness a list", Some(format!("{TYPES}harness:\n- guardrails\n{GATE}").into_bytes()), false),
-        ("a list item among the guardrails", Some(g("    - protected-paths: {enabled: true}\n")), false),
-        ("editor-hook with pending_pair, one line", Some(g("    editor-hook: {enabled: true, on_unjudged: allow, pending_pair: allow}\n")), true),
-        ("editor-hook with pending_pair, block", Some(g("    editor-hook:\n      enabled: true\n      on_unjudged: allow\n      pending_pair: allow\n")), true),
-        ("a double-quoted allow", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: \"allow\"\n")), true),
-        ("a single-quoted allow", Some(g("    protected-paths: {enabled: true, on_unjudged: 'allow'}\n")), true),
-        ("a guardrail's name in a value", Some(format!("description: Records the acceptance of a decision\n{TYPES}harness:\n  guardrails:\n    session-start: {{enabled: true}}\n{GATE}").into_bytes()), true),
-    ];
-    for (name, before) in open_elsewhere() {
-        out.push((
-            name,
-            Some(format!("{before}{OPEN_TAIL}").into_bytes()),
-            true,
-        ));
-    }
-    out
-}
-
-const OPEN_TAIL: &str = "harness:\n  guardrails:\n    editor-hook: {enabled: true}\n";
-
-/// Ordinary YAML outside the guardrails, each followed by an open
-/// `harness.guardrails`: none of it may make the configuration uncertain.
-fn open_elsewhere() -> Vec<(&'static str, String)> {
+    let long_line = o(&format!(
+        "x: [{}]\n",
+        (0..22_000)
+            .map(|n| format!("'p{n} (a: b) ; c'"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
+    let deep_block: String = (0..150)
+        .map(|n| format!("{}k{n}:\n", "  ".repeat(n)))
+        .collect::<String>()
+        + &"  ".repeat(150)
+        + "x: 1\n";
     let placeholders: Vec<String> = (0..40)
         .map(|n| {
             format!("'Describe step {n} (e.g.: `run it`) \u{2014} then; check {{x}} [y], z #{n}'")
         })
         .collect();
     vec![
-        ("a flow map with a single-quoted value in a list item", "x:\n  - {a: 'b', c: d}\n".into()),
-        ("a flow map with one single-quoted value in a list item", "x:\n  - {name: 'a'}\n".into()),
-        ("a section list item with a quoted name", "x:\n  - {name: 'TL;DR', shape: y-statement}\n".into()),
-        ("a flow map in a list item", "x:\n  - {a: b, c: d}\n".into()),
-        ("a flow map with a single-quoted value", "x: {a: 'b'}\n".into()),
-        ("a block list item with a quoted value", "x:\n  - name: 'TL;DR'\n".into()),
-        ("flow maps with double-quoted and unquoted values, nested in lists", "a:\n  b:\n    - c:\n        - {d: \"e\", f: g}\n        - {h: 'i', j: \"k\"}\n    - [l, 'm', \"n\"]\n".into()),
-        ("quoted strings holding punctuation", "a: 'x;y#z: {w} [v], u'\nb: \"x;y#z: {w} [v], u\"\nc: 'it''s'\nd: [ '}', \"]\", '{[' ]\n".into()),
-        ("a multi-line flow list", "a: [one,\n    'two: 2',\n    \"three, 3\"]\nb: {c: d,\n    e: 'f'}\n".into()),
-        ("a long inline list of quoted placeholders", format!("placeholders: [{}]\n", placeholders.join(", "))),
-        ("a literal block scalar with guardrail-looking lines", "notes: |\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n  it's [ { '\n".into()),
-        ("a folded block scalar with guardrail-looking lines", "notes: >-\n  acceptance: {enabled: true}\n  editor-hook:\n    on_unjudged: deny\n".into()),
-        ("comments holding quotes and brackets", "# it's a \"comment\" [with {brackets}\na: b # don't [ {\n".into()),
-        ("a plain scalar with an apostrophe", "a: it's plain\nb: x [y\n".into()),
+        // Refusals the earlier reviews established.
+        ("an escaped key", Some(g("    \"protected\\x2dpaths\":\n      enabled: true\n")), Closed),
+        ("a quoted key", Some(g("    \"protected-paths\":\n      enabled: true\n")), Closed),
+        ("broken YAML", Some(format!("{TYPES}schema_version: [\nharness:\n  guardrails:\n    protected-paths: {{enabled: false}}\n{GATE}").into_bytes()), Closed),
+        ("UTF-16", Some(utf16), Closed),
+        ("a NUL byte", Some(nul), Closed),
+        ("a tab in indentation", Some(format!("{TYPES}harness:\n\tguardrails:\n\t\tprotected-paths: {{enabled: false}}\n{GATE}").into_bytes()), Closed),
+        ("a repeated key", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: deny\n      on_unjudged: allow\n")), Closed),
+        ("a child deeper than its siblings", Some(g("    protected-paths:\n      enabled: false\n        on_unjudged: allow\n")), Closed),
+        ("the configuration a directory", None, Closed),
+        ("a second document", Some(format!("{TYPES}{OPEN_TAIL}---\n{CLOSED_TAIL}{GATE}").into_bytes()), Closed),
+        ("a quoted scalar left open", Some(o("x: 'abc\n")), Closed),
+        ("a quoted harness key", Some(format!("{TYPES}\"harness\":\n  guardrails:\n    protected-paths: {{enabled: true}}\n{GATE}").into_bytes()), Closed),
+        ("the whole document a flow map", Some(b"{schema_version: 2, harness: {guardrails: {protected-paths: {enabled: true}}}}\n".to_vec()), Closed),
+        ("a list item among the guardrails", Some(g("    - protected-paths: {enabled: true}\n")), Closed),
+        ("an anchor inside harness", Some(g("    editor-hook: &e {enabled: true}\n")), Stricter),
+        ("a complex harness key", Some(format!("{TYPES}? harness\n: guardrails: {{protected-paths: {{enabled: true}}}}\n{GATE}").into_bytes()), Closed),
+        ("harness a list", Some(format!("{TYPES}harness:\n- guardrails\n{GATE}").into_bytes()), Closed),
+        // A key with a blank before its colon is the same key.
+        ("a space before the colon, closed", Some(format!("harness :\n  guardrails :\n    protected-paths : {{enabled: true}}\n").into_bytes()), Closed),
+        ("a tab before the colon, closed", Some(b"harness:\n  guardrails:\n    protected-paths\t: {enabled: true}\n".to_vec()), Closed),
+        ("a space before the colon, block form, closed", Some(b"harness:\n  guardrails:\n    protected-paths :\n      enabled: true\n".to_vec()), Closed),
+        ("a space before the colon, open", Some(b"harness :\n  guardrails :\n    editor-hook : {enabled: true}\n".to_vec()), Open),
+        // The root indentation is the first content line's.
+        ("a whole document indented, closed", Some(b"  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n".to_vec()), Closed),
+        ("an indented document after ---, closed", Some(b"---\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n".to_vec()), Closed),
+        ("a whole document indented, open", Some(b"  harness:\n    guardrails:\n      editor-hook: {enabled: true}\n".to_vec()), Open),
+        // Line breaks awk does not see.
+        ("a lone carriage return", Some(b"a: 1\rharness:\r  guardrails:\r    protected-paths: {enabled: true}\r".to_vec()), Closed),
+        ("a next-line character", Some(b(&[b"a: 1\xc2\x85", CLOSED_TAIL.as_bytes()])), Closed),
+        ("a line separator", Some(b(&[b"a: 1\xe2\x80\xa8", CLOSED_TAIL.as_bytes()])), Closed),
+        ("a paragraph separator", Some(b(&[b"a: 1\xe2\x80\xa9", CLOSED_TAIL.as_bytes()])), Closed),
+        ("a byte order mark on a later line", Some(b(&[b"a: 1\n\xef\xbb\xbf", OPEN_TAIL.as_bytes()])), Closed),
+        ("a doubled byte order mark", Some(b(&[b"\xef\xbb\xbf\xef\xbb\xbf", OPEN_TAIL.as_bytes()])), Stricter),
+        // A tab in leading whitespace on a line the reader would skip.
+        ("a tab before a comment", Some(o("a: 1\n\t# c\n")), Closed),
+        ("a tab-only line", Some(o("a: 1\n\t\n")), Closed),
+        ("a tab in block scalar indentation", Some(o("a: |\n  x\n\t y\n")), Closed),
+        // A line under a one-line guardrail entry.
+        ("a deeper line under a one-line guardrail", Some(b"harness:\n  guardrails:\n    editor-hook: {enabled: true}\n        protected-paths: {enabled: true}\n".to_vec()), Closed),
+        // Files the engine cannot load, with guardrails that read as open.
+        ("a byte that is not UTF-8", Some(b(&[b"a: \xff\n", OPEN_TAIL.as_bytes()])), Closed),
+        ("a form feed", Some(o("a: x\x0cy\n")), Closed),
+        ("a vertical tab", Some(o("a: x\x0by\n")), Closed),
+        ("a delete character", Some(o("a: x\x7fy\n")), Closed),
+        ("a start-of-heading character", Some(o("a: x\x01y\n")), Closed),
+        ("a duplicate top-level key", Some(o("a: 1\na: 2\n")), Closed),
+        ("a mapping value inside a plain value", Some(o("a: b: c\n")), Closed),
+        ("a list item as a plain value", Some(o("a: - b\n")), Closed),
+        ("a value running into the next key", Some(b"a: 1harness:\n  guardrails:\n    editor-hook: {enabled: true}\n".to_vec()), Closed),
+        ("flow nested 200 deep", Some(o(&format!("a: {}{}\n", "[".repeat(200), "]".repeat(200)))), Closed),
+        ("blocks nested 150 deep", Some(o(&deep_block)), Closed),
+        ("guardrails indented past a sibling", Some(b"harness:\n  adapters: claude-code\n    guardrails:\n      editor-hook: {enabled: true}\n".to_vec()), Closed),
+        ("a directive with no document start", Some(o("%YAML 1.2\n")), Closed),
+        // The binary's own reading does not resolve merge keys, so it lets
+        // this through; the fallback refuses any merge key at the root.
+        ("a merge key at the root carrying harness", Some(b"base: &b\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n<<: *b\n".to_vec()), Stricter),
+        ("a 400 KB line", Some(long_line), Stricter),
+        // Ordinary YAML that must stay open.
+        ("editor-hook with pending_pair, one line", Some(g("    editor-hook: {enabled: true, on_unjudged: allow, pending_pair: allow}\n")), Open),
+        ("editor-hook with pending_pair, block", Some(g("    editor-hook:\n      enabled: true\n      on_unjudged: allow\n      pending_pair: allow\n")), Open),
+        ("a double-quoted allow", Some(g("    protected-paths:\n      enabled: true\n      on_unjudged: \"allow\"\n")), Open),
+        ("a single-quoted allow", Some(g("    protected-paths: {enabled: true, on_unjudged: 'allow'}\n")), Open),
+        ("a guardrail's name in a value", Some(format!("description: Records the acceptance of a decision\n{TYPES}harness:\n  guardrails:\n    session-start: {{enabled: true}}\n{GATE}").into_bytes()), Open),
+        ("a flow map with a single-quoted value in a list item", Some(o("x:\n  - {a: 'b', c: d}\n")), Open),
+        ("a flow map with one single-quoted value in a list item", Some(o("x:\n  - {name: 'a'}\n")), Open),
+        ("a section list item with a quoted name", Some(o("x:\n  - {name: 'TL;DR', shape: y-statement}\n")), Open),
+        ("a flow map in a list item", Some(o("x:\n  - {a: b, c: d}\n")), Open),
+        ("a flow map with a single-quoted value", Some(o("x: {a: 'b'}\n")), Open),
+        ("a block list item with a quoted value", Some(o("x:\n  - name: 'TL;DR'\n")), Open),
+        ("flow maps with double-quoted and unquoted values, nested in lists", Some(o("a:\n  b:\n    - c:\n        - {d: \"e\", f: g}\n        - {h: 'i', j: \"k\"}\n    - [l, 'm', \"n\"]\n")), Open),
+        ("quoted strings holding punctuation", Some(o("a: 'x;y#z: {w} [v], u'\nb: \"x;y#z: {w} [v], u\"\nc: 'it''s'\nd: [ '}', \"]\", '{[' ]\n")), Open),
+        ("a multi-line flow list", Some(o("a: [one,\n    'two: 2',\n    \"three, 3\"]\nb: {c: d,\n    e: 'f'}\n")), Open),
+        ("a long inline list of quoted placeholders", Some(o(&format!("placeholders: [{}]\n", placeholders.join(", ")))), Open),
+        ("a literal block scalar with guardrail-looking lines", Some(o("notes: |\n  harness:\n    guardrails:\n      protected-paths: {enabled: true}\n  it's [ { '\n")), Open),
+        ("a folded block scalar with guardrail-looking lines", Some(o("notes: >-\n  acceptance: {enabled: true}\n  editor-hook:\n    on_unjudged: deny\n")), Open),
+        ("comments holding quotes and brackets", Some(o("# it's a \"comment\" [with {brackets}\na: b # don't [ {\n")), Open),
+        ("a plain scalar with an apostrophe", Some(o("a: it's plain\nb: x [y\n")), Open),
+        ("a closing bracket aligned with its key", Some(o("placeholders: [\n  'a',\n]\n")), Open),
+        ("a flow continued left of its key", Some(o("a:\n  b: [1,\n 2]\n")), Open),
+        ("a multi-line quoted scalar", Some(o("description: \"one\n  two\"\n")), Open),
+        ("an anchor and alias outside harness", Some(o("a: &x [1]\nb: *x\nc:\n  <<: {d: 1}\n")), Open),
+        ("harness null", Some(b"harness: ~\n".to_vec()), Open),
+        ("a document end", Some(o("a: 1\n").into_iter().chain(b"...\n".iter().copied()).collect()), Open),
+        ("a YAML directive before ---", Some(b(&[b"%YAML 1.2\n---\n", OPEN_TAIL.as_bytes()])), Open),
+        ("a quoted top-level key", Some(o("\"x\": 1\n'y': 2\n")), Open),
+        ("a doubled quote before a colon", Some(o("a: 'x'' b: c'\n")), Open),
+        ("an escaped double quote before a colon", Some(o("a: \"x\\\" b: c\"\n")), Open),
+        ("a multi-line flow inside harness", Some(b"harness:\n  adapters: [claude-code,\n    codex]\n  guardrails:\n    editor-hook: {enabled: true}\n".to_vec()), Open),
     ]
 }
 
+fn seam_rank(dir: &Path) -> u8 {
+    let out = common::run_hook(
+        dir,
+        "edit",
+        &ordinary_payload(dir),
+        Some(&["false"]),
+        Some(dir),
+        &[],
+    );
+    fallback_rank(&String::from_utf8(out.stdout).unwrap())
+}
+
 #[test]
-fn without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused_and_an_open_one_is_open(
-) {
+fn without_urzua_every_shape_is_read_as_the_binary_reads_it_or_more_strictly() {
     let cmds = commands();
-    for (name, config, open) in shapes() {
-        let dir = repo_with(&name.replace(' ', "-"), config.as_deref());
-        // An open shape: the engine lets an ordinary edit through, and the
-        // fallback must too (with its notice). Any other: the engine refuses a
-        // write to a protected file where it can read the configuration, and
-        // the fallback refuses it in every case.
-        let payload = if open {
-            ordinary_payload(&dir)
-        } else {
-            write_payload(&dir)
+    let mut wrong = Vec::new();
+    for (name, config, want) in shapes() {
+        let dir = repo_with(&name.replace([' ', ',', '\''], "-"), config.as_deref());
+        let binary = seam_rank(&dir);
+        let (eb, ef) = match want {
+            Want::Open => (1, 1),
+            Want::Closed => (2, 2),
+            Want::Stricter => (1, 2),
         };
-        let engine = engine_rank(&dir, &payload);
-        if open {
-            assert!(
-                engine < 2,
-                "{name}: the engine lets an ordinary edit through"
-            );
+        if binary != eb {
+            wrong.push(format!(
+                "{name}: the binary gives {binary}, the shape says {want:?}"
+            ));
         }
         for combo in combos() {
-            let (out, _) = run(
+            let payload = ordinary_payload(&dir);
+            let (out, took) = run(
                 &cmds["PreToolUse"],
                 &combo,
                 &dir.to_string_lossy(),
@@ -464,17 +525,23 @@ fn without_urzua_a_shape_the_engine_refuses_or_might_read_differently_is_refused
                 &payload,
                 false,
             );
-            let what = format!(
-                "{name} {:?} {:?}: engine {engine}, fallback {out}",
-                combo.shell, combo.awk
-            );
-            if open {
-                assert!(!denied(&out) && out.contains("could NOT run"), "{what}");
-            } else {
-                assert!(denied(&out), "{what}");
+            let fallback = fallback_rank(&out);
+            assert!(fallback >= binary, "{name} {:?} {:?}: the fallback ({fallback}) is more permissive than the binary ({binary})", combo.shell, combo.awk);
+            if fallback != ef {
+                wrong.push(format!(
+                    "{name} {:?} {:?}: fallback {fallback}, want {want:?}",
+                    combo.shell, combo.awk
+                ));
             }
+            assert!(
+                took < std::time::Duration::from_secs(5),
+                "{name} {:?} {:?}: took {took:?}",
+                combo.shell,
+                combo.awk
+            );
         }
     }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 #[test]
