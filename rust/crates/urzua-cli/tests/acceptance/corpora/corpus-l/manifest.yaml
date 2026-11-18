@@ -7,3 +7,5 @@ fixtures:
   irregularity: 'a sequencing pair that does not declare acyclic and no roadmap.pairs, so there is no roadmap; not a record.'
 - path: records/MILE-1-seed.md
   irregularity: 'Done, with no dependency: the finished blocker most cases depend on, which the roadmap ignores.'
+- path: .urzua/containment.yaml
+  irregularity: 'a milestone type whose Part-of field declares containment, grouped by Phase, which only the parent writes; not a record.'

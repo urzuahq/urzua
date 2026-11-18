@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.168'
+Version: '0.170'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:e2981c06fd2407d7fe81d1c1d5a796caf66cfa47d57f6e188a22412d3d1a545d, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:b3c446ff6ddde5977a6c3256903bdb49b250e9aff411a7f5137c76d416fb9c72, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1436,6 +1436,20 @@ discovery:
   corpus. Two checkouts of one commit with different untracked files still disagree on `files_examined`,
   as they already do for staged files.
 
+## What an export adds: `export`
+
+```yaml
+export:
+  link_prefix: "https://example.org/blob/main/"
+```
+
+`link_prefix` is optional. When declared, each record `urzua export --format json` returns carries a `link`: the
+prefix followed by the record's repository-relative path with `/` separators, percent-encoded (so a file name holding `#`,
+`?`, `%` or a space cannot change what the address names). The prefix is `https://` or `http://` and a host, or a path
+starting with a single `/`, in URL-safe characters only: `//`, a quote, an angle bracket, a backslash, whitespace and a control
+character are a load error (`export: ...`), since the value is written into a page's attributes. Absent,
+no record carries a `link`. The engine fetches nothing from it. `urzua board` does not render it.
+
 ## Numbering against open pull requests: `new`
 
 A top-level `new` sets whether `urzua new` fetches pull-request head refs before numbering a record, so it skips
@@ -1665,6 +1679,19 @@ outside it is reported by `pointer.target-type` only, not also by `relation.cros
 `urzua graph` lists the claims of every declared relation pair as `pointer` edges, alongside `pointer_fields` and
 `narrative_fields`.
 
+**Containment: `part_of`.** A reference with a declared target type does not by itself mean "is part of", so
+containment is declared. A `pointer_fields` entry of the map form may add `part_of: true`:
+`{name: Parent, targets: [group], part_of: true}`. A record naming another through that field is part of it. A `part_of` field names one record: when it
+resolves to more than one record of a listed type (other than the record itself), the record has no `parent`, the export lists
+them in `parent_ambiguous` and none of them lists it as a child; a reference that resolves to a record whose header cannot be
+read names no parent.
+`urzua export --format json` reads `parent`, `children`, `children_by_state` and
+`state_disagrees_with_children` from this declaration alone (`SPEC-1`), `urzua board` draws its tree from it, and
+`roadmap.group_by` follows a record to its parents for a value the record does not carry. A configuration that
+declares no `part_of` has no tree: its types are flat groups. Load errors: `part_of: true` without `targets` (a
+containment field names the types it may point at), and `part_of: true` on more than one field of one type (a record
+has one parent). `part_of: false` declares nothing. The engine reads no field or type by name for this.
+
 `provisional` (`MILE-154`, from the `MILE-127` decision) splits `relation.pair-reciprocity` by the
 **claimant's** status, read from its `Status` role field by exact comparison. A claim from a record
 whose status is listed in `provisional.statuses` and that the peer does not echo is reported at
@@ -1785,7 +1812,10 @@ are optional and default to empty, and so is `work_types`. Absent `pairs` means 
   roadmap agree on a loop that crosses pairs (`SPEC-2`).
 - `group_by`: each name must be a field some record type declares (`required_fields` or
   `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
-  A field no open record carries is not an error; the roadmap notes it.
+  A field no open record carries is not an error; the roadmap notes it. A record that does not carry
+  the field takes the value of its nearest ancestor that does, through the type's `part_of` field when it
+  declares one; its own value wins. The group value is therefore not `null` under a child merely because the
+  field lives on the parent.
 - `work_types` (`ADR-82` Amendment of 2026-11-05, `MILE-196`): the `record_types` keys whose records the
   roadmap orders. A record of any other type still blocks its dependents but is not in `waves`,
   `ready`, `critical_path`, `records` or `groups`, and the output gains a `waiting_on` list (`SPEC-2`).
@@ -3017,3 +3047,8 @@ proves this configuration produces the three findings.
 > | 2026-11-17 | Bumped to `0.167`. `acceptance.in_session: ask` stores nothing: `approval_minutes` and the requirement of `post-command` are removed, and under `require_evidence` a record's receipt row lowers the local finding to info as unverified. **Why:** Removing the stored approval, with the shape stated here (nothing stored; no second hook, no approvals folder, no forgery report; approving writes the file with a revision-log note worded as recorded and not verified; declining writes nothing and leaves nothing behind; hand edits and the commit check as before, except that under a local `require_evidence` the note is honoured at commit as unverified), was accepted by the maintainer on 2026-11-17: "I accept." | **substantive** |
 > | 2026-11-18 | Bumped to `0.168`. States the definition of a receipt row the local check honours under `require_evidence` (a row the diff adds to the declared revision log, naming the record's id and the statuses left and entered, dated the day of its change); the mode asks only for one gate, an existing record and the path as written. **Why:** a security review of the pull request that builds it found the earlier match accepted rows outside the log, misdated or from an earlier move; decided by the builder and the orchestrator on 2026-11-18, pending maintainer review. | **substantive** |
 > | 2026-11-18 | Closing note on this pull request's earlier rows: the rows of 2026-11-17 for `0.164`, `0.165` and `0.166` describe intermediate states the merged change does not contain (`acceptance.approval_minutes`, the requirement of `post-command`, and stored approvals that were pending, confirmed or invalid); `0.167` and `0.168` describe what ships. **Why:** rows are history and stay; this says which of them never shipped. | **structural** |
+> | 2026-11-18 | Bumped to `0.164`. A `pointer_fields` entry may add `part_of: true` to declare containment (it requires `targets`; one per type); `roadmap.group_by` follows a record to its nearest ancestor's value when the record carries none; a new optional `export.link_prefix` makes each exported record carry a `link`. **Why:** `MILE-330` and its amendment of 2026-11-18, and `MILE-344`: a reference with a target type does not say "is part of", and the roadmap's grouping returned `null` under a child whose group field lives on its parent. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e2981c06fd24 -> 63cc3a95e1a4. Reason: config.rs: Config gains a skipped part_of map and an export declaration (ExportDecl with link_prefix, validated at load, new InvalidExport error); every other key and how it is read is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-18 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.169 by this merge, the next number above the higher side's 0.168, because `version_bump` requires a new version for the rows this merge combines. Rows added on the branches state versions 0.164 and 0.168, which were true there and are superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-18 | Bumped to `0.170`. A `part_of` field names one record (several give no parent and `parent_ambiguous`); `export.link_prefix` is restricted to `https://` or `http://` and a host, or a path starting with a single `/`, in URL-safe characters, and the exported link percent-encodes the path. **Why:** the review of the board's pull request: a prefix such as `https://h.test/"><script>` or `//evil.example/` was accepted, and a record with two containers listed itself under one of them only. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
+> | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 63cc3a95e1a4 -> b3c446ff6ddd. Reason: config.rs: export.link_prefix is validated as https:// or http:// and a host, or a path with a single leading /, in URL-safe characters, and link_for percent-encodes the path; nothing else changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

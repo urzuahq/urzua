@@ -695,6 +695,25 @@ pub fn today() -> String {
     clock().date.clone()
 }
 
+/// The instant this call is made, UTC, as `YYYY-MM-DDTHH:MM:SSZ`. Unlike
+/// [`today`] it is read at each call, ignores `--as-of` and is never cached: it
+/// says when a view of the records was taken, which a long-lived process must
+/// answer afresh each time.
+pub fn read_instant() -> String {
+    instant_text(Date::unix_now())
+}
+
+fn instant_text(unix: i64) -> String {
+    let secs = unix.rem_euclid(86_400);
+    let date = date_of_unix(unix).unwrap_or_default();
+    format!(
+        "{date}T{:02}:{:02}:{:02}Z",
+        secs / 3600,
+        secs % 3600 / 60,
+        secs % 60
+    )
+}
+
 /// The UTC `YYYY-MM-DD` date of a Unix time, or `None` when out of range.
 pub fn date_of_unix(unix: i64) -> Option<String> {
     Date::from_unix(unix).map(|d| d.to_string())
@@ -2743,5 +2762,14 @@ mod tests {
         assert!(status.success());
         // Every line is a boundary commit in the shallow history.
         assert_batch_matches_single(&clone, "doc.md", 3);
+    }
+
+    #[test]
+    fn an_instant_is_written_in_utc_to_the_second() {
+        assert_eq!(instant_text(0), "1970-01-01T00:00:00Z");
+        assert_eq!(instant_text(3 * 3600 + 7 * 60 + 9), "1970-01-01T03:07:09Z");
+        let now = read_instant();
+        assert_eq!(now.len(), 20);
+        assert!(now.ends_with('Z') && now.as_bytes()[10] == b'T');
     }
 }

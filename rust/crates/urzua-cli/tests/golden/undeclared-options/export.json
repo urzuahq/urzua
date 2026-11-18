@@ -28,6 +28,61 @@
       "records": 1
     }
   ],
+  "type_roles": {
+    "adr": {
+      "work": true,
+      "part_of": null,
+      "value_fields": [],
+      "statuses_declared": false,
+      "progress_declared": false,
+      "waits_through": [
+        "Depends-on"
+      ],
+      "gated_without_transitions": false
+    },
+    "fact": {
+      "work": true,
+      "part_of": null,
+      "value_fields": [],
+      "statuses_declared": true,
+      "progress_declared": false,
+      "waits_through": [
+        "Depends-on"
+      ],
+      "gated_without_transitions": false
+    },
+    "milestone": {
+      "work": true,
+      "part_of": null,
+      "value_fields": [],
+      "statuses_declared": true,
+      "progress_declared": true,
+      "waits_through": [
+        "Depends-on"
+      ],
+      "gated_without_transitions": false
+    },
+    "task": {
+      "work": true,
+      "part_of": null,
+      "value_fields": [],
+      "statuses_declared": true,
+      "progress_declared": true,
+      "waits_through": [
+        "Depends-on"
+      ],
+      "gated_without_transitions": false
+    },
+    "waiver": {
+      "work": true,
+      "part_of": null,
+      "value_fields": [],
+      "statuses_declared": false,
+      "progress_declared": false,
+      "waits_through": [],
+      "gated_without_transitions": false
+    }
+  },
   "records": [
     {
       "type": "adr",
@@ -59,7 +114,36 @@
       ],
       "raw_text": "---\nStatus: Accepted\nAuthor: a\nEmbodiment: Implemented\nRealized-by: code:src/a.rs\n---\n# ADR-1: A\n\nA second commit touches this record.\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "A",
+      "title_is_fallback": false,
+      "fields": {
+        "Author": "a",
+        "Embodiment": "Implemented",
+        "Realized-by": "code:src/a.rs",
+        "Status": "Accepted"
+      },
+      "status": "Accepted",
+      "state": "none",
+      "state_decided_by": "no-statuses-declared",
+      "waiting_on": [],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {},
+      "referred_by": {}
     },
     {
       "type": "adr",
@@ -76,7 +160,33 @@
       ],
       "raw_text": "---\nStatus: Accepted\n---\n# ADR-2: B\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "B",
+      "title_is_fallback": false,
+      "fields": {
+        "Status": "Accepted"
+      },
+      "status": "Accepted",
+      "state": "none",
+      "state_decided_by": "no-statuses-declared",
+      "waiting_on": [],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {},
+      "referred_by": {}
     },
     {
       "type": "adr",
@@ -103,7 +213,41 @@
       ],
       "raw_text": "---\nStatus: Draft\nAuthor: c\nDepends-on: ADR-9\n---\n# ADR-3: C\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "C",
+      "title_is_fallback": false,
+      "fields": {
+        "Author": "c",
+        "Depends-on": [
+          "ADR-9"
+        ],
+        "Status": "Draft"
+      },
+      "status": "Draft",
+      "state": "none",
+      "state_decided_by": "no-statuses-declared",
+      "waiting_on": [],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {
+        "Depends-on": [
+          "ADR-9"
+        ]
+      },
+      "referred_by": {}
     },
     {
       "type": "fact",
@@ -120,7 +264,38 @@
       ],
       "raw_text": "---\nStatus: Open\n---\n# a\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "a",
+      "title_is_fallback": false,
+      "fields": {
+        "Status": "Open"
+      },
+      "status": "Open",
+      "state": "open",
+      "state_decided_by": "no-progress-declared",
+      "waiting_on": [],
+      "ready": true,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {},
+      "referred_by": {
+        "Depends-on": [
+          "MILE-3",
+          "TASK-3"
+        ]
+      }
     },
     {
       "type": "fact",
@@ -137,7 +312,37 @@
       ],
       "raw_text": "---\nStatus: Met\n---\n# b\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "b",
+      "title_is_fallback": false,
+      "fields": {
+        "Status": "Met"
+      },
+      "status": "Met",
+      "state": "finished",
+      "state_decided_by": "record_types.fact.statuses.success",
+      "waiting_on": [],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {},
+      "referred_by": {
+        "Depends-on": [
+          "TASK-4"
+        ]
+      }
     },
     {
       "type": "milestone",
@@ -154,7 +359,33 @@
       ],
       "raw_text": "---\nStatus: Done\n---\n# 1 — A\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "A",
+      "title_is_fallback": false,
+      "fields": {
+        "Status": "Done"
+      },
+      "status": "Done",
+      "state": "finished",
+      "state_decided_by": "record_types.milestone.statuses.success",
+      "waiting_on": [],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {},
+      "referred_by": {}
     },
     {
       "type": "milestone",
@@ -176,7 +407,38 @@
       ],
       "raw_text": "---\nStatus: Planned\nRealized-by: test:tests/t.rs\n---\n# 2 — B\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "B",
+      "title_is_fallback": false,
+      "fields": {
+        "Realized-by": "test:tests/t.rs",
+        "Status": "Planned"
+      },
+      "status": "Planned",
+      "state": "not-started",
+      "state_decided_by": "record_types.milestone.statuses.progress",
+      "waiting_on": [],
+      "ready": true,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {},
+      "referred_by": {
+        "Depends-on": [
+          "MILE-3"
+        ]
+      }
     },
     {
       "type": "milestone",
@@ -198,7 +460,45 @@
       ],
       "raw_text": "---\nStatus: InProgress\nDepends-on: FACT-1, MILE-2\n---\n# 3 — C\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "C",
+      "title_is_fallback": false,
+      "fields": {
+        "Depends-on": [
+          "FACT-1",
+          "MILE-2"
+        ],
+        "Status": "InProgress"
+      },
+      "status": "InProgress",
+      "state": "under-way",
+      "state_decided_by": "record_types.milestone.statuses.progress",
+      "waiting_on": [
+        "FACT-1",
+        "MILE-2"
+      ],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {
+        "Depends-on": [
+          "FACT-1",
+          "MILE-2"
+        ]
+      },
+      "unresolved_refs": {},
+      "referred_by": {}
     },
     {
       "type": "task",
@@ -215,7 +515,37 @@
       ],
       "raw_text": "---\nStatus: Planned\n---\n# a\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "a",
+      "title_is_fallback": false,
+      "fields": {
+        "Status": "Planned"
+      },
+      "status": "Planned",
+      "state": "not-started",
+      "state_decided_by": "record_types.task.statuses.progress",
+      "waiting_on": [],
+      "ready": true,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {},
+      "referred_by": {
+        "Depends-on": [
+          "TASK-2"
+        ]
+      }
     },
     {
       "type": "task",
@@ -237,7 +567,42 @@
       ],
       "raw_text": "---\nStatus: Done\nDepends-on: TASK-1\n---\n# b\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "b",
+      "title_is_fallback": false,
+      "fields": {
+        "Depends-on": [
+          "TASK-1"
+        ],
+        "Status": "Done"
+      },
+      "status": "Done",
+      "state": "finished",
+      "state_decided_by": "record_types.task.statuses.success",
+      "waiting_on": [
+        "TASK-1"
+      ],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {
+        "Depends-on": [
+          "TASK-1"
+        ]
+      },
+      "unresolved_refs": {},
+      "referred_by": {}
     },
     {
       "type": "task",
@@ -259,7 +624,42 @@
       ],
       "raw_text": "---\nStatus: Planned\nDepends-on: FACT-1\n---\n# c\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "c",
+      "title_is_fallback": false,
+      "fields": {
+        "Depends-on": [
+          "FACT-1"
+        ],
+        "Status": "Planned"
+      },
+      "status": "Planned",
+      "state": "not-started",
+      "state_decided_by": "record_types.task.statuses.progress",
+      "waiting_on": [
+        "FACT-1"
+      ],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {
+        "Depends-on": [
+          "FACT-1"
+        ]
+      },
+      "unresolved_refs": {},
+      "referred_by": {}
     },
     {
       "type": "task",
@@ -281,7 +681,40 @@
       ],
       "raw_text": "---\nStatus: Planned\nDepends-on: FACT-2\n---\n# d\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "d",
+      "title_is_fallback": false,
+      "fields": {
+        "Depends-on": [
+          "FACT-2"
+        ],
+        "Status": "Planned"
+      },
+      "status": "Planned",
+      "state": "not-started",
+      "state_decided_by": "record_types.task.statuses.progress",
+      "waiting_on": [],
+      "ready": true,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {
+        "Depends-on": [
+          "FACT-2"
+        ]
+      },
+      "unresolved_refs": {},
+      "referred_by": {}
     },
     {
       "type": "waiver",
@@ -308,7 +741,35 @@
       ],
       "raw_text": "---\nRule: header.required-fields\nScope: docs/adr/ADR-2-b.md\nReason: the fixture needs one waived finding\n---\n# 1\n",
       "sections": null,
-      "preamble": null
+      "preamble": null,
+      "title": "WAIVER-1",
+      "title_is_fallback": true,
+      "fields": {
+        "Reason": "the fixture needs one waived finding",
+        "Rule": "header.required-fields",
+        "Scope": "docs/adr/ADR-2-b.md"
+      },
+      "status": null,
+      "state": "none",
+      "state_decided_by": "no-statuses-declared",
+      "waiting_on": [],
+      "ready": false,
+      "gated_moves": [],
+      "parent": null,
+      "parent_ambiguous": [],
+      "children": [],
+      "children_by_state": {
+        "finished": 0,
+        "dropped": 0,
+        "under-way": 0,
+        "not-started": 0,
+        "open": 0,
+        "none": 0
+      },
+      "state_disagrees_with_children": false,
+      "refers_to": {},
+      "unresolved_refs": {},
+      "referred_by": {}
     }
   ],
   "roadmap": {

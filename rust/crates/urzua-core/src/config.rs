@@ -63,6 +63,15 @@ pub struct Config {
     /// raw document at load; the typed parse keeps only the names.
     #[serde(skip)]
     pub pointer_targets: crate::pointer_targets::PointerTargets,
+    /// The pointer field each type declares as containment (`part_of: true`),
+    /// read from the raw document beside `pointer_targets`. A type absent here
+    /// has no containment: its records are flat.
+    #[serde(skip)]
+    pub part_of: crate::pointer_targets::PartOf,
+    /// What `urzua export` adds beyond the records themselves (`link_prefix`).
+    /// Absent adds nothing.
+    #[serde(default, skip_serializing_if = "ExportDecl::is_empty")]
+    pub export: ExportDecl,
     /// Which status entries some type declares, read once at load so a rule
     /// that is on by declaration does not parse every type's `statuses` again
     /// each time it is asked whether it applies.
@@ -506,6 +515,69 @@ pub struct RoadmapDecl {
 impl RoadmapDecl {
     fn is_empty(&self) -> bool {
         self.pairs.is_empty() && self.group_by.is_empty() && self.work_types.is_none()
+    }
+}
+
+/// The `export` key: what `urzua export` adds to a record beyond what the
+/// record holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportDecl {
+    /// Text put before a record's repository-relative path, with `/` separators,
+    /// to make the `link` each exported record carries: the address of a hosted
+    /// view of the file. Absent means no record carries a `link`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_prefix: Option<String>,
+}
+
+impl ExportDecl {
+    fn is_empty(&self) -> bool {
+        self.link_prefix.is_none()
+    }
+
+    /// `prefix` joined to `path`, or `None` when no prefix is declared. The path
+    /// is percent-encoded, so a file name holding `#`, `?`, `%` or a space
+    /// cannot change what the address names.
+    pub fn link_for(&self, path: &std::path::Path) -> Option<String> {
+        let prefix = self.link_prefix.as_deref()?;
+        let mut encoded = String::new();
+        for byte in path.to_string_lossy().replace('\\', "/").bytes() {
+            if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
+                encoded.push(byte as char);
+            } else {
+                encoded.push_str(&format!("%{byte:02X}"));
+            }
+        }
+        Some(format!("{prefix}{encoded}"))
+    }
+}
+
+/// A link prefix is `https://` or `http://` and a host, or a path from the
+/// host's root that does not start `//`, in URL-safe characters only: no quote,
+/// angle bracket, backslash, whitespace or control character, which would let a
+/// configuration value break out of the attribute a viewer writes it into.
+fn validate_export(config: &Config) -> Result<(), ConfigError> {
+    let Some(prefix) = config.export.link_prefix.as_deref() else {
+        return Ok(());
+    };
+    let url_safe = prefix
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "-._~:/?#[]@!$&()*+,;=%".contains(c));
+    let shaped = match prefix
+        .strip_prefix("https://")
+        .or_else(|| prefix.strip_prefix("http://"))
+    {
+        Some(rest) => !rest.is_empty() && !rest.starts_with('/'),
+        None => prefix.starts_with('/') && !prefix.starts_with("//"),
+    };
+    if url_safe && shaped {
+        Ok(())
+    } else {
+        Err(ConfigError::InvalidExport {
+            reason: format!(
+                "export.link_prefix '{prefix}' must be https:// or http:// and a host, or a path starting with a single /, in URL-safe characters (no quote, angle bracket, whitespace or control character)"
+            ),
+        })
     }
 }
 
@@ -2113,6 +2185,8 @@ pub enum ConfigError {
     InvalidRelationPair { reason: String },
     #[error("pointer target types: {reason}")]
     InvalidPointerTargets { reason: String },
+    #[error("export: {reason}")]
+    InvalidExport { reason: String },
     #[error("roadmap: {reason}")]
     InvalidRoadmap { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -3304,7 +3378,7 @@ pub fn parse_with_document_models(
     content: &str,
 ) -> Result<(Config, BTreeMap<String, DocumentModel>), ConfigError> {
     let mut config = read_in_window(content)?;
-    config.pointer_targets = crate::pointer_targets::collect(content)?;
+    (config.pointer_targets, config.part_of) = crate::pointer_targets::collect(content)?;
     let models = crate::document_model::validate_declarations(&config.record_types)?;
     config
         .embodiment
@@ -3318,6 +3392,7 @@ pub fn parse_with_document_models(
     crate::status_model::validate_items_rule(&config.record_types, &status_decls, &config.rules)?;
     validate_relation_pairs(&config)?;
     crate::pointer_targets::validate(&config)?;
+    validate_export(&config)?;
     validate_roadmap(&config)?;
     validate_companion_fields(&config)?;
     validate_record_types(&config)?;
@@ -6923,6 +6998,69 @@ record_types:
     }
 
     const AMEND_PAIR: &str = "relation_pairs:\n  - {name: amendment, forward: Amends, inverse: Amended-by, reciprocity: required, cross_type: false}\n";
+
+    #[test]
+    fn a_link_prefix_joins_a_record_path_and_must_be_an_address() {
+        let none = parse(&pair_cfg("", "")).unwrap();
+        assert_eq!(
+            none.export.link_for(std::path::Path::new("docs/a.md")),
+            None
+        );
+        let c = parse(&pair_cfg(
+            "",
+            "export:\n  link_prefix: https://h.test/blob/main/\n",
+        ))
+        .unwrap();
+        assert_eq!(
+            c.export
+                .link_for(std::path::Path::new("docs/a.md"))
+                .as_deref(),
+            Some("https://h.test/blob/main/docs/a.md")
+        );
+        for bad in [
+            "ftp://h.test/",
+            "h.test/",
+            "https://h.test/ x/",
+            "javascript:alert(1)//",
+            "https://h.test/\\\"><script>alert(1)</script>",
+            "https://h.test/'x",
+            "https://h.test/<b>",
+            "https://h.test/\\\\x",
+            "https://h.test/a\tb",
+            "//evil.example/",
+            "///evil.example/",
+            "https://",
+            "https:///x",
+            "/ok/\\\"x",
+        ] {
+            let text = pair_cfg("", &format!("export:\n  link_prefix: \"{bad}\"\n"));
+            assert!(
+                matches!(parse(&text), Err(ConfigError::InvalidExport { .. })),
+                "{bad}"
+            );
+        }
+        assert!(parse(&pair_cfg("", "export:\n  other: 1\n")).is_err());
+        for good in [
+            "https://h.test/a/b?c=d#e",
+            "http://h.test:8080/",
+            "/docs/",
+            "/",
+        ] {
+            let text = pair_cfg("", &format!("export:\n  link_prefix: \"{good}\"\n"));
+            assert!(parse(&text).is_ok(), "{good}");
+        }
+    }
+
+    #[test]
+    fn a_link_percent_encodes_the_record_path() {
+        let c = parse(&pair_cfg("", "export:\n  link_prefix: https://h.test/b/\n")).unwrap();
+        assert_eq!(
+            c.export
+                .link_for(std::path::Path::new("docs/a b#c?d%e/é.md"))
+                .as_deref(),
+            Some("https://h.test/b/docs/a%20b%23c%3Fd%25e/%C3%A9.md")
+        );
+    }
 
     #[test]
     fn fail_on_defaults_to_error_and_accepts_warning() {

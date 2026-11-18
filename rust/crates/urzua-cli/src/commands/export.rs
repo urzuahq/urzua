@@ -3,24 +3,49 @@
 //! `check` uses instead of a second one (`MILE-115`).
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::RelationRole;
 use urzua_core::report::{
-    ExportReport, ExportTypeCount, ExportedField, ExportedRecord, ExportedSectionEntry, Notice,
-    NoticeSeverity, ReportStatus,
+    ChecklistItem, ExportReport, ExportTypeCount, ExportedField, ExportedRecord,
+    ExportedSectionEntry, Notice, NoticeSeverity, ReadStamp, ReportStatus,
 };
 
 use urzua_core::config::Config;
 use urzua_core::record::Record;
+use urzua_core::view_model::{self, RecordView, ViewInput};
 
 use crate::emit;
 use crate::session::{emit_or_not_run, Session};
 use urzua_core::report::Failure;
 
-pub fn run(config_path: Option<PathBuf>) -> ExitCode {
-    emit_or_not_run(build(config_path, &RecordFilter::default()).map(|report| emit(&report)))
+pub fn run(config_path: Option<PathBuf>, options: &ExportOptions) -> ExitCode {
+    emit_or_not_run(
+        build_with(config_path, &RecordFilter::default(), options).map(|report| emit(&report)),
+    )
+}
+
+/// What an export carries beyond the filter.
+pub(crate) struct ExportOptions {
+    /// Each record's `raw_text`; off drops the key.
+    pub raw_text: bool,
+    /// Each section's `content`; off drops the key, and the section's name,
+    /// heading, lines, counts and items stay.
+    pub section_text: bool,
+    /// The per-item evaluation of each declared checklist, which judges every
+    /// item's evidence against the tree; off drops `items` from the sections.
+    pub checklist_items: bool,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        ExportOptions {
+            raw_text: true,
+            section_text: true,
+            checklist_items: true,
+        }
+    }
 }
 
 /// Which records `build` keeps. The default keeps every record with its text,
@@ -42,22 +67,57 @@ pub(crate) fn build(
     config_path: Option<PathBuf>,
     filter: &RecordFilter,
 ) -> Result<ExportReport, Failure> {
+    build_with(config_path, filter, &ExportOptions::default())
+}
+
+/// [`build`] with the options of the command line.
+pub(crate) fn build_with(
+    config_path: Option<PathBuf>,
+    filter: &RecordFilter,
+    options: &ExportOptions,
+) -> Result<ExportReport, Failure> {
     // `raw_text` publishes a file's contents; `Session::open` refuses a tracked
     // record that resolves outside the repository or its type's directory, so an
     // export cannot disclose an arbitrary file under a repository path.
+    let session = Session::open(config_path)?;
     let Session {
+        repo_root,
         config,
         records,
         full_text,
         ..
-    } = Session::open(config_path)?;
+    } = &session;
 
+    let (edges, _) = crate::commands::graph::edges_of(records, config);
+    let model = view_model::compute(&ViewInput {
+        records,
+        config,
+        full_text,
+        edges: &edges,
+    });
+    let checklists = if options.checklist_items {
+        checklists(&session)
+    } else {
+        Checklists::new()
+    };
     let mut exported: Vec<ExportedRecord> = records
         .iter()
-        .map(|record| exported_record(record, &config, &full_text))
+        .zip(model.records)
+        .map(|(record, view)| {
+            let checklist = checklists.get(&record.path);
+            exported_record(record, config, full_text, view, checklist, options)
+        })
         .collect();
-    exported.sort_by(|a, b| (&a.record_type, &a.path).cmp(&(&b.record_type, &b.path)));
-    let notices = apply_filter(&mut exported, &config, filter);
+    exported.sort_by(|a, b| {
+        a.record_type
+            .cmp(&b.record_type)
+            .then_with(|| {
+                let id = |r: &ExportedRecord| r.id.clone().unwrap_or_default();
+                urzua_core::rules::natural_cmp(&id(a), &id(b))
+            })
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    let notices = apply_filter(&mut exported, config, filter);
 
     let types = config
         .sorted_type_names()
@@ -73,18 +133,107 @@ pub(crate) fn build(
         status: ReportStatus::Ok,
         record_count: exported.len(),
         types,
+        type_roles: model.roles,
+        read: read_stamp(repo_root, config),
         records: exported,
         roadmap: (!config.roadmap.pairs.is_empty())
-            .then(|| urzua_core::rules::compute_roadmap(&records, &config)),
+            .then(|| urzua_core::rules::compute_roadmap(records, config)),
         notices,
     })
 }
 
-/// One record as plain data: its header, sections and complete text.
+/// A declared checklist section's name and its items, as the delivery rule
+/// judges them, for each record whose type declares one.
+type Checklists = HashMap<PathBuf, (String, Vec<ChecklistItem>)>;
+
+fn checklists(session: &Session) -> Checklists {
+    let Session {
+        repo_root,
+        config,
+        discovered,
+        records,
+        ..
+    } = session;
+    let declared = urzua_core::rules::statuses_by_type(config);
+    let mut out = Checklists::new();
+    crate::file_texts::with_locator_env(repo_root, config, &discovered.paths, records, |env| {
+        for record in records {
+            let Some(items) = &record.items else { continue };
+            let Some(delivery) = declared
+                .get(&record.record_type)
+                .and_then(|d| d.delivery.as_ref())
+            else {
+                continue;
+            };
+            let Some(decl) = &delivery.items else {
+                continue;
+            };
+            let judged = urzua_core::rules::judge_items(record, items, config, delivery, env);
+            let listed = judged
+                .items
+                .iter()
+                .zip(&items.items)
+                .map(|(standing, item)| ChecklistItem {
+                    n: standing.n,
+                    line: standing.line,
+                    text: standing.text.clone(),
+                    resolved: standing.resolved(),
+                    evidence: item.evidence.as_ref().map(|c| c.text.clone()),
+                    waived: standing.is_waived(),
+                })
+                .collect();
+            out.insert(record.path.clone(), (decl.section.clone(), listed));
+        }
+    });
+    out
+}
+
+/// One trimmed line of `git`'s answer, `None` when git fails or says nothing.
+fn git_line(repo_root: &Path, args: &[&str]) -> Option<String> {
+    urzua_io::git::stdout_in(repo_root, args)
+        .ok()
+        .map(|out| String::from_utf8_lossy(&out).trim().to_string())
+        .filter(|text| !text.is_empty())
+}
+
+/// The commit and the branch the working tree is on; `None` for a repository
+/// with no commit and for a detached head.
+pub(crate) fn git_identity(repo_root: &Path) -> (Option<String>, Option<String>) {
+    (
+        git_line(repo_root, &["rev-parse", "HEAD"]),
+        git_line(repo_root, &["symbolic-ref", "--short", "-q", "HEAD"]),
+    )
+}
+
+/// The commit and branch the working tree is on, whether any file under a
+/// record directory differs from the commit, and when this was read. A failure
+/// to ask git is an absent value, never a guess.
+fn read_stamp(repo_root: &Path, config: &Config) -> ReadStamp {
+    let git = |args: &[&str]| git_line(repo_root, args);
+    let mut status = vec!["status", "--porcelain", "--untracked-files=all", "--"];
+    let dirs: Vec<&str> = config
+        .record_types
+        .values()
+        .flat_map(|t| t.all_dirs())
+        .collect();
+    status.extend(&dirs);
+    ReadStamp {
+        commit: git(&["rev-parse", "HEAD"]),
+        branch: git(&["symbolic-ref", "--short", "-q", "HEAD"]),
+        uncommitted_record_changes: !dirs.is_empty() && git(&status).is_some(),
+        time: urzua_io::read_instant(),
+    }
+}
+
+/// One record as plain data: its header, sections and complete text, and what
+/// a view of it needs.
 fn exported_record(
     record: &Record,
     config: &Config,
     full_text: &HashMap<PathBuf, String>,
+    view: RecordView,
+    checklist: Option<&(String, Vec<ChecklistItem>)>,
+    options: &ExportOptions,
 ) -> ExportedRecord {
     let text = full_text
         .get(&record.path)
@@ -100,12 +249,21 @@ fn exported_record(
             Some(
                 sections
                     .into_iter()
-                    .map(|s| ExportedSectionEntry {
-                        name: s.name,
-                        heading: s.heading,
-                        line: s.line,
-                        end_line: s.end_line,
-                        content: s.content,
+                    .map(|s| {
+                        let (ticked, unticked) = view_model::checkbox_counts(&s.content);
+                        let items = checklist
+                            .filter(|(section, _)| *section == s.name || *section == s.heading)
+                            .map(|(_, items)| items.clone());
+                        ExportedSectionEntry {
+                            name: s.name,
+                            heading: s.heading,
+                            line: s.line,
+                            end_line: s.end_line,
+                            content: options.section_text.then_some(s.content),
+                            ticked,
+                            unticked,
+                            items,
+                        }
                     })
                     .collect(),
             ),
@@ -134,7 +292,8 @@ fn exported_record(
                 line: f.line,
             })
             .collect(),
-        raw_text: text.to_string(),
+        raw_text: options.raw_text.then(|| text.to_string()),
+        view,
     }
 }
 

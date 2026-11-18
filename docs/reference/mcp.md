@@ -33,8 +33,8 @@ id, an unknown rule) is a result with `isError: true` and `"status": "not-run"`.
 | Tool | Arguments | Returns |
 |---|---|---|
 | `urzua_check` | `paths`, `base`, `rules` (all optional) | The `check` report: findings, scope and rules run. `paths` stay inside the repository. See [`check`](check.md). |
-| `urzua_list_records` | `type`, `status` (a list), both optional | Each matching record's id, type, path and header fields, without its text. A filter that matches nothing is a notice. It carries no `roadmap` block: that spans the whole corpus whatever the filter, and is [`urzua roadmap`](commands.md#roadmap)'s. |
-| `urzua_show_record` | `id` (required, for example `ADR-23`) | One record: header, sections and complete text, and the relation edges that touch it, supersession included. An unknown id is an error result. |
+| `urzua_list_records` | `type`, `status` (a list), both optional | Each matching record's id, type, path and header fields, without its text, with the keys [`export`](commands.md#export) derives (`title`, `fields`, `state`, `waiting_on`, `ready`, `parent`, `children`, `refers_to`, `referred_by`), computed over the whole corpus before the filter. A filter that matches nothing is a notice. It carries no `roadmap` block: that spans the whole corpus whatever the filter, and is [`urzua roadmap`](commands.md#roadmap)'s. |
+| `urzua_show_record` | `id` (required, for example `ADR-23`) | One record: header, sections and complete text, the same derived keys, and the relation edges that touch it, supersession included. An unknown id is an error result. |
 | `urzua_get_findings_for_path` | `path` (required) | Which records govern a file, directory or glob: the report of [`urzua explain`](commands.md#explain). |
 | `urzua_get_graph` | none | Every relation edge between records: the report of [`urzua graph`](commands.md#graph). |
 

@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use urzua_core::config::Config;
+use urzua_core::record::Record;
 use urzua_core::report::{GraphReport, ReportStatus};
 use urzua_core::rules;
 
@@ -16,12 +18,15 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
     emit_or_not_run(build(config_path).map(|report| emit(&report)))
 }
 
-/// The report `urzua graph` prints, also built by the MCP server.
-pub(crate) fn build(config_path: Option<PathBuf>) -> Result<GraphReport, Failure> {
-    let Session {
-        config, records, ..
-    } = Session::open(config_path)?;
-
+/// The edges `urzua graph` prints and the export's `refers_to` and
+/// `referred_by` read, with the identifier collisions found building them.
+pub(crate) fn edges_of<'a>(
+    records: &'a [Record],
+    config: &Config,
+) -> (
+    Vec<urzua_core::graph::GraphEdge>,
+    Vec<rules::IdentifierCollision<'a>>,
+) {
     let mut pointer_fields_by_type = HashMap::new();
     let mut narrative_fields_by_type = HashMap::new();
     for (name, cfg) in &config.record_types {
@@ -32,13 +37,21 @@ pub(crate) fn build(config_path: Option<PathBuf>) -> Result<GraphReport, Failure
             narrative_fields_by_type.insert(name.clone(), narrative_fields.clone());
         }
     }
-
-    let (edges, collisions) = urzua_core::graph::graph(
-        &records,
-        &config,
+    urzua_core::graph::graph(
+        records,
+        config,
         &pointer_fields_by_type,
         &narrative_fields_by_type,
-    );
+    )
+}
+
+/// The report `urzua graph` prints, also built by the MCP server.
+pub(crate) fn build(config_path: Option<PathBuf>) -> Result<GraphReport, Failure> {
+    let Session {
+        config, records, ..
+    } = Session::open(config_path)?;
+
+    let (edges, collisions) = edges_of(&records, &config);
 
     let mut notices = rules::identity_collision_notices(&collisions);
     let (population, left_out) = urzua_core::graph::read_population(&records, &config, "graph");

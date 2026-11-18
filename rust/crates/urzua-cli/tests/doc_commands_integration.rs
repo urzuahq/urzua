@@ -13,7 +13,10 @@ use std::process::Command;
 use common::{commit_all, git};
 
 /// Commands not run, each with why.
-const ALLOWED: &[(&str, &str)] = &[];
+const ALLOWED: &[(&str, &str)] = &[(
+    "urzua board --serve --port 8787",
+    "listens until interrupted, so `output()` would never return; board_integration serves a fixture and stops it",
+)];
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")

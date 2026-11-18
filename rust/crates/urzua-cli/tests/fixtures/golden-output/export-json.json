@@ -9,9 +9,30 @@
     "next_action": null,
     "next_action_inputs": [],
     "next_action_reason": null,
+    "read": {
+      "branch": "<BRANCH>",
+      "commit": "<COMMIT>",
+      "time": "<NOW>",
+      "uncommitted_record_changes": false
+    },
     "record_count": 4,
     "records": [
       {
+        "children": [],
+        "children_by_state": {
+          "dropped": 0,
+          "finished": 0,
+          "none": 0,
+          "not-started": 0,
+          "open": 0,
+          "under-way": 0
+        },
+        "fields": {
+          "Embodiment": "Implemented",
+          "Realized-by": "code:src/a.rs",
+          "Status": "Accepted"
+        },
+        "gated_moves": [],
         "header": [
           {
             "line": 2,
@@ -31,14 +52,41 @@
         ],
         "header_readable": true,
         "id": "ADR-1",
+        "parent": null,
+        "parent_ambiguous": [],
         "path": "docs/adr/ADR-1-first.md",
         "preamble": null,
         "raw_text": "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/a.rs\n---\n# 1 — First\n\nClean record.\n\nA later edit.\n\nA later edit.\n",
+        "ready": false,
+        "referred_by": {},
+        "refers_to": {},
         "sections": null,
         "stable_id": null,
-        "type": "adr"
+        "state": "none",
+        "state_decided_by": "no-statuses-declared",
+        "state_disagrees_with_children": false,
+        "status": "Accepted",
+        "title": "First",
+        "title_is_fallback": false,
+        "type": "adr",
+        "unresolved_refs": {},
+        "waiting_on": []
       },
       {
+        "children": [],
+        "children_by_state": {
+          "dropped": 0,
+          "finished": 0,
+          "none": 0,
+          "not-started": 0,
+          "open": 0,
+          "under-way": 0
+        },
+        "fields": {
+          "Bogus": "yes",
+          "Status": "Accepted"
+        },
+        "gated_moves": [],
         "header": [
           {
             "line": 2,
@@ -53,14 +101,45 @@
         ],
         "header_readable": true,
         "id": "ADR-2",
+        "parent": null,
+        "parent_ambiguous": [],
         "path": "docs/adr/ADR-2-second.md",
         "preamble": null,
         "raw_text": "---\nStatus: Accepted\nBogus: yes\n---\n# 2 — Second\n\nMissing Embodiment, an undeclared key.\n",
+        "ready": false,
+        "referred_by": {},
+        "refers_to": {},
         "sections": null,
         "stable_id": null,
-        "type": "adr"
+        "state": "none",
+        "state_decided_by": "no-statuses-declared",
+        "state_disagrees_with_children": false,
+        "status": "Accepted",
+        "title": "Second",
+        "title_is_fallback": false,
+        "type": "adr",
+        "unresolved_refs": {},
+        "waiting_on": []
       },
       {
+        "children": [],
+        "children_by_state": {
+          "dropped": 0,
+          "finished": 0,
+          "none": 0,
+          "not-started": 0,
+          "open": 0,
+          "under-way": 0
+        },
+        "fields": {
+          "Embodiment": "Verified",
+          "Parent": [
+            "ADR-99"
+          ],
+          "Realized-by": "code:src/a.rs",
+          "Status": "Accepted"
+        },
+        "gated_moves": [],
         "header": [
           {
             "line": 2,
@@ -85,26 +164,87 @@
         ],
         "header_readable": true,
         "id": "ADR-3",
+        "parent": null,
+        "parent_ambiguous": [],
         "path": "docs/adr/ADR-3-third.md",
         "preamble": null,
         "raw_text": "---\nStatus: Accepted\nEmbodiment: Verified\nRealized-by: code:src/a.rs\nParent: ADR-99\n---\n# 3 — Not the filename title\n\nClaims more than the evidence.\n",
+        "ready": false,
+        "referred_by": {},
+        "refers_to": {},
         "sections": null,
         "stable_id": null,
-        "type": "adr"
+        "state": "none",
+        "state_decided_by": "no-statuses-declared",
+        "state_disagrees_with_children": false,
+        "status": "Accepted",
+        "title": "Not the filename title",
+        "title_is_fallback": false,
+        "type": "adr",
+        "unresolved_refs": {
+          "Parent": [
+            "ADR-99"
+          ]
+        },
+        "waiting_on": []
       },
       {
+        "children": [],
+        "children_by_state": {
+          "dropped": 0,
+          "finished": 0,
+          "none": 0,
+          "not-started": 0,
+          "open": 0,
+          "under-way": 0
+        },
+        "fields": {},
+        "gated_moves": [],
         "header": [],
         "header_readable": true,
         "id": "NOTE-1",
+        "parent": null,
+        "parent_ambiguous": [],
         "path": "docs/note/NOTE-1-plain.md",
         "preamble": null,
         "raw_text": "# 1 — A plain note\n\nNo header at all; the type declares none.\n",
+        "ready": false,
+        "referred_by": {},
+        "refers_to": {},
         "sections": null,
         "stable_id": null,
-        "type": "note"
+        "state": "none",
+        "state_decided_by": "no-statuses-declared",
+        "state_disagrees_with_children": false,
+        "status": null,
+        "title": "A plain note",
+        "title_is_fallback": false,
+        "type": "note",
+        "unresolved_refs": {},
+        "waiting_on": []
       }
     ],
     "status": "ok",
+    "type_roles": {
+      "adr": {
+        "gated_without_transitions": false,
+        "part_of": null,
+        "progress_declared": false,
+        "statuses_declared": false,
+        "value_fields": [],
+        "waits_through": [],
+        "work": true
+      },
+      "note": {
+        "gated_without_transitions": false,
+        "part_of": null,
+        "progress_declared": false,
+        "statuses_declared": false,
+        "value_fields": [],
+        "waits_through": [],
+        "work": true
+      }
+    },
     "types": [
       {
         "dir": "docs/adr",

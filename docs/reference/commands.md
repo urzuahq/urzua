@@ -34,7 +34,7 @@ path outside the repository, a directory that is not a git repository).
 ### What uses the network
 
 Almost nothing. `check`, `fix` and `reverify` without `--apply`, `explain`, `graph`, `roadmap`,
-`rules`, `doctor`, `export`, `index`, `migrate`, `mcp`, `init` and `harness` make no network call.
+`rules`, `doctor`, `export`, `board`, `index`, `migrate`, `mcp`, `init` and `harness` make no network call.
 Four commands do:
 
 - `urzua refs refresh` fetches issue and pull request numbers from the GitHub REST API (with `curl`).
@@ -60,6 +60,7 @@ Four commands do:
 | [`explain`](#explain) | Which records govern a path, what a rule is, or what the configuration declares for its record types | no |
 | [`graph`](#graph) | The record relationship graph | no |
 | [`roadmap`](#roadmap) | The order of work, computed from the records | no |
+| [`board`](#board) | One page showing every record, as a file or served locally | a file under `.urzua/cache` (or `--out`) |
 | [`rules`](#rules) | Every rule this build ships | no |
 | [`migrate`](#migrate) | Backfill stable ids, rename files to the filename convention, upgrade the config, preview a new required field | with `--apply` or `config` |
 | [`export`](#export) | Emit the records as JSON | no |
@@ -385,6 +386,19 @@ config and stores nothing. A repository that declares none gets a note (`no-sequ
 empty roadmap. Output: `status` and `roadmap` with `schema`, `pairs`, `waves`, `ready`,
 `critical_path`, `records`, `groups`, `needs_replan`, `cycles` and `notes`.
 
+## board
+
+```text
+urzua board [--out <path>]
+urzua board --serve [--port <n>] [--allowed-host <name>]...
+```
+
+One HTML page of every record, laid out only from the configuration; see [the board](board.md). Without
+`--serve` it writes the file (default `.urzua/cache/board.html`) and prints `status`, `file`, `bytes`,
+`record_count` and `read`. With `--serve` it listens on 127.0.0.1 (a free port unless `--port` names one),
+prints one JSON line with `listening`, `address` and `port`, and answers `GET` until interrupted (the page refreshes itself from `GET /stamp`; see [the board](board.md)). `--port`
+and `--allowed-host` (a `Host` name to answer besides `localhost` and `127.0.0.1`; others get 403) need `--serve`, and `--out` excludes it. The page is a file or a response, never stdout.
+
 ## mcp
 
 ```text
@@ -459,9 +473,41 @@ urzua migrate schema --report --field <name>
 urzua export --format json
 ```
 
-Every record as plain JSON data. Output: `status`, `record_count`, `types` and `records`, each record
-with `id`, `type`, `path`, `stable_id`, `header`, `header_readable`, `preamble`, `sections` and
-`raw_text`. The format must be named. `--format agdr` is not implemented and exits 2.
+Every record as plain JSON data. Output: `status`, `record_count`, `types`, `type_roles`, `read` and
+`records`, each record with `id`, `type`, `path`, `stable_id`, `header`, `header_readable`, `preamble`,
+`sections` and `raw_text`, and what a view of the records needs: `title`, `fields`, `status`, `state` and
+`state_decided_by`, `waiting_on`, `ready`, `gated_moves`, `parent`, `children`, `children_by_state`,
+`state_disagrees_with_children`, `refers_to`, `unresolved_refs`, `referred_by` and, when the configuration
+declares an `export.link_prefix`, `link`. Records are in numeric order within a type. `--no-raw-text`
+leaves `raw_text` out of every record. The format must be named. `--format agdr` is not implemented and
+exits 2. [The board](board.md) is built from these keys alone; so can your own view be.
+
+```text
+urzua export --format json --no-raw-text
+urzua export --format json --no-text --no-checklist-items
+```
+
+`--no-raw-text` leaves each record's `raw_text` out. `--no-text` leaves out `raw_text` and each section's `content` as well,
+which is most of an export's size (this repository's 22 MB export is about 3.6 MB with it, against 12.6 MB under
+`--no-raw-text` alone). `--no-checklist-items` skips judging every declared checklist item's evidence against the tree, which is
+about 1.3 of the export's 1.7 seconds here (release build), and leaves `items` out of the sections. Defaults are unchanged; the board reads
+`raw_text` and the items, and not the sections' `content`.
+
+`state` is one of `finished`, `dropped`, `under-way`, `not-started`, `open` or `none`, read from the type's
+`statuses.success`, `failure` and `progress` lists, and `state_decided_by` names the declaration that
+decided it. A type that declares no `statuses.progress` cannot say work has begun, so its records that are neither
+finished nor dropped are `open`; `not-started` needs a declared progress set the status is not in. `waiting_on` is separate from it: a record can be under way and waiting. A record whose header cannot be read has
+state `none` (`state_decided_by` `header-unreadable`), is never ready and has no tree.
+`ready` means work someone can pick up: a record of a work type that has not begun (`not-started` or `open`), whose type
+declares statuses, and that waits on nothing. It is not `roadmap.ready`, which lists the open work records the declared pairs
+reach that sit in the first wave with every dependency finished: that includes records already under way and leaves out
+records no pair reaches; the export's `ready` leaves out the former and includes the latter. Neither counts a free-text
+wait (a narrative field naming a record), only the declared pairs. The board lists the ready records that have no children.
+The ids in `waiting_on`, `refers_to`, `referred_by`, `parent` and `children` are the records' own; `roadmap` and `graph` print
+an id as the referring header wrote it. `parent` and
+`children` exist only where a `pointer_fields` entry declares `part_of: true` (see
+[config](config.md#containment-part_of)). `read` names the commit, the branch, whether a record file has
+uncommitted changes, and the time. The full contract is in `SPEC-1`.
 
 ## index
 

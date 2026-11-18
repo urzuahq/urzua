@@ -1,0 +1,20 @@
+id: grouping-by-a-field-follows-a-child-to-its-parents-value
+corpus: corpus-l
+commits:
+  - write:
+      records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 7\n---\n# MILE-2 — m2\n"
+      records/MILE-3-m3.md: "---\nStatus: Planned\nPart-of: MILE-2\n---\n# MILE-3 — m3\n"
+      records/MILE-4-m4.md: "---\nStatus: Planned\nPart-of: MILE-3\n---\n# MILE-4 — m4\n"
+      records/MILE-5-m5.md: "---\nStatus: Planned\n---\n# MILE-5 — m5\n"
+      records/MILE-6-m6.md: "---\nStatus: Planned\nPhase: 9\nPart-of: MILE-2\n---\n# MILE-6 — m6\n"
+invocation: [--config, .urzua/containment.yaml, roadmap]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /roadmap/groups/0/value, equals: "7"}
+  - {at: /roadmap/groups/0/records, equals: ["MILE-2", "MILE-3", "MILE-4"]}
+  - {at: /roadmap/groups/1/value, equals: "9"}
+  - {at: /roadmap/groups/1/records, equals: ["MILE-6"]}
+  - {at: /roadmap/groups/2/value, equals: null}
+  - {at: /roadmap/groups/2/records, equals: ["MILE-5"]}
+mutation_exempt: urzua roadmap is a read-only view; it applies no rule, so there is none to switch off.

@@ -415,9 +415,11 @@ fn every_top_level_key_but_types_and_rules_is_under_repository() {
     assert!(keys.len() > 10, "{keys:?}");
     let (_, r) = run(&own_root(), &["explain", "--types", "--full"]);
     let repository = r["repository"].as_object().unwrap();
+    // `export` is optional and means nothing without a hosted address for the
+    // records, so this repository's configuration need not declare it.
     for key in keys
         .iter()
-        .filter(|k| *k != "record_types" && *k != "rules")
+        .filter(|k| !["record_types", "rules", "export"].contains(&k.as_str()))
     {
         assert!(
             repository.get(key).is_some_and(|e| e["at"].is_string()),
