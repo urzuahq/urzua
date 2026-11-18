@@ -743,6 +743,53 @@ fn names_phrase(names: &[&str]) -> String {
     }
 }
 
+/// "X declares a gate but no transitions, ..." for the types that do, or nothing.
+fn no_transitions_note(page: &Page<'_>) -> String {
+    let names: Vec<&str> = page
+        .e
+        .type_roles
+        .iter()
+        .filter(|(_, role)| role.gated_without_transitions)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    if names.is_empty() {
+        return String::new();
+    }
+    let one = names.len() == 1;
+    format!(
+        "{} {} a gate but no transitions, so the next move of {} records cannot be read.",
+        names_phrase(&names),
+        if one { "declares" } else { "declare" },
+        if one { "its" } else { "their" }
+    )
+}
+
+/// The one line under "Under way" naming the types that declare no progress set.
+fn progress_note(page: &Page<'_>, none_under_way: bool) -> String {
+    let names: Vec<&str> = page
+        .e
+        .type_roles
+        .iter()
+        .filter(|(_, role)| role.statuses_declared && !role.progress_declared)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    if names.is_empty() {
+        return String::new();
+    }
+    let one = names.len() == 1;
+    format!(
+        "{}{} {} no `statuses.progress`, so {} records show as open.",
+        if none_under_way {
+            "Nothing is under way. "
+        } else {
+            ""
+        },
+        names_phrase(&names),
+        if one { "declares" } else { "declare" },
+        if one { "its" } else { "their" }
+    )
+}
+
 fn attention(page: &Page<'_>) -> String {
     let all = || (0..page.e.records.len()).filter(|&i| page.record(i).header_readable);
     let gated: Vec<usize> = all()
@@ -753,31 +800,7 @@ fn attention(page: &Page<'_>) -> String {
         .collect();
     let ready: Vec<usize> = all().filter(|&i| ready_leaf(page.record(i))).collect();
     let mut out = String::new();
-    let no_transitions: Vec<&str> = page
-        .e
-        .type_roles
-        .iter()
-        .filter(|(_, role)| role.gated_without_transitions)
-        .map(|(name, _)| name.as_str())
-        .collect();
-    let notes = if no_transitions.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "{} {} a gate but no transitions, so the next move of {} records cannot be read.",
-            names_phrase(&no_transitions),
-            if no_transitions.len() == 1 {
-                "declares"
-            } else {
-                "declare"
-            },
-            if no_transitions.len() == 1 {
-                "its"
-            } else {
-                "their"
-            }
-        )
-    };
+    let notes = no_transitions_note(page);
     let needs_right = |r: &ExportedRecord| {
         let moves: Vec<&str> = r.view.gated_moves.iter().map(|m| m.to.as_str()).collect();
         let mut groups: Vec<&str> = r.view.gated_moves.iter().map(|m| m.by.as_str()).collect();
@@ -799,36 +822,7 @@ fn attention(page: &Page<'_>) -> String {
             "needs",
         ));
     }
-    let without_progress: Vec<&str> = page
-        .e
-        .type_roles
-        .iter()
-        .filter(|(_, role)| role.statuses_declared && !role.progress_declared)
-        .map(|(name, _)| name.as_str())
-        .collect();
-    let progress_note = if without_progress.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "{}{} {} no `statuses.progress`, so {} records show as open.",
-            if under_way.is_empty() {
-                "Nothing is under way. "
-            } else {
-                ""
-            },
-            names_phrase(&without_progress),
-            if without_progress.len() == 1 {
-                "declares"
-            } else {
-                "declare"
-            },
-            if without_progress.len() == 1 {
-                "its"
-            } else {
-                "their"
-            }
-        )
-    };
+    let progress_note = progress_note(page, under_way.is_empty());
     let by_status = |r: &ExportedRecord| status_cell(r);
     out.push_str(&section(
         "Under way",
