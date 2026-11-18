@@ -13,7 +13,7 @@ use std::fmt::Write;
 use urzua_core::report::{ExportReport, ExportedRecord};
 use urzua_core::view_model::StateCategory;
 
-use super::board_assets::{SCRIPT, STYLE};
+use super::board_assets::{LIVE, SCRIPT, STYLE};
 
 /// What `urzua check` reported, reduced to the line the page shows.
 pub(crate) struct CheckLine {
@@ -136,6 +136,7 @@ pub(crate) fn is_path_id(id: &str) -> bool {
 /// The export, indexed for linking.
 struct Page<'a> {
     e: &'a ExportReport,
+    serving: bool,
     by_id: HashMap<&'a str, usize>,
     anchors: Vec<String>,
     text: Text,
@@ -182,6 +183,7 @@ impl<'a> Page<'a> {
         }
         Page {
             e,
+            serving,
             by_id,
             anchors,
             text,
@@ -459,8 +461,13 @@ impl<'a> Page<'a> {
         .map(|(n, word)| format!("{n} {word}"))
         .collect();
         let rows: String = ids.iter().map(|&i| self.entry(i, level + 1, "")).collect();
+        let anchor = ids
+            .first()
+            .map(|&i| self.anchors[i].as_str())
+            .unwrap_or_default();
         format!(
-            "<li class=\"fold lv{}\"><details><summary><span class=\"ch\"></span>{}, collapsed</summary><ul class=\"kids\">{rows}</ul></details></li>",
+            "<li id=\"f-{}\" class=\"fold lv{}\"><details><summary><span class=\"ch\"></span>{}, collapsed</summary><ul class=\"kids\">{rows}</ul></details></li>",
+            esc(anchor),
             level.min(8),
             parts.join(", ")
         )
@@ -501,25 +508,29 @@ fn checklist_ratio(r: &ExportedRecord) -> Option<(usize, usize)> {
     Some((items.iter().filter(|i| i.resolved).count(), items.len()))
 }
 
-fn head(csp_style: &str, csp_script: &str) -> String {
+fn head(csp_style: &str, csp_script: &str, serving: bool) -> String {
+    // A served page asks its own server for `stamp` and for the page itself.
+    let connect = if serving { " connect-src 'self';" } else { "" };
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
-<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src {csp_style}; script-src {csp_script}; base-uri 'none'; form-action 'none'\">\n\
+<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src {csp_style}; script-src {csp_script};{connect} base-uri 'none'; form-action 'none'\">\n\
 <title>urzua board</title>\n<style>{STYLE}</style>\n</head>\n"
     )
 }
 
-/// `2026-11-18T06:16:35Z` as `2026-11-18 06:16 UTC`.
-fn short_time(time: &str) -> String {
-    match (time.get(..10), time.get(11..16)) {
+/// `2026-11-18T06:16:35Z` as `2026-11-18 06:16:35 UTC`.
+fn exact_time(time: &str) -> String {
+    match (time.get(..10), time.get(11..19)) {
         (Some(date), Some(clock)) => format!("{date} {clock} UTC"),
         _ => time.to_string(),
     }
 }
 
-/// The header: the name, the read stamp, the check summary.
-fn header(page: &Page<'_>, check: &CheckNote<'_>) -> String {
+/// The header line: the name, where the records were read from, and when. A
+/// served page also carries the digest it was built at and a Refresh button;
+/// a file says it is a file, since it cannot refresh itself.
+fn top(page: &Page<'_>, digest: Option<&str>) -> String {
     let read = &page.e.read;
     let commit = read
         .commit
@@ -531,12 +542,24 @@ fn header(page: &Page<'_>, check: &CheckNote<'_>) -> String {
     } else {
         ""
     };
-    let mut out = format!(
-        "<div class=\"top\"><b>urzua board</b><span class=\"meta\">{} · {} · read {} · working tree{changes}</span></div>\n",
+    let time = esc(&exact_time(&read.time));
+    let stamp = match digest {
+        Some(digest) => format!(
+            "<span class=\"meta\" id=\"upd\" data-d=\"{}\" title=\"{time}\">updated {time}</span><button type=\"button\" id=\"refresh\" class=\"rf\">Refresh</button>",
+            esc(digest)
+        ),
+        None => format!("<span class=\"meta\" id=\"upd\">static file, generated {time}</span>"),
+    };
+    format!(
+        "<header class=\"top\"><b>urzua board</b><span class=\"meta\" id=\"meta\">{} · {} · working tree{changes}</span>{stamp}</header>\n",
         esc(branch),
-        esc(commit),
-        esc(&short_time(&read.time))
-    );
+        esc(commit)
+    )
+}
+
+/// What the page says about `urzua check` and about record text.
+fn notes(page: &Page<'_>, check: &CheckNote<'_>) -> String {
+    let mut out = String::new();
     match check {
         CheckNote::Line(c) => {
             let _ = writeln!(out, "<p class=\"note\">{}</p>", esc(&c.text()));
@@ -631,7 +654,12 @@ fn section(
 }
 
 /// A short list of one-line rows: the first few, then the rest under "N more".
-fn brief_rows(page: &Page<'_>, ids: &[usize], right: &dyn Fn(&ExportedRecord) -> String) -> String {
+fn brief_rows(
+    page: &Page<'_>,
+    key: &str,
+    ids: &[usize],
+    right: &dyn Fn(&ExportedRecord) -> String,
+) -> String {
     const SHOWN: usize = 8;
     let row = |&i: &usize| {
         let r = page.record(i);
@@ -647,7 +675,7 @@ fn brief_rows(page: &Page<'_>, ids: &[usize], right: &dyn Fn(&ExportedRecord) ->
         let rest: String = ids.iter().skip(SHOWN).map(row).collect();
         let _ = write!(
             out,
-            "<li class=\"fold\"><details><summary><span class=\"ch\"></span>{} more</summary><ul class=\"kids\">{rest}</ul></details></li>",
+            "<li id=\"more-{key}\" class=\"fold\"><details><summary><span class=\"ch\"></span>{} more</summary><ul class=\"kids\">{rest}</ul></details></li>",
             ids.len() - SHOWN
         );
     }
@@ -691,7 +719,7 @@ fn attention(page: &Page<'_>) -> String {
             &gated.len().to_string(),
             false,
             notes.trim(),
-            &brief_rows(page, &gated, &needs_right),
+            &brief_rows(page, "needs", &gated, &needs_right),
             "needs",
         ));
     }
@@ -717,7 +745,7 @@ fn attention(page: &Page<'_>) -> String {
         &under_way.len().to_string(),
         false,
         &progress_note,
-        &brief_rows(page, &under_way, &by_status),
+        &brief_rows(page, "under-way", &under_way, &by_status),
         "under-way",
     ));
     out.push_str(&section(
@@ -725,7 +753,7 @@ fn attention(page: &Page<'_>) -> String {
         &ready.len().to_string(),
         false,
         "",
-        &brief_rows(page, &ready, &by_status),
+        &brief_rows(page, "ready", &ready, &by_status),
         "ready",
     ));
     out
@@ -996,17 +1024,29 @@ fn unreadable_section(page: &Page<'_>) -> String {
     )
 }
 
-/// The whole page.
-pub(crate) fn render(export: &ExportReport, check: &CheckNote<'_>, serving: bool) -> String {
-    let page = Page::new(export, serving);
-    let mut out = head(&csp_hash(STYLE), &csp_hash(SCRIPT));
+/// The script, with the part only a served page has (polling and Refresh).
+fn script(serving: bool) -> String {
+    SCRIPT.replace("/*LIVE*/", if serving { LIVE } else { "" })
+}
+
+/// The whole page. `live` is the digest of the records and configuration the
+/// page was built from when it is served, and `None` for a file.
+pub(crate) fn render(export: &ExportReport, check: &CheckNote<'_>, live: Option<&str>) -> String {
+    let page = Page::new(export, live.is_some());
+    let script = script(page.serving);
+    let mut out = head(&csp_hash(STYLE), &csp_hash(&script), page.serving);
     out.push_str("<body>\n<div class=\"wrap\">\n");
-    out.push_str(&header(&page, check));
+    out.push_str(&top(&page, live));
+    out.push_str("<main id=\"board\">\n");
+    out.push_str(&notes(&page, check));
     out.push_str(&controls(&page));
     out.push_str(&attention(&page));
     out.push_str(&work_section(&page));
     out.push_str(&other_section(&page));
     out.push_str(&unreadable_section(&page));
-    let _ = write!(out, "</div>\n<script>{SCRIPT}</script>\n</body>\n</html>\n");
+    let _ = write!(
+        out,
+        "</main>\n</div>\n<script>{script}</script>\n</body>\n</html>\n"
+    );
     out
 }

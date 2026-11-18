@@ -896,6 +896,16 @@ fn csp_source(content: &str) -> String {
 }
 
 fn assert_self_contained(html: &str) {
+    assert_page(html, false);
+}
+
+/// A served page: the same, plus the one request it may make, to its own
+/// server, and nothing else.
+fn assert_served(html: &str) {
+    assert_page(html, true);
+}
+
+fn assert_page(html: &str, served: bool) {
     assert_well_formed(html);
     assert!(html.contains("<meta charset=\"utf-8\">"));
     assert!(html.contains("<meta name=\"viewport\""));
@@ -918,9 +928,10 @@ fn assert_self_contained(html: &str) {
     for forbidden in [
         "http://",
         "https://",
-        "fetch(",
         "XMLHttpRequest",
         "WebSocket",
+        "EventSource",
+        "sendBeacon",
         "@import",
         "url(",
         "<link",
@@ -956,6 +967,23 @@ fn assert_self_contained(html: &str) {
         !html.contains(" style=\""),
         "an inline style attribute would be blocked"
     );
+    if served {
+        assert!(html.contains("script-src") && html.contains("connect-src 'self';"));
+        assert_eq!(count(html, "connect-src"), 1);
+        assert_eq!(count(script, "fetch("), 1, "one fetch, taking a path");
+        assert!(script.contains("get('./')") && script.contains("get('stamp')"));
+        assert!(
+            !script.contains("http") && !script.contains("//"),
+            "no other origin"
+        );
+    } else {
+        assert!(
+            !html.contains("connect-src"),
+            "a file may not connect anywhere"
+        );
+        assert!(!script.contains("fetch(") && !script.contains("setInterval"));
+        assert!(!html.contains("id=\"refresh\"") && !html.contains("id=\"stamp\""));
+    }
 }
 
 #[test]
@@ -1424,7 +1452,7 @@ fn the_server_answers_get_only_re_reads_every_request_and_stops_on_interrupt() {
         head.to_lowercase().contains("content-type: text/html"),
         "{head}"
     );
-    assert_self_contained(&body);
+    assert_served(&body);
     assert_eq!(count(&body, " data-record=\""), 18);
     assert!(body.contains("Alpha"));
 
@@ -1519,6 +1547,141 @@ fn the_server_listens_on_the_loopback_address_only_and_refuses_a_flag_misuse() {
         Some(2),
         "--out and --serve exclude each other"
     );
+}
+
+fn stamp(server: &Server) -> Value {
+    let (head, body) = server.get("/stamp");
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    let lower = head.to_lowercase();
+    assert!(
+        lower.contains("cache-control: no-store")
+            && lower.contains("content-type: application/json"),
+        "{head}"
+    );
+    serde_json::from_str(&body).unwrap_or_else(|e| panic!("not JSON ({e}): {body}"))
+}
+
+#[test]
+fn the_stamp_changes_with_a_record_or_the_configuration_and_is_stable_otherwise() {
+    let dir = chain("stamp");
+    let mut server = Server::start(&dir);
+    let first = stamp(&server);
+    let digest = first["digest"].as_str().unwrap().to_string();
+    assert_eq!(digest.len(), 64);
+    assert_eq!(first["branch"], "main");
+    assert_eq!(first["commit"].as_str().unwrap().len(), 40);
+
+    // Reading the page, the check and a record's text changes nothing.
+    let _ = server.get("/");
+    let _ = server.get("/record/PRG-1");
+    assert_eq!(stamp(&server), first, "stable while nothing changes");
+
+    // A record file changes it, and the page built next reflects the change and carries the new digest.
+    write(
+        &dir,
+        "docs/programmes/PRG-1-alpha.md",
+        &record(
+            "Status: Rolling",
+            "Owner: ann\nLane: north\n",
+            "# 1 — Alpha, edited",
+        ),
+    );
+    let after_record = stamp(&server);
+    assert_ne!(after_record["digest"], first["digest"]);
+    assert_eq!(
+        after_record["commit"], first["commit"],
+        "the commit did not move"
+    );
+    let (_, page) = server.get("/");
+    assert!(
+        page.contains("Alpha, edited"),
+        "the page reflects the change"
+    );
+    assert!(page.contains(&format!(
+        "data-d=\"{}\"",
+        after_record["digest"].as_str().unwrap()
+    )));
+
+    // A new record file, a removed one, and the configuration each change it.
+    write(
+        &dir,
+        "docs/steps/STP-99-new.md",
+        &record("Status: Idea", "In: STG-2\n", "# 99 — New"),
+    );
+    let after_new = stamp(&server);
+    assert_ne!(after_new["digest"], after_record["digest"]);
+    std::fs::remove_file(dir.join("docs/steps/STP-99-new.md")).unwrap();
+    assert_ne!(stamp(&server)["digest"], after_new["digest"]);
+    let before_config = stamp(&server);
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{config}# a comment\n"),
+    )
+    .unwrap();
+    assert_ne!(stamp(&server)["digest"], before_config["digest"]);
+
+    // The server's rules: GET only, a query is ignored, no other path.
+    let (head, _) = server.request("POST /stamp HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n");
+    assert!(
+        head.starts_with("HTTP/1.1 405") && head.contains("Allow: GET"),
+        "{head}"
+    );
+    assert!(server.get("/stamp?now=1").0.starts_with("HTTP/1.1 200"));
+    assert!(server.get("/stamp/x").0.starts_with("HTTP/1.1 404"));
+    assert!(server.interrupt_and_wait());
+}
+
+#[test]
+fn a_served_page_updates_itself_and_a_file_does_not() {
+    let dir = chain("live");
+    let (file, _) = board_page(&dir);
+    assert_self_contained(&file);
+    assert!(
+        file.contains("static file, generated 20"),
+        "the header says it is a file"
+    );
+    assert!(
+        !file.contains("Refresh")
+            && !file.contains("setInterval")
+            && !file.contains("visibilitychange")
+    );
+
+    let server = Server::start(&dir);
+    let (_, page) = server.get("/");
+    assert_served(&page);
+    assert!(page.contains("<button type=\"button\" id=\"refresh\" class=\"rf\">Refresh</button>"));
+    assert!(
+        page.contains("id=\"upd\"") && page.contains("title=\"20") && page.contains(">updated 20"),
+        "the exact time, for a reader without script"
+    );
+    let script = page
+        .split("<script>")
+        .nth(1)
+        .unwrap()
+        .split("</script>")
+        .next()
+        .unwrap();
+    assert!(script.contains("15000"), "polls every 15 seconds");
+    assert!(
+        script.contains("visibilitychange") && script.contains("document.hidden"),
+        "and only while the tab is visible"
+    );
+    assert!(script.contains("not updating: last read"));
+    for forbidden in [
+        "innerHTML",
+        "outerHTML",
+        "insertAdjacentHTML",
+        "document.write",
+        "eval(",
+        "Function(",
+        "location",
+    ] {
+        assert!(!script.contains(forbidden), "{forbidden}");
+    }
+    assert!(page.contains(".warn") && page.contains("id=\"board\""));
+    // The swap replaces the main element's children with nodes of the fetched document.
+    assert!(script.contains("replaceChildren") && script.contains("importNode"));
 }
 
 // ---------------------------------------------------------------- this repository's records

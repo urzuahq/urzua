@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.52'
+Version: '0.53'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -213,7 +213,8 @@ bare `urzua export` exits 2 asking for one. `--format agdr` is not implemented (
 laid out only from what the configuration declares and read from the export's view model: the
 page computes nothing a consumer of `urzua export` could not read. `urzua board` writes it to a file
 (`--out <path>`, default `.urzua/cache/board.html`) and prints a JSON answer naming the file, the
-record count and the `read` stamp. `urzua board --serve [--port N]` answers `GET /`, `GET /check` (the `urzua check`
+record count and the `read` stamp. `urzua board --serve [--port N]` answers `GET /`, `GET /stamp` (the commit, the branch and a digest of the record files' and the
+configuration's paths, sizes and modification times, which the page polls every 15 seconds while visible to refresh itself), `GET /check` (the `urzua check`
 summary, computed for that request; the page links it instead of waiting for it) and each
 record's text at `GET /record/<id>` when the page links it on 127.0.0.1 only, re-reading the records
 on every request, with `Cache-Control: no-store`, as a foreground process that prints one JSON line
@@ -469,3 +470,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-18 | Bumped to `0.51`. Added `urzua board` and `export --no-raw-text` to the command surface, and to the export contract the record keys `title`, `title_is_fallback`, `fields`, `status`, `state`, `state_decided_by`, `waiting_on`, `ready`, `gated_moves`, `parent`, `children`, `children_by_state`, `state_disagrees_with_children`, `refers_to`, `unresolved_refs`, `referred_by` and `link`, the section keys `ticked`, `unticked` and `items`, and the top-level `type_roles` and `read`; records are ordered by the number in their id within a type. **Why:** `MILE-330` and its amendment of 2026-11-18, and `MILE-344`: a view of the records should read what it needs from the export instead of recomputing it. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 155-511) 1e4a23278dfd -> e156c61f2247. Reason: main.rs: a Board command and export's --no-raw-text flag are added and dispatched; no existing command or flag changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Bumped to `0.52`. `state` gains `open`, for a record that is neither finished nor dropped in a type that declares no `statuses.progress`; `not-started` now needs a declared progress set the status is not in; `state_decided_by` and `children_by_state` follow; `type_roles` gains `progress_declared` and `waits_through`; a served board answers `GET /check` and does not run `check` for `GET /`. **Why:** a repository that declares no progress set had records at an in-progress status shown as "not started"; the rule that a state comes only from a declaration is right and the word was wrong. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
+> | 2026-11-18 | Bumped to `0.53`. A served board answers `GET /stamp` and refreshes itself when the digest it returns changes; a Refresh button and the time of the last read are in its header. **Why:** the maintainer asked for the served board to update itself and show when it last did. Decided by the orchestrator on 2026-11-18 from the maintainer's words (the 15-second interval, the path, pausing while hidden), pending his review. | **substantive** |

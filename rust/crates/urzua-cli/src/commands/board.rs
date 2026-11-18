@@ -4,13 +4,13 @@
 //! page is a file or a response, never stdout.
 //!
 //! The server is a read-only, foreground, standard-library one: it answers
-//! `GET /`, `GET /check` (the `urzua check` summary, which the page does not
-//! wait for) and each record's text at `GET /record/<id>`, and nothing else, on
+//! `GET /`, `GET /stamp` (a digest the page polls), `GET /check` (the
+//! `urzua check` summary, which the page does not wait for) and each record's text at `GET /record/<id>`, and nothing else, on
 //! 127.0.0.1 only, and re-reads the records on every request.
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
@@ -116,11 +116,14 @@ fn check_line(config_path: &Option<PathBuf>) -> Option<CheckLine> {
 
 /// The page, and the export it was drawn from. The file carries the check
 /// summary, computed when it is written. A served page does not wait for one:
-/// `check` takes as long as it takes, so the page links `GET /check`.
+/// `check` takes as long as it takes, so the page links `GET /check`. It carries
+/// the digest of the records it was built from, taken before they are read, so a
+/// change made while it builds shows up as a difference at the next poll.
 fn build_page(
     config_path: &Option<PathBuf>,
     serving: bool,
 ) -> Result<(String, ExportReport), Failure> {
+    let digest = serving.then(|| stamp(config_path)).transpose()?;
     let export = export::build_with(
         config_path.clone(),
         &RecordFilter::default(),
@@ -132,7 +135,74 @@ fn build_page(
         (Some(line), false) => CheckNote::Line(line),
         (None, false) => CheckNote::Unavailable,
     };
-    Ok((render(&export, &note, serving), export))
+    let page = render(&export, &note, digest.as_ref().map(|s| s.digest.as_str()));
+    Ok((page, export))
+}
+
+/// What `GET /stamp` answers: where the working tree is, and a digest that
+/// changes when a record file or the configuration does.
+#[derive(serde::Serialize)]
+struct Stamp {
+    commit: Option<String>,
+    branch: Option<String>,
+    digest: String,
+}
+
+/// The files directly in a record directory, as `path size mtime` lines.
+fn file_lines(root: &Path, dir: &str, out: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(root.join(dir)) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        out.push(file_line(
+            &format!("{dir}/{}", entry.file_name().to_string_lossy()),
+            &entry.path(),
+        ));
+    }
+}
+
+fn file_line(shown: &str, path: &Path) -> String {
+    let meta = std::fs::metadata(path).ok().filter(|m| m.is_file());
+    let size = meta.as_ref().map_or(0, std::fs::Metadata::len);
+    let modified = meta
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos());
+    format!("{shown} {size} {modified}")
+}
+
+/// The stamp: git's commit and branch, and a digest of the path, size and
+/// modification time of every file in a record directory and of the
+/// configuration. It opens no record, runs no rule and builds no export, so
+/// it costs two `git` calls and a directory listing.
+fn stamp(config_path: &Option<PathBuf>) -> Result<Stamp, Failure> {
+    let ws = Workspace::open(&[], config_path.clone())?;
+    let (commit, branch) = export::git_identity(&ws.repo_root);
+    let mut dirs: Vec<&str> = ws
+        .config
+        .record_types
+        .values()
+        .flat_map(|t| t.all_dirs())
+        .collect();
+    dirs.sort_unstable();
+    dirs.dedup();
+    let mut lines = Vec::new();
+    for dir in dirs {
+        file_lines(&ws.repo_root, dir, &mut lines);
+    }
+    lines.push(file_line("config", &ws.config_path));
+    lines.sort_unstable();
+    let material = format!(
+        "{}\n{}\n{}",
+        commit.as_deref().unwrap_or_default(),
+        branch.as_deref().unwrap_or_default(),
+        lines.join("\n")
+    );
+    Ok(Stamp {
+        commit,
+        branch,
+        digest: urzua_io::sha256_hex_of_str(&material),
+    })
 }
 
 /// The one line `GET /check` answers: the summary, when it was computed and
@@ -206,6 +276,8 @@ enum Request {
     RecordText(String),
     /// The `urzua check` summary, computed for the request.
     Check,
+    /// Where the working tree is and a digest of its records and configuration.
+    Stamp,
     NotFound,
     WrongMethod,
     Malformed,
@@ -253,6 +325,7 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Request> {
     Ok(match path.strip_prefix("/record/") {
         _ if path == "/" => Request::Page,
         _ if path == "/check" => Request::Check,
+        _ if path == "/stamp" => Request::Stamp,
         Some(id) if is_path_id(id) => Request::RecordText(id.to_string()),
         _ => Request::NotFound,
     })
@@ -305,6 +378,22 @@ fn answer(mut stream: TcpStream, config_path: &Option<PathBuf>) -> std::io::Resu
             ),
         },
         Request::Check => respond(&mut stream, "200 OK", TEXT, "", &check_text(config_path)),
+        Request::Stamp => match stamp(config_path).map(|s| serde_json::to_string(&s)) {
+            Ok(Ok(json)) => respond(
+                &mut stream,
+                "200 OK",
+                "application/json",
+                "",
+                &(json + "\n"),
+            ),
+            Ok(Err(_)) | Err(_) => respond(
+                &mut stream,
+                "500 Internal Server Error",
+                TEXT,
+                "",
+                "the stamp could not be read\n",
+            ),
+        },
         Request::Page => match build_page(config_path, true) {
             Ok((page, _)) => respond(&mut stream, "200 OK", "text/html; charset=utf-8", "", &page),
             Err(failure) => respond(

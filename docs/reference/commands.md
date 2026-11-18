@@ -396,7 +396,7 @@ urzua board --serve [--port <n>]
 One HTML page of every record, laid out only from the configuration; see [the board](board.md). Without
 `--serve` it writes the file (default `.urzua/cache/board.html`) and prints `status`, `file`, `bytes`,
 `record_count` and `read`. With `--serve` it listens on 127.0.0.1 (a free port unless `--port` names one),
-prints one JSON line with `listening`, `address` and `port`, and answers `GET` until interrupted. `--port`
+prints one JSON line with `listening`, `address` and `port`, and answers `GET` until interrupted (the page refreshes itself from `GET /stamp`; see [the board](board.md)). `--port`
 needs `--serve`, and `--out` excludes it. The page is a file or a response, never stdout.
 
 ## mcp

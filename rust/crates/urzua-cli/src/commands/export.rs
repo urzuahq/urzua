@@ -175,16 +175,28 @@ fn checklists(session: &Session) -> Checklists {
     out
 }
 
+/// One trimmed line of `git`'s answer, `None` when git fails or says nothing.
+fn git_line(repo_root: &Path, args: &[&str]) -> Option<String> {
+    urzua_io::git::stdout_in(repo_root, args)
+        .ok()
+        .map(|out| String::from_utf8_lossy(&out).trim().to_string())
+        .filter(|text| !text.is_empty())
+}
+
+/// The commit and the branch the working tree is on; `None` for a repository
+/// with no commit and for a detached head.
+pub(crate) fn git_identity(repo_root: &Path) -> (Option<String>, Option<String>) {
+    (
+        git_line(repo_root, &["rev-parse", "HEAD"]),
+        git_line(repo_root, &["symbolic-ref", "--short", "-q", "HEAD"]),
+    )
+}
+
 /// The commit and branch the working tree is on, whether any file under a
 /// record directory differs from the commit, and when this was read. A failure
 /// to ask git is an absent value, never a guess.
 fn read_stamp(repo_root: &Path, config: &Config) -> ReadStamp {
-    let git = |args: &[&str]| {
-        urzua_io::git::stdout_in(repo_root, args)
-            .ok()
-            .map(|out| String::from_utf8_lossy(&out).trim().to_string())
-            .filter(|text| !text.is_empty())
-    };
+    let git = |args: &[&str]| git_line(repo_root, args);
     let mut status = vec!["status", "--porcelain", "--untracked-files=all", "--"];
     let dirs: Vec<&str> = config
         .record_types

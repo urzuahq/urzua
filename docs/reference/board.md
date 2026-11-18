@@ -22,8 +22,8 @@ urzua board --serve --port 8787
 It prints one JSON line (`{"status": "ok", "listening": "http://127.0.0.1:8787/", "address": ..., "port": ...}`) when
 it is listening, then runs in the foreground until interrupted. Without `--port` it takes a free port and says which.
 
-- It listens on 127.0.0.1 only and answers `GET` only. Any other method gets `405`, any path but `/` (and
-  `/record/<id>`, below) `404`, a request line or head that is too long `400`. It serves no file from disk, and
+- It listens on 127.0.0.1 only and answers `GET` only. Any other method gets `405`, any path but `/`, `/stamp`, `/check` and
+  `/record/<id>` `404`, a request line or head that is too long `400`. It serves no file from disk, and
   a client that stalls is dropped after a few seconds.
 - It re-reads the records on every request, so a second request shows a record changed since the first. Every
   response carries `Cache-Control: no-store`.
@@ -42,6 +42,13 @@ ExecStart=/usr/local/bin/urzua board --serve --port 8787
 ```
 
 Then `systemctl --user enable --now urzua-board`.
+
+A served page updates itself. Every 15 seconds while its tab is visible (and once when it becomes visible again) it asks
+`GET /stamp`, which answers the commit, the branch and a digest of every record file's and the configuration's path, size and
+modification time without reading a record (about 20 ms on this repository's 722). When the digest differs it fetches `/` and
+swaps the content in place, keeping the search text, the state filter, the open rows and the scroll position. The header shows
+*updated N s ago* (the exact time in its tooltip) and a *Refresh* button; if a request fails the page keeps its content and says
+*not updating: last read <time>* until one succeeds. A static file does not update: it says when it was generated.
 
 A request for `/` reads the records and builds the page from the export alone: on this repository's 722 records
 that is a second or two in a release build. `urzua check` takes ten times as long, so the served page does not run it:

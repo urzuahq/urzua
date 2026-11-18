@@ -24,6 +24,13 @@ code, pre { font-family: var(--mono); font-size: 12px; }
 .top b { font-size: 14px; font-weight: 600; }
 .meta { color: var(--muted); font: 12px var(--mono); }
 .note { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
+.warn { color: var(--wait); }
+.rf {
+  display: none; margin-left: auto; font: inherit; font-size: 12px; color: var(--muted); background: transparent;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 2px 10px; cursor: pointer;
+}
+.js .rf { display: inline-block; }
+.rf:disabled { opacity: .6; cursor: default; }
 .bar { display: none; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
 .js .bar { display: flex; }
 .bar input {
@@ -97,28 +104,19 @@ li[class*="lv"] > details > .more { padding-left: calc(30px + var(--ind)); }
 pub(super) const SCRIPT: &str = r#"
 (function () {
   document.documentElement.className += ' js';
-  var q = document.getElementById('q');
-  var n = document.getElementById('shown');
-  var buttons = Array.prototype.slice.call(document.querySelectorAll('.seg button'));
-  if (!q || !n) { return; }
-  var recs = Array.prototype.slice.call(document.querySelectorAll('.rec'));
-  var haystack = recs.map(function (r) {
-    return (r.querySelector('.id').textContent + ' ' + r.querySelector('.t').textContent).toLowerCase();
-  });
-  var shells = Array.prototype.slice.call(document.querySelectorAll('.rec, .fold'));
-  var sections = Array.prototype.slice.call(document.querySelectorAll('section[data-sec]'));
-  var filter = '';
+  var state = { q: '', filter: '' };
+  var q, n, buttons, recs, haystack, shells, sections;
   function matches(r, text, k) {
     if (text !== '' && haystack[k].indexOf(text) === -1) { return false; }
-    if (filter === '') { return true; }
-    if (filter === 'needs' || filter === 'ready') {
-      return (' ' + r.getAttribute('data-flags') + ' ').indexOf(' ' + filter + ' ') !== -1;
+    if (state.filter === '') { return true; }
+    if (state.filter === 'needs' || state.filter === 'ready') {
+      return (' ' + r.getAttribute('data-flags') + ' ').indexOf(' ' + state.filter + ' ') !== -1;
     }
-    return r.getAttribute('data-state') === filter;
+    return r.getAttribute('data-state') === state.filter;
   }
   function apply() {
-    var text = q.value.trim().toLowerCase();
-    var active = text !== '' || filter !== '';
+    var text = state.q.trim().toLowerCase();
+    var active = text !== '' || state.filter !== '';
     var shown = 0;
     shells.forEach(function (r) { r.hidden = active; });
     sections.forEach(function (s) { s.hidden = active; });
@@ -135,14 +133,127 @@ pub(super) const SCRIPT: &str = r#"
     n.hidden = !active;
     n.textContent = shown + ' of ' + recs.length + ' records shown';
   }
-  buttons.forEach(function (b) {
-    b.addEventListener('click', function () {
-      filter = b.getAttribute('data-f');
-      buttons.forEach(function (o) { o.className = o === b ? 'on' : ''; });
-      apply();
+  function wire() {
+    q = document.getElementById('q');
+    n = document.getElementById('shown');
+    if (!q || !n) { return; }
+    buttons = Array.prototype.slice.call(document.querySelectorAll('.seg button'));
+    recs = Array.prototype.slice.call(document.querySelectorAll('.rec'));
+    haystack = recs.map(function (r) {
+      return (r.querySelector('.id').textContent + ' ' + r.querySelector('.t').textContent).toLowerCase();
     });
-  });
-  q.addEventListener('input', apply);
-  apply();
+    shells = Array.prototype.slice.call(document.querySelectorAll('.rec, .fold'));
+    sections = Array.prototype.slice.call(document.querySelectorAll('section[data-sec]'));
+    q.value = state.q;
+    buttons.forEach(function (b) {
+      b.className = b.getAttribute('data-f') === state.filter ? 'on' : '';
+      b.addEventListener('click', function () {
+        state.filter = b.getAttribute('data-f');
+        buttons.forEach(function (o) { o.className = o === b ? 'on' : ''; });
+        apply();
+      });
+    });
+    q.addEventListener('input', function () { state.q = q.value; apply(); });
+    apply();
+  }
+  wire();
+/*LIVE*/
 })();
+"#;
+
+/// What only a served page has: the relative "updated" time, polling `stamp`
+/// while the tab is visible, the Refresh button, and the swap that keeps the
+/// reader's place. Every string it puts in the page came from the server,
+/// escaped, as nodes of the fetched document; it builds none itself.
+pub(super) const LIVE: &str = r#"
+  var upd = document.getElementById('upd');
+  var meta = document.getElementById('meta');
+  var button = document.getElementById('refresh');
+  var board = document.getElementById('board');
+  if (upd && meta && button && board) {
+    var digest = upd.getAttribute('data-d');
+    var exact = upd.getAttribute('title');
+    var receivedAt = Date.now();
+    var failed = false;
+    var polling = null;
+    var ticking = null;
+    function ago(ms) {
+      var s = Math.max(0, Math.round(ms / 1000));
+      if (s < 60) { return s + ' s ago'; }
+      if (s < 3600) { return Math.floor(s / 60) + ' min ago'; }
+      if (s < 86400) { return Math.floor(s / 3600) + ' h ago'; }
+      return Math.floor(s / 86400) + ' d ago';
+    }
+    function show() {
+      if (failed) {
+        upd.className = 'meta warn';
+        upd.textContent = 'not updating: last read ' + exact;
+      } else {
+        upd.className = 'meta';
+        upd.textContent = 'updated ' + ago(Date.now() - receivedAt);
+      }
+      upd.title = exact;
+    }
+    function get(path) {
+      return fetch(path, { cache: 'no-store' }).then(function (r) {
+        if (!r.ok) { throw new Error('status ' + r.status); }
+        return r;
+      });
+    }
+    function swap(text) {
+      var doc = new DOMParser().parseFromString(text, 'text/html');
+      var fresh = doc.getElementById('board');
+      var freshUpd = doc.getElementById('upd');
+      var freshMeta = doc.getElementById('meta');
+      if (!fresh || !freshUpd || !freshMeta) { throw new Error('not a board page'); }
+      var open = {};
+      Array.prototype.forEach.call(board.querySelectorAll('li[id] > details'), function (d) {
+        open[d.parentElement.id] = d.open;
+      });
+      var y = window.scrollY;
+      var nodes = Array.prototype.map.call(fresh.childNodes, function (c) { return document.importNode(c, true); });
+      board.replaceChildren.apply(board, nodes);
+      Array.prototype.forEach.call(board.querySelectorAll('li[id] > details'), function (d) {
+        if (Object.prototype.hasOwnProperty.call(open, d.parentElement.id)) { d.open = open[d.parentElement.id]; }
+      });
+      wire();
+      meta.textContent = freshMeta.textContent;
+      digest = freshUpd.getAttribute('data-d');
+      exact = freshUpd.getAttribute('title');
+      receivedAt = Date.now();
+      window.scrollTo(0, y);
+    }
+    function fail() { failed = true; show(); }
+    function reload() {
+      return get('./').then(function (r) { return r.text(); }).then(function (text) {
+        swap(text);
+        failed = false;
+        show();
+      }).catch(fail);
+    }
+    function poll() {
+      return get('stamp').then(function (r) { return r.json(); }).then(function (s) {
+        failed = false;
+        if (s.digest !== digest) { return reload(); }
+        show();
+      }).catch(fail);
+    }
+    function start() {
+      if (polling === null) { polling = setInterval(poll, 15000); }
+      if (ticking === null) { ticking = setInterval(show, 1000); }
+    }
+    function stop() {
+      clearInterval(polling); polling = null;
+      clearInterval(ticking); ticking = null;
+    }
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      reload().then(function () { button.disabled = false; });
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { stop(); } else { poll(); show(); start(); }
+    });
+    show();
+    if (!document.hidden) { start(); }
+  }
 "#;
