@@ -13,6 +13,7 @@
       "branch": "<BRANCH>",
       "commit": "<COMMIT>",
       "time": "<NOW>",
+      "uncommitted_config_changes": false,
       "uncommitted_record_changes": false
     },
     "record_count": 4,
@@ -231,6 +232,7 @@
         "part_of": null,
         "progress_declared": false,
         "statuses_declared": false,
+        "unplaced_statuses": [],
         "value_fields": [],
         "waits_through": [],
         "work": true
@@ -240,6 +242,7 @@
         "part_of": null,
         "progress_declared": false,
         "statuses_declared": false,
+        "unplaced_statuses": [],
         "value_fields": [],
         "waits_through": [],
         "work": true

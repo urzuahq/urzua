@@ -82,6 +82,7 @@ pub(crate) fn build_with(
     let session = Session::open(config_path)?;
     let Session {
         repo_root,
+        config_path,
         config,
         records,
         full_text,
@@ -134,7 +135,7 @@ pub(crate) fn build_with(
         record_count: exported.len(),
         types,
         type_roles: model.roles,
-        read: read_stamp(repo_root, config),
+        read: read_stamp(repo_root, config_path, config),
         records: exported,
         roadmap: (!config.roadmap.pairs.is_empty())
             .then(|| urzua_core::rules::compute_roadmap(records, config)),
@@ -205,10 +206,32 @@ pub(crate) fn git_identity(repo_root: &Path) -> (Option<String>, Option<String>)
     )
 }
 
+/// Whether the configuration file differs from the commit. `None` when the
+/// file cannot be placed inside the repository (a path that does not resolve,
+/// or a link out of it) or git cannot be asked: never a guess of `false`.
+fn config_changed(repo_root: &Path, config_path: &Path) -> Option<bool> {
+    let root = std::fs::canonicalize(repo_root).ok()?;
+    let file = std::fs::canonicalize(config_path).ok()?;
+    let relative = file.strip_prefix(&root).ok()?;
+    let pathspec = format!(":(literal){}", relative.to_string_lossy());
+    let out = urzua_io::git::stdout_in(
+        repo_root,
+        &[
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            &pathspec,
+        ],
+    )
+    .ok()?;
+    Some(!String::from_utf8_lossy(&out).trim().is_empty())
+}
+
 /// The commit and branch the working tree is on, whether any file under a
-/// record directory differs from the commit, and when this was read. A failure
-/// to ask git is an absent value, never a guess.
-fn read_stamp(repo_root: &Path, config: &Config) -> ReadStamp {
+/// record directory or the configuration file differs from the commit, and
+/// when this was read. A failure to ask git is an absent value, never a guess.
+fn read_stamp(repo_root: &Path, config_path: &Path, config: &Config) -> ReadStamp {
     let git = |args: &[&str]| git_line(repo_root, args);
     let mut status = vec!["status", "--porcelain", "--untracked-files=all", "--"];
     let dirs: Vec<&str> = config
@@ -221,6 +244,7 @@ fn read_stamp(repo_root: &Path, config: &Config) -> ReadStamp {
         commit: git(&["rev-parse", "HEAD"]),
         branch: git(&["symbolic-ref", "--short", "-q", "HEAD"]),
         uncommitted_record_changes: !dirs.is_empty() && git(&status).is_some(),
+        uncommitted_config_changes: config_changed(repo_root, config_path),
         time: urzua_io::read_instant(),
     }
 }

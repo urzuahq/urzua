@@ -395,7 +395,7 @@ urzua board --serve [--port <n>] [--allowed-host <name>]...
 
 One HTML page of every record, laid out only from the configuration; see [the board](board.md). Without
 `--serve` it writes the file (default `.urzua/cache/board.html`) and prints `status`, `file`, `bytes`,
-`record_count` and `read`. With `--serve` it listens on 127.0.0.1 (a free port unless `--port` names one),
+`record_count`, `read` and any `notices`. With `--serve` it listens on 127.0.0.1 (a free port unless `--port` names one),
 prints one JSON line with `listening`, `address` and `port`, and answers `GET` until interrupted (the page refreshes itself from `GET /stamp`; see [the board](board.md)). `--port`
 and `--allowed-host` (a `Host` name to answer besides `localhost` and `127.0.0.1`; others get 403) need `--serve`, and `--out` excludes it. The page is a file or a response, never stdout.
 
@@ -507,7 +507,7 @@ The ids in `waiting_on`, `refers_to`, `referred_by`, `parent` and `children` are
 an id as the referring header wrote it. `parent` and
 `children` exist only where a `pointer_fields` entry declares `part_of: true` (see
 [config](config.md#containment-part_of)). `read` names the commit, the branch, whether a record file has
-uncommitted changes, and the time. The full contract is in `SPEC-1`.
+uncommitted changes (`uncommitted_record_changes`), whether the configuration file has (`uncommitted_config_changes`, `null` when the file cannot be placed inside the repository or git cannot be asked), and the time, to the second. The full contract is in `SPEC-1`.
 
 ## index
 

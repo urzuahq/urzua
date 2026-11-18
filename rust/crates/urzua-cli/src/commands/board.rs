@@ -10,10 +10,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::report::{
-    ExportReport, Failure, FindingSeverity, Notice, ReadStamp, Report, ReportStatus,
+    DetailValue, ExportReport, Failure, FindingSeverity, Notice, NoticeSeverity, ReadStamp, Report,
+    ReportStatus,
 };
 
-use super::board_page::{render, CheckLine, CheckNote};
+use super::board_page::{progress_gap_sentence, progress_gaps, render, CheckLine, CheckNote};
 use super::check::{self, CheckArgs};
 use super::export::{self, ExportOptions, RecordFilter};
 use crate::emit;
@@ -212,6 +213,8 @@ fn write_file(config_path: Option<PathBuf>, out: Option<PathBuf>) -> Result<Exit
             .join(DEFAULT_FILE),
     };
     let (page, export) = build_page(&config_path, None)?;
+    let mut notices = progress_notices(&export);
+    notices.extend(export.notices);
     if let Some(dir) = target.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir)
             .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
@@ -224,6 +227,27 @@ fn write_file(config_path: Option<PathBuf>, out: Option<PathBuf>) -> Result<Exit
         bytes: page.len(),
         record_count: export.record_count,
         read: export.read,
-        notices: export.notices,
+        notices,
     }))
+}
+
+fn progress_notices(export: &ExportReport) -> Vec<Notice> {
+    progress_gaps(export)
+        .into_iter()
+        .map(|(name, statuses)| {
+            let mut notice = Notice::new(
+                NoticeSeverity::Info,
+                "board.progress",
+                progress_gap_sentence(name, statuses),
+            );
+            notice.detail = Some(
+                [
+                    ("type".to_string(), DetailValue::Text(name.to_string())),
+                    ("statuses".to_string(), DetailValue::List(statuses.to_vec())),
+                ]
+                .into(),
+            );
+            notice
+        })
+        .collect()
 }

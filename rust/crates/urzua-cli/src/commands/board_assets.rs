@@ -103,13 +103,15 @@ li[class*="lv"] > .rs, li[class*="lv"] > details > .rs { padding-left: calc(10px
 li[class*="lv"] > .det > .more { padding-left: calc(30px + var(--ind)); }
 [hidden] { display: none !important; }
 @media (max-width: 460px) {
-  .s .x { display: none; }
   .dw { display: none; }
   .dn { display: inline; font-size: 16px; line-height: 1; }
   .rs { padding-right: 36px; }
   .id { min-width: 7ch; }
-  .st { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; }
-  .s { max-width: 45%; }
+  .rs, .br { flex-wrap: wrap; align-items: flex-start; row-gap: 2px; }
+  .t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; white-space: normal; }
+  .s { flex: 1 0 100%; max-width: 100%; flex-wrap: wrap; row-gap: 2px; padding-left: 20px; }
+  .s .x { max-width: none; overflow: visible; text-overflow: clip; white-space: normal; }
+  .st { white-space: normal; }
 }
 "#;
 

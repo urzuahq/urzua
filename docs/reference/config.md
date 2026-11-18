@@ -39,7 +39,7 @@ rules:
 | `locator_resolvers` | list | How a `path#Symbol` evidence pin finds the item it pins, per file type. A line-range pin (`#L10-L40`) needs none. |
 | `relation_pairs` | list | Pairs of fields declared as inverses of each other, optionally a sequencing relation. |
 | `roadmap` | map | `pairs` (the sequencing pairs `urzua roadmap` orders by), `group_by` (fields to group by) and `work_types` (types the roadmap orders). |
-| `export` | map | `link_prefix` (optional): text put before a record's repository-relative path to make the `link` each exported record carries. Must start with `https://`, `http://` or `/`. Absent, no record carries a `link`. |
+| `export` | map | `link_prefix` (optional): text put before a record's repository-relative path to make the `link` each exported record carries. Must start with `https://`, `http://` or `/`. Absent, no record carries a `link`, and the board has no link to a record's file. |
 | `new` | map | How `urzua new` numbers records. `check_open_prs` (default `false`) fetches pull request head refs to skip numbers open pull requests took; `pull_ref_patterns` (default `refs/pull/*/head`), `remote` (default `origin`), `fetch_timeout_seconds` (30), `lock_timeout_seconds` (10). |
 | `discovery` | map | `include_untracked` (default `false`): also read untracked, non-ignored files directly under a record directory, so `check` sees a draft before `git add`. |
 | `attestation` | map | Who a tool-written revision row names. `identity` is `gh-verified` (default) or `asserted`; `require_verified` (default `false`) refuses a run with no verified identity. `reason` sets the least a `--reason` must hold for `fix --rebaseline --apply` and `reverify --apply`: `min_words` (default `3`, runs holding a letter or digit) and `min_chars` (default `12`). |
@@ -199,7 +199,7 @@ requires `targets`, and a type declares at most one.
 | `success`, `failure` | Which values are a good or a bad outcome. |
 | `implementable` | Statuses whose records code may legitimately keep citing. |
 | `claim_retained` | Statuses that keep a record's evidence claim even though it is no longer current. |
-| `initial` | Statuses a record may be filed in. Declared only with `transitions`; one without the other is a load error. |
+| `initial` | Statuses a record may be filed in. Declared only with `transitions`; one without the other is a load error. `urzua board` names a type that has statuses between its start and its end but no `statuses.progress` only when `initial` is declared, since without it a start status cannot be told from an in-between one. |
 | `transitions` | `{From: [To, ...]}`: the lawful moves. |
 | `require`, `forbid` | Lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields: [field, ...]}`: fields that must, or must not (absent or blank), hold a value when the status is one of `when` and each `when_field` field holds one of its values. Declare `when`, `when_field` or both. `status.required-field-missing` is on at `error` wherever some type declares a `require` entry, and `status.forbidden-field-present` wherever one declares a `forbid` entry; a rule you name under `rules:` keeps the level you give, and `urzua doctor` warns of an entry whose rule you turned off. A finding says whether the field is `missing from the header` or `empty`, and names the values the field may hold when the type declares `field_values` for it. |
 | `pending` | The type's placeholder vocabulary: whole values (`unknown`) and `{pattern: <regex>}` entries that count as missing. |

@@ -84,3 +84,5 @@
   reason: "an init serialization error swallowed into an empty config body; no input makes the serialization fail, so no corpus can reach it"
 - bug: BUG-201
   reason: "the installed hook command's shell fallback misreading a configuration when urzua cannot run; it is shell and awk in the agent harness's hook entry, which no urzua command run over a corpus executes, and harness_fallback_integration runs it over every real configuration instead"
+- bug: BUG-202
+  reason: "the board page's style at phone width, a layout no urzua command's JSON output over a corpus shows; board_integration asserts the rules and the markup they act on"

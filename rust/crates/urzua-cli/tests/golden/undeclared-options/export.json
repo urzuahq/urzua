@@ -35,6 +35,7 @@
       "value_fields": [],
       "statuses_declared": false,
       "progress_declared": false,
+      "unplaced_statuses": [],
       "waits_through": [
         "Depends-on"
       ],
@@ -46,6 +47,7 @@
       "value_fields": [],
       "statuses_declared": true,
       "progress_declared": false,
+      "unplaced_statuses": [],
       "waits_through": [
         "Depends-on"
       ],
@@ -57,6 +59,7 @@
       "value_fields": [],
       "statuses_declared": true,
       "progress_declared": true,
+      "unplaced_statuses": [],
       "waits_through": [
         "Depends-on"
       ],
@@ -68,6 +71,7 @@
       "value_fields": [],
       "statuses_declared": true,
       "progress_declared": true,
+      "unplaced_statuses": [],
       "waits_through": [
         "Depends-on"
       ],
@@ -79,6 +83,7 @@
       "value_fields": [],
       "statuses_declared": false,
       "progress_declared": false,
+      "unplaced_statuses": [],
       "waits_through": [],
       "gated_without_transitions": false
     }
