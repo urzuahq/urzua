@@ -294,6 +294,7 @@ fn within_types_opt(
         .map(|r| r.path.clone())
         .collect();
     let (exec, mut findings) = crate::report::with_records_outside_types(excluded.clone(), run)?;
+    // Sound only because every record-anchored finding sits on a loaded record's path.
     findings.retain(|f| !excluded.contains(&f.file));
     Some((exec, findings))
 }
