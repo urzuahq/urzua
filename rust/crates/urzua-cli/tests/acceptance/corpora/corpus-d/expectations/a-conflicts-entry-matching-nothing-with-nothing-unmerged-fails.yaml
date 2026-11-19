@@ -1,0 +1,12 @@
+id: a-conflicts-entry-matching-nothing-with-nothing-unmerged-fails
+corpus: corpus-d
+bugs: [BUG-209]
+# Nothing is unmerged in the corpus, and the --ids entry names no record, so the run
+# is a failure naming it, not `nothing-conflicted`.
+mutation_exempt: "fix is a command, not a rule, so there is no rule to switch off"
+invocation: [fix, --conflicts, --ids, records/ADR-9999-nothing.md]
+expect_exit: 1
+expect_json:
+  - {at: /status, equals: partial-failure}
+  - {at: /failed/0/record, equals: records/ADR-9999-nothing.md}
+  - {at: /next_action, equals: urzua fix --conflicts}
