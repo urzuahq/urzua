@@ -16,7 +16,7 @@ use urzua_core::report::{ActionInput, AttestationReport, FixFailure, NextAction,
 use urzua_core::reverify::{apply_reverify, review_locators, FirstPin, ReverifyPlan};
 
 use super::evidence_log::{evidence_log, with_evidence_log, EvidenceLog, LogHistory};
-use super::fix::{refuse, resolve_attestation, validate_reason, Refusal};
+use super::fix::{refuse, repo_relative_ids, resolve_attestation, validate_reason, Refusal};
 use crate::emit;
 use crate::session::Session;
 
@@ -100,6 +100,17 @@ impl Report for PinReport {
     }
 }
 
+/// An `--ids` entry that names none of `selected`, as a failure naming it.
+fn unknown_ids(ids: &[String], selected: &[&Record]) -> Vec<FixFailure> {
+    ids.iter()
+        .filter(|i| !selected.iter().any(|r| r.path == PathBuf::from(i)))
+        .map(|i| FixFailure {
+            record: PathBuf::from(i),
+            error: "names no record (an entry is a record's repo-relative path)".to_string(),
+        })
+        .collect()
+}
+
 pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<ExitCode, Refusal> {
     if (args.replace.is_some() || args.remove.is_some()) && args.ids.len() != 1 {
         return Err(refuse(
@@ -119,6 +130,8 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
     .map_err(refuse)?;
     let session = Session::open(config_path).map_err(refuse)?;
     let (repo_root, config) = (&session.repo_root, &session.config);
+    let ids = repo_relative_ids(repo_root, args.ids);
+    let args = PinArgs { ids: &ids, ..args };
     if args.apply {
         config
             .attestation
@@ -143,15 +156,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         .iter()
         .filter(|r| args.ids.is_empty() || args.ids.iter().any(|i| r.path == PathBuf::from(i)))
         .collect();
-    let mut failed: Vec<FixFailure> = args
-        .ids
-        .iter()
-        .filter(|i| !selected.iter().any(|r| r.path == PathBuf::from(i)))
-        .map(|i| FixFailure {
-            record: PathBuf::from(i),
-            error: "names no record (an entry is a record's repo-relative path)".to_string(),
-        })
-        .collect();
+    let mut failed = unknown_ids(args.ids, &selected);
     let mut done = Vec::new();
     let mut notices: Vec<Notice> = Vec::new();
     let history = LogHistory::resolve(repo_root, args.base)

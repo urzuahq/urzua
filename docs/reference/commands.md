@@ -165,6 +165,13 @@ findings print this command, `urzua fix --apply --ids <B>`.
   Each write changes only that field's line and appends a structural row to the record's revision
   log; a record with no revision log is refused, not skipped. The report's `identity` says who was
   recorded and from which source; a verified `gh` login takes precedence over `--by`, with a notice.
+- An `--ids` entry names a record by its repo-relative path; the same path written `./`-prefixed, as an
+  absolute path inside the repository or with the OS separator is the same entry, in every mode that
+  takes `--ids`. An entry that names no pending repair, or an absolute path outside the repository, is
+  a failure naming it: `partial-failure`, exit 1, nothing written, and `next_action` is `urzua fix`
+  (`urzua fix --rebaseline` for a re-pin), the dry run that lists what is pending.
+- Exit codes: `not-run` exits 2 in every mode (a configuration that fails to load exits as `check`
+  does), `partial-failure` exits 1, and `ok`, `repairs-available` and `applied` exit 0.
 - `--actor agent|human` records who ran the command in the revision row, beside the identity
   source. It is the caller's claim, not proof. Without it the row records `unspecified`.
 - `--rebaseline` re-pins stale `@sha256:` evidence pins instead of repairing `Embodiment`. Without

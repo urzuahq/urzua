@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.66'
+Version: '0.67'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:4b34535101632cdb51c3c4d8bb2fc44e2e5c35c425a718d73693bdd6b7ed2bd8, code:rust/crates/urzua-core/src/fix.rs@sha256:ef63c51c34e02fd0dc5db51b32a28c2d526a756704cf476203f1cb3466c69484, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e34ae347e45e878fa39ddd00dba9e70264ec995ba6daee26a30cafec016accef, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:07c6e30fd14e77bd6d46c31492f6e94eb56b6a1aff131cca2e54f4945b7d5406, code:rust/crates/urzua-core/src/fix.rs@sha256:ef63c51c34e02fd0dc5db51b32a28c2d526a756704cf476203f1cb3466c69484, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e34ae347e45e878fa39ddd00dba9e70264ec995ba6daee26a30cafec016accef, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -239,8 +239,16 @@ Every one of the following is a hard gate — none are optional, none are defaul
 - **`--ids <record,...>` or `--force` is required.** Nothing applies without one; `--force` (apply to
   every detected repair) is never implied by `--apply` alone.
 - **An `--ids` entry that matches no pending repair is a failure.** It is reported in `failed` naming
-  the entry (`partial-failure`, exit 1) and writes nothing, never a clean `ok` (`BUG-166`). An entry is
-  matched against a record's repo-relative path; accepting a record id is not defined here.
+  the entry (`partial-failure`, exit 1) and writes nothing, never a clean `ok` (`BUG-166`), and its
+  `next_action` is `urzua fix` (`urzua fix --rebaseline` for a re-pin), the dry run that lists the pending
+  repairs by path (`BUG-203`). An entry is matched against a record's repo-relative path; accepting a
+  record id is not defined here. An entry written `./`-prefixed, as an absolute path inside the
+  repository or with the OS separator names the same record as its repo-relative form, in every mode that
+  takes `--ids` (plain, `--rebaseline`, `--pin`, `--conflicts`); an absolute path outside the repository is
+  kept as written and fails naming it (`BUG-204`).
+- **The exit code says whether the command wrote what it was asked to.** `not-run` is exit 2 in every mode
+  (a configuration that fails to load exits as `check` does), `partial-failure` or any `failed` entry is
+  exit 1, and `ok`, `repairs-available` and `applied` are exit 0.
 - **Identity is required**, resolved via `urzua-io::resolve_identity_with` under the configuration's
   `attestation` (`SPEC-3`, `ADR-89` section 5). Under `identity: gh-verified`, the default and what an
   absent key means, `gh api user` wins even over an explicit `--by`, which wins over `git config
@@ -830,3 +838,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 75776e5768fb -> 931921fb10f9. Reason: fix.rs gains append_revision_row, a public wrapper that appends one tool-authored row to a record's revision log; apply, rebaseline and the row layout are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 75776e5768fb -> d9398b0c5717. Reason: fix.rs: test and fixture Config literals gain the part_of and export fields; no production behavior changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/fix.rs` (Realized-by) 931921fb10f9 and d9398b0c5717 -> ef63c51c34e0; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
+> | 2026-11-19 | Bumped to `0.67`. An `--ids` entry written `./`-prefixed, absolute inside the repository or with the OS separator names the same record as its repo-relative path in every mode that takes `--ids`, and a failed `--ids` entry names the dry run that lists the pending repairs as `next_action`; the exit codes of each status are stated. **Why:** a repair the editor hook named, run with an entry in another path form, wrote nothing and left no next step (`BUG-203`, `BUG-204`). | **substantive** |
+> | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 4b3453510163 -> 07c6e30fd14e. Reason: Read the diff of fix.rs since the old pin and the claim still holds. fix.rs adds repo_relative_ids, which normalises each --ids entry (./ prefix, absolute path inside the repository, OS separator) to the repo-relative path before matching, applied once after the session opens, and adds unmatched_action and pending_action, which set next_action to the dry-run urzua fix (urzua fix --rebaseline for a re-pin) when an --ids entry matched nothing; no repair, drift or write logic changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
