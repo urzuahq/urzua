@@ -300,12 +300,22 @@ enum Command {
         #[arg(long)]
         serve: bool,
         /// With `--serve`: the port to listen on. 0, the default, takes a free one.
-        #[arg(long, requires = "serve", default_value_t = 0)]
+        #[arg(
+            long,
+            requires = "serve",
+            conflicts_with = "prompt",
+            default_value_t = 0
+        )]
         port: u16,
         /// With `--serve`: a `Host` name to answer besides `localhost` and
         /// `127.0.0.1` (any port); a request for another name gets 403. Give it
         /// once per name, whenever a proxy with a known name fronts the server.
-        #[arg(long = "allowed-host", value_name = "NAME", requires = "serve")]
+        #[arg(
+            long = "allowed-host",
+            value_name = "NAME",
+            requires = "serve",
+            conflicts_with = "prompt"
+        )]
         allowed_hosts: Vec<String>,
     },
 
