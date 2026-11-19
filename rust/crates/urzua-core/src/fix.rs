@@ -94,11 +94,21 @@ pub fn detect_repairs(
     };
     let delivery_types = crate::rules::statuses_by_type(config);
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
-        let (embodiment, repair) = scan.embodiment(record);
+        // A rule's `types:` holds for `fix` as for `check`: a record of a type
+        // the rule does not judge gets no repair of what that rule judges.
+        let judges = |rule| config.rule_judges_type(rule, &record.record_type);
+        let (embodiment, repair) = if judges(crate::rules::RULE_EMBODIMENT_CONSISTENCY) {
+            scan.embodiment(record)
+        } else {
+            (Outcome::OutOfTypes, None)
+        };
         repairs.extend(repair);
         // `Status` against delivery evidence (`MILE-183`): the one case with a
         // single correct value is repaired; the reverse is `unevidenced_successes`.
         let (status, repair) = match delivery_types.get(&record.record_type) {
+            _ if !judges(crate::rules::RULE_STATUS_DELIVERY_AGREEMENT) => {
+                (Outcome::OutOfTypes, None)
+            }
             Some(decl) if decl.delivery.is_some() => scan.status(record, decl),
             _ => (Outcome::Absent, None),
         };
@@ -273,6 +283,12 @@ pub fn unevidenced_successes(
     let declared = crate::rules::statuses_by_type(config);
     records
         .iter()
+        .filter(|record| {
+            config.rule_judges_type(
+                crate::rules::RULE_STATUS_DELIVERY_AGREEMENT,
+                &record.record_type,
+            )
+        })
         .filter_map(|record| {
             let decl = declared.get(&record.record_type)?;
             let judged = crate::rules::judge_delivery(record, config, decl, ctx).ok()?;

@@ -65,6 +65,14 @@ pub fn detect(records: &[Record], scope: &[Record], config: &Config) -> (Vec<Rep
     if enabled(config, RULE_RELATION_PAIR_RECIPROCITY) && !config.relation_pairs.is_empty() {
         findings.extend(relation_pair_reciprocity(records, config, &index, &untracked).1);
     }
+    // A finding on a record of a type the rule's `types:` does not list is not
+    // reported by `check`, so `fix` does not repair it either.
+    findings.retain(|f| {
+        records
+            .iter()
+            .find(|r| r.path == f.file)
+            .is_none_or(|r| config.rule_judges_type(&f.rule, &r.record_type))
+    });
     let in_scope = |p: &PathBuf| scope.iter().any(|r| &r.path == p);
     let mut notices = Vec::new();
     let mut asks: BTreeMap<(PathBuf, String), Vec<Ask>> = BTreeMap::new();

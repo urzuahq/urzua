@@ -259,7 +259,43 @@ pub fn gate_and_run(
 
 /// One rule through the gate.
 pub fn run_rule(def: &RuleDef, ctx: &RuleCtx<'_>) -> (RuleExecution, Vec<Finding>) {
-    gate_and_run(ctx.config, def.id, || (def.run)(ctx))
+    gate_and_run(ctx.config, def.id, || {
+        within_types(def.id, ctx, || (def.run)(ctx))
+    })
+}
+
+/// `run` under the rule's `types:`: every record of another type is counted
+/// `OutOfTypes` in its population and a finding on one is not reported. The
+/// rule still reads every record, so a rule that judges a record against
+/// others (a parent against its children, a reference against its target)
+/// reads the same context; only what it reports on narrows. Without `types:`
+/// this is `run` itself.
+fn within_types(
+    id: &str,
+    ctx: &RuleCtx<'_>,
+    run: impl FnOnce() -> (RuleExecution, Vec<Finding>),
+) -> (RuleExecution, Vec<Finding>) {
+    within_types_opt(id, ctx, || Some(run())).expect("the run returns a result")
+}
+
+/// [`within_types`] for a run that may return nothing (a companion population).
+fn within_types_opt(
+    id: &str,
+    ctx: &RuleCtx<'_>,
+    run: impl FnOnce() -> Option<(RuleExecution, Vec<Finding>)>,
+) -> Option<(RuleExecution, Vec<Finding>)> {
+    let Some(types) = ctx.config.rules.get(id).and_then(|s| s.types.as_ref()) else {
+        return run();
+    };
+    let excluded: HashSet<PathBuf> = ctx
+        .records
+        .iter()
+        .filter(|r| !types.contains(&r.record_type))
+        .map(|r| r.path.clone())
+        .collect();
+    let (exec, mut findings) = crate::report::with_records_outside_types(excluded.clone(), run)?;
+    findings.retain(|f| !excluded.contains(&f.file));
+    Some((exec, findings))
 }
 
 /// Every rule of `phase`, in table order.
@@ -313,7 +349,10 @@ pub fn run_phase_with(
                 .rules
                 .get(d.id)
                 .is_some_and(|s| s.level != crate::config::RuleLevel::Off);
-            if let Some(extra) = enabled.then(|| companion(ctx)).flatten() {
+            if let Some(extra) = enabled
+                .then(|| within_types_opt(d.id, ctx, || companion(ctx)))
+                .flatten()
+            {
                 out.push(gate_and_run(ctx.config, d.id, || extra));
             }
         }

@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
-Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:c8983bd30d26b9a13cd731653ff56b3ed5dbc615c7e6a1e4799f5b6ad5526207, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:4f83a98ee9f49d6777374d97db1c84b9ee4d353540a12c9db2b7f7d100994f73, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -112,3 +112,4 @@ Cheap to revise before v0 ships to any external user.
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 48743ee96815 -> d2a0b8266ddc. Reason: report.rs: ReadStamp gains the boolean uncommitted_config_changes beside uncommitted_record_changes; nothing this record's claim rests on changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` d2a0b8266ddc -> 0732259ac7fd. Reason: report.rs: ReadStamp's new uncommitted_config_changes is an Option<bool> (null when the file cannot be placed in the repository or git cannot be asked); nothing this record's claim rests on changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 0732259ac7fd -> c8983bd30d26. Reason: Read the diff of report.rs since the old pin and the claim still holds. report.rs: ConflictsReport::next_action, in the partial-failure case where no record waits on a pinned file and none has a take_side, now returns the dry run urzua fix --conflicts when a failure names an --ids entry that matched no unmerged record, instead of None; no other report, notice or exit-code logic changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` c8983bd30d26 -> 4f83a98ee9f4. Reason: report.rs adds the OutOfTypes outcome, the out_of_types population counter and the thread-local set census_records reads to count records outside a rule's types **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

@@ -79,6 +79,31 @@ rule runs and examines nothing; `check --stdin-path` treats the proposed record 
 The candidates it skips are counted in the rule's population as `deferred_by_scope`, with one `info`
 notice. `urzua explain --rule <id>` shows whether a rule has the option.
 
+`types` narrows a rule to the record types it judges (`ADR-104`). It is a list of declared record-type
+names, accepted on any rule entry in the map form whose rule judges loaded records:
+
+```yaml
+rules:
+  status.children-agreement:
+    level: error
+    types: [milestone]
+  header.required-fields: error   # every type, as before
+```
+
+A record of a type the list does not name is not judged by that rule: a finding on it is not reported, and
+its candidates are counted in the rule's population as `out_of_scope` and in `out_of_types`, present only
+when non-zero. The rule still reads every record as context, so a parent is judged against all its
+children and a reference against its target whatever their type. Omitted, the rule judges every type. A
+name that is not a declared type is a load error naming the rule and the type, and so is an empty list. A
+rule that judges the configuration, files that are not records, a diff's changed paths, the run itself or
+a type's directory does not take the key (`rule '<id>' does not take the option 'types'`, with the
+reason). A listed type the rule can never judge (a `header_shape: none` type for a rule that reads a
+header, a type no `part_of: true` field targets for `status.children-agreement`, a type without the
+`sections` key a section rule reads) loads, and `check` names every such entry in one
+`rule-types-never-judged` warning notice. `types` holds the same way on `check --base`, the editor hook's
+`check --stdin-path` and `fix`, composes with `scope: changed` and the rule's other options, and
+`urzua explain --rule <id>` shows the declared list.
+
 `citation.issue-exists` takes the structured option `issue_refs` (`snapshot`, `repository`, `forms`, and
 optionally `fields` and `workers`). `workers` is how many pages of the issue listing `urzua refs refresh`
 requests at once when GitHub names the last page: an integer from 1 to 16, default 4, anything else a

@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::fix::pin::Replaced;
-use crate::report::{census, Outcome};
+use crate::report::{census_records, Outcome};
 
 /// One evidence citation: where it sits (the evidence field, or a Done-means
 /// item clause), the locator as `display()` shows it (path and scope) and the
@@ -393,42 +393,48 @@ pub fn diff_pin_changed_unattested(
     };
     let changed: HashSet<&PathBuf> = changed.iter().collect();
     let mut findings = Vec::new();
-    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
-        if !changed.contains(&record.path) {
-            return Outcome::Absent;
-        }
-        let (Some(now), Some(then)) = (full_text.get(&record.path), base_text.get(&record.path))
-        else {
-            return Outcome::Absent;
-        };
-        let mut before = claim_expiry::record_in_text(config, &record.record_type, then);
-        delivery_items::attach_done_items_to(&mut before, config, then);
-        let events = added_events(config, record, now, then);
-        let shown = record.path.display().to_string();
-        if let Some(message) = stable_id_change(&before, record) {
-            findings.push(Finding::new(
-                RULE_ID,
-                FindingSeverity::Error,
-                record.path.clone(),
-                ActionSource::new("stable-id-changed"),
-                message,
-            ));
-        }
-        for p in unattested(
-            &citations(config, &before),
-            &citations(config, record),
-            &events,
-        ) {
-            findings.push(Finding::new(
-                RULE_ID,
-                FindingSeverity::Error,
-                record.path.clone(),
-                ActionSource::new(p.variant),
-                format!("{}; {}", p.what, remedy(&p, &shown)),
-            ));
-        }
-        Outcome::Examined
-    });
+    let (population, _) = census_records(
+        PopulationUnit::Record,
+        records.iter().collect(),
+        |record| record.path.clone(),
+        |record| {
+            if !changed.contains(&record.path) {
+                return Outcome::Absent;
+            }
+            let (Some(now), Some(then)) =
+                (full_text.get(&record.path), base_text.get(&record.path))
+            else {
+                return Outcome::Absent;
+            };
+            let mut before = claim_expiry::record_in_text(config, &record.record_type, then);
+            delivery_items::attach_done_items_to(&mut before, config, then);
+            let events = added_events(config, record, now, then);
+            let shown = record.path.display().to_string();
+            if let Some(message) = stable_id_change(&before, record) {
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("stable-id-changed"),
+                    message,
+                ));
+            }
+            for p in unattested(
+                &citations(config, &before),
+                &citations(config, record),
+                &events,
+            ) {
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new(p.variant),
+                    format!("{}; {}", p.what, remedy(&p, &shown)),
+                ));
+            }
+            Outcome::Examined
+        },
+    );
     (
         RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
