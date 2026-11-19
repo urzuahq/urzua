@@ -4,7 +4,7 @@ Status: Fixed
 Found-in: the same run, ./docs/adr/ADR-2-old.md, an absolute path and a path that names no pending repair were each reported as matching no pending repair
 Realized-by: test:rust/crates/urzua-cli/tests/fix_exit_codes_integration.rs#a_dot_slash_ids_entry_writes_the_repair@sha256:f044bd162f5adb16ae97e9ce83688fef98893d6a61ab003c2c0f736fe3ff6b68, test:rust/crates/urzua-cli/tests/fix_exit_codes_integration.rs#an_absolute_ids_entry_inside_the_repository_writes_the_repair@sha256:42351c27a9f825ac31508e6e05328fd92e9aff6f09230369684ef53063ad56cd
 ---
-# 204 — urzua fix --ids matches only the plain repo-relative path, so a ./-prefixed or absolute entry for the record writes nothing
+# 208 — urzua fix --ids matches only the plain repo-relative path, so a ./-prefixed or absolute entry for the record writes nothing
 
 ## What was wrong
 
