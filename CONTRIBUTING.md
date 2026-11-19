@@ -28,6 +28,31 @@ prefers them; `make ci` is the thing CI actually runs, so it's the one to trust 
 
 CI also fails a pull request when `urzua fix --rebaseline` lists a stale evidence pin; re-pin it with a per-file reason (`.claude/commands/repin.md`).
 
+## When your branch's re-pins conflict
+
+Two branches that each re-pin the same record conflict in the record's pin hashes and revision log
+when one merges. Resolve it in this order, and never edit a pin hash by hand: a hash you typed
+carries no reason and fails `diff.pin-changed-unattested`.
+
+1. Merge `origin/main` into your branch (`git merge origin/main`); do not rebase a shared branch.
+2. Run `urzua fix --conflicts` to see each unmerged record, then `urzua fix --conflicts --apply
+   --ids <record,...> --actor agent` (or `--force` for all of them) and `git add` what it resolved. For
+   a record whose sides differ only in evidence pins, version and added revision-log rows it keeps
+   both sides' rows, takes the higher version and recomputes each pin from git's merge of the pinned
+   file, adding a row that says the pin was recomputed on merge. A record that conflicts in its real
+   content, or whose pinned file is itself unmerged, is listed and left alone with the reason; resolve
+   those by hand first (a file you merged by hand needs the sequence in `SPEC-8`, "When a pinned file
+   was merged by hand").
+3. Run `urzua fix --rebaseline`. It lists every pin that is still stale; re-pin each with
+   `urzua fix --rebaseline --apply --ids <record> --actor agent --reason "<what changed in the pinned code>"`,
+   after reading the diff of the pinned file. The reason says what changed, not that the pin was stale.
+4. Run `urzua check` and `urzua check --base origin/main`; the second lists every pin recomputed on
+   merge so a reviewer can confirm it.
+
+A pin scoped to the symbol a record is about (`path#symbol`) goes stale only when that symbol
+changes, so it conflicts far less often than a whole-file pin. Prefer it when you cite code
+(`SPEC-8`, "Scoped pins").
+
 ## Adding a rule to `urzua check`
 
 Every rule lives in `rust/crates/urzua-core/src/rules.rs`, returns a `(RuleExecution, Vec<Finding>)`
