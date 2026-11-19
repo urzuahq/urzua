@@ -38,8 +38,10 @@ carries no reason and fails `diff.pin-changed-unattested`.
 2. Run `urzua fix --conflicts` to see each unmerged record, then `urzua fix --conflicts --apply
    --ids <record,...> --actor agent` (or `--force` for all of them) and `git add` what it resolved. For
    a record whose sides differ only in evidence pins, version and added revision-log rows it keeps
-   both sides' rows, takes the higher version and recomputes each pin from git's merge of the pinned
-   file, adding a row that says the pin was recomputed on merge. A record that conflicts in its real
+   both sides' rows, takes the higher version (and raises it by one more when the rows the merge
+   combines are of a class that requires a version bump and the higher version would equal a
+   side's) and recomputes each pin from git's merge of the pinned file, adding a row that says the
+   pin was recomputed on merge. A record that conflicts in its real
    content, or whose pinned file is itself unmerged, is listed and left alone with the reason; resolve
    those by hand first (a file you merged by hand needs the sequence in `SPEC-8`, "When a pinned file
    was merged by hand").
