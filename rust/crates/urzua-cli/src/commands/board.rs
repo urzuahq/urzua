@@ -1,7 +1,8 @@
 //! `urzua board`: one HTML page showing every record, laid out only from what
 //! the configuration declares and read from the export's view model. Written to
 //! a file, or served at a local address with `--serve`. Stdout stays JSON: the
-//! page is a file or a response, never stdout.
+//! page is a file or a response, never stdout. `--prompt` prints, in a JSON
+//! answer, the text a person gives a coding agent to build a view of their own.
 //!
 //! `--serve` is in `board_server`: a read-only, foreground, standard-library
 //! server on 127.0.0.1.
@@ -14,6 +15,7 @@ use urzua_core::report::{
     ReportStatus,
 };
 
+use super::board_declared::{declared, prompt};
 use super::board_page::{progress_gap_sentence, progress_gaps, render, CheckLine, CheckNote};
 use super::check::{self, CheckArgs};
 use super::export::{self, ExportOptions, RecordFilter};
@@ -34,6 +36,7 @@ pub struct BoardArgs {
     pub serve: bool,
     pub port: u16,
     pub allowed_hosts: Vec<String>,
+    pub prompt: bool,
 }
 
 /// What `urzua board` printed when it wrote a file.
@@ -75,8 +78,35 @@ impl Report for Listening {
     }
 }
 
+/// What `urzua board --prompt` printed: the text a person gives their coding
+/// agent, written from the configuration.
+#[derive(serde::Serialize)]
+struct PromptReport {
+    status: ReportStatus,
+    prompt: String,
+}
+
+impl Report for PromptReport {
+    fn notices(&self) -> &[Notice] {
+        &[]
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::SUCCESS
+    }
+}
+
+fn print_prompt(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
+    let ws = Workspace::open(&[], config_path)?;
+    Ok(emit(&PromptReport {
+        status: ReportStatus::Ok,
+        prompt: prompt(&declared(&ws.config)),
+    }))
+}
+
 pub fn run(config_path: Option<PathBuf>, args: BoardArgs) -> ExitCode {
-    emit_or_not_run(if args.serve {
+    emit_or_not_run(if args.prompt {
+        print_prompt(config_path)
+    } else if args.serve {
         super::board_server::serve(config_path, args.port, args.allowed_hosts)
     } else {
         write_file(config_path, args.out)
@@ -136,7 +166,8 @@ pub(super) fn build_page(
         (Some(line), None) => CheckNote::Line(line),
         (None, None) => CheckNote::Unavailable,
     };
-    let page = render(&export, &note, served_at);
+    let ws = Workspace::open(&[], config_path.clone())?;
+    let page = render(&export, &note, served_at, &declared(&ws.config));
     Ok((page, export))
 }
 

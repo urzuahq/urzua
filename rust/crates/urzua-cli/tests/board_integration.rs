@@ -409,19 +409,14 @@ fn without_a_progress_set_a_record_that_is_neither_finished_nor_dropped_is_open(
         .all(|r| r["state"] != "under-way" && r["state"] != "not-started"));
     let (html, _) = board_page(&dir);
     assert!(html.contains("<h3>Under way<i>0</i></h3>"));
-    let note = html
-        .split("<h3>Under way")
-        .nth(1)
-        .unwrap()
-        .split("</p>")
-        .next()
-        .unwrap();
+    let under_way = section_of(&html, "under-way");
     assert!(
-        note.contains("<p class=\"note\">Nothing is under way. "),
-        "{note}"
+        under_way.contains("<p class=\"empty\">No record is under way.</p>"),
+        "{under_way}"
     );
+    let note = about_of(&html);
     assert!(
-        !note.contains("charter"),
+        !note.contains("charter declares no <code>statuses.progress</code>"),
         "a type that declares no initial status is not named: {note}"
     );
     for name in ["programme", "stage", "step"] {
@@ -430,7 +425,6 @@ fn without_a_progress_set_a_record_that_is_neither_finished_nor_dropped_is_open(
             "{note}"
         );
     }
-    assert!(html.contains("statuses.progress"));
 }
 
 #[test]
@@ -852,7 +846,7 @@ fn assert_well_formed(html: &str) {
                 Some(name.as_str()),
                 "mismatched </{name}> at byte {i}"
             );
-        } else if !VOID.contains(&name.as_str()) {
+        } else if !VOID.contains(&name.as_str()) && !tag.ends_with("/>") {
             stack.push(name.clone());
         }
         i += j + 1;
@@ -926,6 +920,29 @@ fn html_escape(text: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+/// The page's one `<link>`: the favicon, an inline SVG address that names no
+/// other file. Returns the whole tag so the scan below can leave it out after
+/// checking it.
+fn icon_link(html: &str) -> Option<String> {
+    let start = html.find("<link")?;
+    let end = start + html[start..].find('>')? + 1;
+    let tag = &html[start..end];
+    let prefix = "<link rel=\"icon\" href=\"data:image/svg+xml,";
+    assert!(
+        tag.starts_with(prefix),
+        "the only link is the favicon: {tag}"
+    );
+    assert_eq!(html.matches("<link").count(), 1);
+    let data = &tag[prefix.len()..tag.len() - 2];
+    assert!(tag.ends_with("\">"));
+    for bad in ["\"", "'", " ", "<", ">", "#", "script", "href", "url"] {
+        assert!(!data.contains(bad), "{bad} in the favicon: {data}");
+    }
+    assert_eq!(data.matches("%3Crect").count(), 5, "five squares: {data}");
+    assert!(data.starts_with("%3Csvg%20xmlns=%22http%3A//www.w3.org/2000/svg%22"));
+    Some(tag.to_string())
+}
+
 fn assert_self_contained(html: &str, links: &[String]) {
     assert_page(html, false, links);
 }
@@ -948,9 +965,13 @@ fn assert_page(html: &str, served: bool, links: &[String]) {
         "one inline script, nothing from a record"
     );
     let mut scanned = html.to_string();
-    for value in attribute_values(html, "href")
+    let icon = icon_link(html);
+    if let Some(link) = &icon {
+        scanned = scanned.replace(link, "");
+    }
+    for value in attribute_values(&scanned, "href")
         .into_iter()
-        .chain(attribute_values(html, "src"))
+        .chain(attribute_values(&scanned, "src"))
     {
         let record_link = links.iter().any(|l| html_escape(l) == value);
         assert!(
@@ -1065,6 +1086,17 @@ fn section_of<'a>(html: &'a str, group: &str) -> &'a str {
     html.split(&format!("data-sec=\"{group}\""))
         .nth(1)
         .unwrap_or_else(|| panic!("no section {group}"))
+        .split("</section>")
+        .next()
+        .unwrap()
+}
+
+/// The "About this board" panel: how each part of the page follows from the
+/// configuration, and what each type declares.
+fn about_of(html: &str) -> &str {
+    html.split("id=\"about\"")
+        .nth(1)
+        .expect("an about panel")
         .split("</section>")
         .next()
         .unwrap()
@@ -1905,7 +1937,7 @@ fn ready_lists_leaves_only_and_a_parent_stays_in_work_with_its_count() {
         "{leaves}: {}",
         &ready[..120]
     );
-    assert!(html.contains(&format!(">Ready {leaves}</button>")));
+    assert!(html.contains(&format!(">Ready<i>{leaves}</i></button>")));
     assert!(!entry(&html, "r-PRG-2").contains("data-flags=\"ready\""));
     assert!(entry(&html, "r-PRG-2").contains("0 of 1 finished"));
 }
@@ -1962,7 +1994,7 @@ fn the_header_area_has_one_short_line_for_the_check_and_none_for_anything_else()
             .split("<main id=\"board\">")
             .nth(1)
             .unwrap()
-            .split("<div class=\"bar\">")
+            .split("<p id=\"shown\"")
             .next()
             .unwrap();
         let lines: Vec<&str> = top.lines().filter(|l| l.contains("<p")).collect();
@@ -2927,14 +2959,18 @@ fn the_progress_note_names_only_a_type_with_statuses_in_between_and_the_json_ans
         );
     });
     let (html, answer) = board_page(&dir);
-    let note = section_of(&html, "under-way");
+    let note = about_of(&html);
     assert!(
         note.contains("staged declares no <code>statuses.progress</code>: until it does, its records in Rolling and Reviewing show as open and a parent&#39;s state cannot disagree with its children."),
         "{note}"
     );
     assert!(
-        !note.contains("plain"),
+        !note.contains("plain declares no <code>statuses.progress</code>"),
         "a type with nothing in between is not named: {note}"
+    );
+    assert!(
+        !section_of(&html, "under-way").contains("statuses.progress"),
+        "the Under way list no longer carries the note"
     );
     let notices = answer["notices"].as_array().unwrap();
     assert_eq!(notices.len(), 1, "{notices:?}");
@@ -2962,7 +2998,7 @@ fn the_progress_note_names_only_a_type_with_statuses_in_between_and_the_json_ans
         );
     });
     let (html, answer) = board_page(&dir);
-    assert!(!section_of(&html, "under-way").contains("statuses.progress"));
+    assert!(!about_of(&html).contains("until it does"));
     assert!(answer.get("notices").is_none(), "{answer}");
 
     let nothing_to_declare = "    statuses:
@@ -2984,7 +3020,7 @@ fn the_progress_note_names_only_a_type_with_statuses_in_between_and_the_json_ans
         },
     );
     let (html, answer) = board_page(&dir);
-    assert!(!html.contains("statuses.progress"));
+    assert!(!about_of(&html).contains("until it does"));
     assert!(answer.get("notices").is_none(), "{answer}");
     assert_eq!(
         export(&dir)["type_roles"]["staged"]["unplaced_statuses"],
@@ -3232,9 +3268,9 @@ fn a_type_that_declares_no_initial_status_is_never_named_by_the_progress_note() 
     });
     let (html, answer) = board_page(&dir);
     assert!(
-        !html.contains("statuses.progress"),
+        !about_of(&html).contains("until it does"),
         "{}",
-        section_of(&html, "under-way")
+        about_of(&html)
     );
     assert!(answer.get("notices").is_none(), "{answer}");
     assert_eq!(
@@ -3261,7 +3297,11 @@ fn a_backtick_in_a_type_or_status_name_does_not_turn_the_note_into_code() {
         );
     });
     let (html, answer) = board_page(&dir);
-    let note = section_of(&html, "under-way");
+    let note = about_of(&html)
+        .split("staged declares")
+        .nth(1)
+        .and_then(|rest| rest.split("children.").next())
+        .expect("the staged sentence");
     assert!(
         note.contains("its records in Ro&#39;lling show as open")
             && note.matches("<code>").count() == 1,
@@ -3271,6 +3311,334 @@ fn a_backtick_in_a_type_or_status_name_does_not_turn_the_note_into_code() {
         answer["notices"][0]["detail"]["statuses"],
         serde_json::json!(["Ro`lling"]),
         "the notice keeps the name as declared"
+    );
+}
+
+// ---------------------------------------------------------------- the application shell and the prompt
+
+fn prompt_of(dir: &Path) -> String {
+    let out = run(dir, &["board", "--prompt"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let answer = json(&out);
+    assert_eq!(answer["status"], "ok");
+    answer["prompt"].as_str().expect("a prompt").to_string()
+}
+
+/// The words in backticks on the first line of `prompt` that starts with `label`.
+fn keys_named(prompt: &str, label: &str) -> Vec<String> {
+    let line = prompt
+        .lines()
+        .find(|l| l.starts_with(label))
+        .unwrap_or_else(|| panic!("no line {label}"));
+    line[label.len()..]
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect()
+}
+
+fn object_keys(value: &Value) -> std::collections::BTreeSet<String> {
+    value.as_object().unwrap().keys().cloned().collect()
+}
+
+#[test]
+fn the_prompt_is_written_from_the_configuration_and_names_exactly_the_keys_an_export_has() {
+    let dir = chain("prompt");
+    let prompt = prompt_of(&dir);
+    assert!(
+        !dir.join(".urzua/cache/board.html").exists(),
+        "the prompt writes no file"
+    );
+    assert!(prompt.lines().count() <= 60, "{prompt}");
+    assert!(prompt.trim_end().ends_with("\nBuild me a view that ..."));
+    for needed in [
+        "urzua export --format json",
+        "--no-text",
+        "--no-raw-text",
+        "--no-checklist-items",
+        "`urzua board` is the plain default",
+        "stable input",
+    ] {
+        assert!(prompt.contains(needed), "{needed}: {prompt}");
+    }
+    let e = export(&dir);
+    for t in e["types"].as_array().unwrap() {
+        let name = t["type"].as_str().unwrap();
+        assert!(prompt.contains(&format!("- {name} (")), "type {name}");
+    }
+    assert!(prompt.contains("- programme (docs/programmes)"));
+    assert!(prompt.contains("Lane takes north, south"), "{prompt}");
+    assert!(
+        prompt.contains("statuses Idea, Rolling, Shipped, Cancelled; initial: Idea; success: Shipped; failure: Cancelled; progress: Rolling, Shipped"),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains(
+            "- charter (docs/charters): fields Status; statuses Draft, Signed; success: Signed"
+        ),
+        "{prompt}"
+    );
+
+    let top = keys_named(&prompt, "Top-level keys:");
+    assert_eq!(object_keys(&e), top.iter().cloned().collect(), "top level");
+    let mut seen = std::collections::BTreeSet::new();
+    for record in e["records"].as_array().unwrap() {
+        seen.extend(object_keys(record));
+    }
+    let per_record = keys_named(&prompt, "Keys of each entry in `records`:");
+    assert_eq!(
+        seen,
+        per_record.iter().cloned().collect(),
+        "a record's keys: a key the prompt names that no record has, or one it leaves out"
+    );
+}
+
+#[test]
+fn the_prompt_is_the_same_in_the_page_and_a_flag_that_takes_no_other() {
+    let dir = flat("prompt-page");
+    let prompt = prompt_of(&dir);
+    assert!(
+        prompt.contains("- ticket (docs/tickets): fields Area, Gates, Needs, Status;"),
+        "{prompt}"
+    );
+    assert!(prompt.contains("- memo (docs/memos): fields Related, Topic; declares no statuses"));
+    let (html, _) = board_page(&dir);
+    let textarea = html
+        .split("<textarea id=\"prompt\"")
+        .nth(1)
+        .unwrap()
+        .split_once('>')
+        .unwrap()
+        .1
+        .split("</textarea>")
+        .next()
+        .unwrap();
+    assert_eq!(textarea, html_escape(&prompt));
+    assert!(html.contains("id=\"copy\"") && html.contains("urzua board --prompt"));
+    for args in [
+        &["board", "--prompt", "--serve"][..],
+        &["board", "--prompt", "--out", "x.html"][..],
+    ] {
+        let out = run(&dir, args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+    }
+}
+
+fn rendered_shell(dir: &Path) -> String {
+    let (html, _) = board_page(dir);
+    assert_self_contained(&html, &links(&export(dir)));
+    html
+}
+
+#[test]
+fn the_page_is_a_shell_with_a_top_bar_tabs_a_sidebar_and_a_footer() {
+    for (name, dir) in [
+        ("chain", chain("shell-chain")),
+        ("flat", flat("shell-flat")),
+    ] {
+        let html = rendered_shell(&dir);
+        let e = export(&dir);
+        for needed in [
+            "<header class=\"top\" id=\"top\">",
+            "<nav id=\"tabs\" class=\"tabs\"",
+            "<nav id=\"side\" class=\"side\"",
+            "<main id=\"board\">",
+            "<aside id=\"panel\"",
+            "<footer class=\"foot\">",
+            "id=\"q\"",
+            "id=\"theme\"",
+            "data-open=\"build-view\"",
+            "data-open=\"about\"",
+            "id=\"empty\"",
+        ] {
+            assert!(html.contains(needed), "{name}: {needed}");
+        }
+        assert!(
+            html.contains(&format!(
+                "urzua {} · generated from this repository's configuration",
+                env!("CARGO_PKG_VERSION")
+            )),
+            "{name}: the footer"
+        );
+        let side = html
+            .split("<nav id=\"side\"")
+            .nth(1)
+            .unwrap()
+            .split("</nav>")
+            .next()
+            .unwrap();
+        for t in e["types"].as_array().unwrap() {
+            let ty = t["type"].as_str().unwrap();
+            assert!(
+                side.contains(&format!(
+                    "data-t=\"{ty}\"><span>{ty}</span><i>{}</i>",
+                    t["records"]
+                )),
+                "{name}: the sidebar lists {ty} with its count: {side}"
+            );
+        }
+        let tabs = html
+            .split("<nav id=\"tabs\"")
+            .nth(1)
+            .unwrap()
+            .split("</nav>")
+            .next()
+            .unwrap();
+        for key in ["", "needs", "under-way", "ready"] {
+            assert!(tabs.contains(&format!("data-f=\"{key}\"")), "{name}: {key}");
+        }
+        assert!(tabs.contains(&format!("All<i>{}</i>", e["record_count"])));
+        assert!(!html.contains("class=\"bar\"") && !html.contains("class=\"seg\""));
+    }
+}
+
+#[test]
+fn the_mark_is_the_five_squares_inline_and_the_favicon_and_blue_is_the_accent() {
+    let html = rendered_shell(&chain("brand"));
+    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 30 20\" role=\"img\" aria-label=\"urzua\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#0F5BF0\"/><rect x=\"0\" y=\"10\" width=\"10\" height=\"10\" fill=\"#12B550\"/><rect x=\"10\" y=\"10\" width=\"10\" height=\"10\" fill=\"#FFD21F\"/><rect x=\"20\" y=\"10\" width=\"10\" height=\"10\" fill=\"#FF7A1A\"/><rect x=\"20\" y=\"0\" width=\"10\" height=\"10\" fill=\"#E5233D\"/></svg>";
+    assert!(
+        html.contains(&svg.replace("http://", "http&#58;//")),
+        "the mark, with its namespace as a character reference"
+    );
+    assert_eq!(count(&html, "<svg"), 1);
+    assert!(html.contains("<link rel=\"icon\" href=\"data:image/svg+xml,"));
+    let style = html
+        .split("<style>")
+        .nth(1)
+        .unwrap()
+        .split("</style>")
+        .next()
+        .unwrap();
+    assert!(!style.contains("gradient"), "no gradients");
+    assert!(style.contains("--blue: #0F5BF0") && style.contains("--link: #0F5BF0"));
+    assert!(
+        !style.contains("color: #FFD21F") && !style.contains("--link: #FFD21F"),
+        "yellow is never text"
+    );
+    assert!(style.contains(":focus-visible") && style.contains("prefers-color-scheme: dark"));
+    assert!(style.contains(":root[data-theme=\"dark\"]"));
+    assert!(style.contains("@media (min-width: 1000px)"));
+}
+
+#[test]
+fn the_script_has_the_keys_the_theme_choice_and_the_panel_and_stays_without_markup() {
+    let html = rendered_shell(&flat("shell-script"));
+    let script = html
+        .split("<script>")
+        .nth(1)
+        .unwrap()
+        .split("</script>")
+        .next()
+        .unwrap();
+    for needed in [
+        "e.key === '/'",
+        "e.key === 'Escape'",
+        "localStorage.setItem('urzua-board-theme'",
+        "localStorage.getItem('urzua-board-theme'",
+        "(min-width: 1000px)",
+        "navigator.clipboard.writeText",
+        "document.execCommand('copy')",
+        "cloneNode(true)",
+    ] {
+        assert!(script.contains(needed), "{needed}");
+    }
+    for call in ["localStorage.setItem", "localStorage.getItem"] {
+        let at = script.find(call).unwrap();
+        assert!(
+            script[..at].rfind("try").is_some_and(|t| at - t < 120),
+            "{call} sits inside a try"
+        );
+    }
+}
+
+#[test]
+fn a_view_with_nothing_in_it_says_so_in_one_sentence_instead_of_an_empty_card() {
+    let dir = repo("nothing", FLAT_CONFIG, |dir| {
+        write(
+            dir,
+            "docs/tickets/TCK-1-a.md",
+            &record("Status: Todo", "", "# 1 — A"),
+        );
+    });
+    let html = rendered_shell(&dir);
+    let under_way = section_of(&html, "under-way");
+    assert!(
+        under_way.contains("<p class=\"empty\">No record is under way.</p>")
+            && !under_way.contains("<ul"),
+        "{under_way}"
+    );
+    assert!(!under_way.contains("class=\"card\""));
+    assert!(html.contains("<p id=\"empty\" class=\"empty\" hidden>No record matches.</p>"));
+}
+
+#[test]
+fn about_this_board_says_what_each_part_follows_from_and_what_each_type_declares() {
+    let dir = chain("about");
+    let html = rendered_shell(&dir);
+    let about = about_of(&html);
+    for needed in [
+        "<code>part_of</code>",
+        "<code>statuses.progress</code>",
+        "<code>authority.gates</code>",
+        "<code>statuses.transitions</code>",
+        "<code>roadmap.pairs</code>",
+        "Declared by: stage (In), step (In)",
+        "<dt>programme</dt><dd>A work type. A record is under way in Rolling and Shipped.",
+        "A gate reserves the move to Shipped for <code>leads</code>.",
+        "<dt>charter</dt><dd>A work type. It declares no <code>initial</code> status",
+        "It declares no <code>statuses.transitions</code>, so its next move cannot be read.",
+    ] {
+        assert!(about.contains(needed), "{needed}: {about}");
+    }
+    for ty in export(&dir)["types"].as_array().unwrap() {
+        let name = ty["type"].as_str().unwrap();
+        assert!(about.contains(&format!("<dt>{name}</dt>")), "{name}");
+    }
+    assert!(html.contains("<a href=\"#about\" data-open=\"about\">About this board</a>"));
+    let flat_html = rendered_shell(&flat("about-flat"));
+    assert!(
+        about_of(&flat_html).contains("No type declares a <code>part_of</code> field"),
+        "no containment, no tree"
+    );
+}
+
+#[test]
+fn deep_links_still_name_a_row_and_the_page_is_no_larger_than_its_frame_needs() {
+    let dir = chain("deep");
+    let html = rendered_shell(&dir);
+    assert!(html.contains("<li id=\"r-STG-1\""));
+    assert!(html.contains("href=\"#r-STG-1\""));
+    let empty = repo(
+        "empty",
+        "schema_version: 2
+record_types:
+  ticket:
+    dir: docs/tickets
+    prefix: TCK
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    narrative_fields: []
+    pointer_fields: []
+    statuses:
+      values: [Todo, Doing, Done, Dropped]
+      success: [Done]
+      failure: [Dropped]
+      progress: [Doing]
+",
+        |_| {},
+    );
+    let bare = rendered_shell(&empty);
+    const BEFORE_THE_SHELL: usize = 10_633;
+    assert!(
+        bare.len() <= BEFORE_THE_SHELL + 40 * 1024,
+        "the frame of a page with no record is {} bytes, {} more than it was",
+        bare.len(),
+        bare.len() - BEFORE_THE_SHELL
     );
 }
 

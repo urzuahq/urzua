@@ -289,8 +289,13 @@ enum Command {
     /// other view from `urzua export --format json`.
     Board {
         /// Where to write the file. Default `.urzua/cache/board.html`.
-        #[arg(long, value_name = "PATH", conflicts_with = "serve")]
+        #[arg(long, value_name = "PATH", conflicts_with_all = ["serve", "prompt"])]
         out: Option<PathBuf>,
+        /// Print, in a JSON answer, the text to give a coding agent to build a
+        /// custom view from `urzua export --format json`, written from this
+        /// repository's configuration. Writes no file.
+        #[arg(long, conflicts_with = "serve")]
+        prompt: bool,
         /// Serve the page at 127.0.0.1 instead of writing a file, until interrupted.
         #[arg(long)]
         serve: bool,
@@ -899,6 +904,7 @@ fn dispatch_export(config: Option<PathBuf>, export: Command) -> ExitCode {
 fn dispatch_board(config: Option<PathBuf>, board: Command) -> ExitCode {
     let Command::Board {
         out,
+        prompt,
         serve,
         port,
         allowed_hosts,
@@ -913,6 +919,7 @@ fn dispatch_board(config: Option<PathBuf>, board: Command) -> ExitCode {
             serve,
             port,
             allowed_hosts,
+            prompt,
         },
     )
 }
