@@ -196,7 +196,7 @@ findings print this command, `urzua fix --apply --ids <B>`.
   whose pinned file is itself still unmerged lists that file under `waits_on`, and `next_action` says to
   resolve and stage it first, then re-run. It does not stage: `git add` the resolved records.
   `status` is `nothing-conflicted`, `no-record-conflicts`, `resolvable`, `resolved` or
-  `partial-failure`.
+  `partial-failure`. An `--ids` entry that matches no unmerged record is a `partial-failure` (exit 1) even when nothing is unmerged.
 - `--stdin-path <path>` judges proposed content for one record from stdin without writing. It cannot
   be combined with `PATHS` or any apply flag.
 
