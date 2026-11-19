@@ -14,7 +14,9 @@ use urzua_core::report::{
     FixFailure,
 };
 
-use super::fix::{identity_notices, refuse, resolve_attestation, Refusal, ResolvedAttestation};
+use super::fix::{
+    identity_notices, refuse, repo_relative_ids, resolve_attestation, Refusal, ResolvedAttestation,
+};
 use super::merge_pins::Unverified;
 use crate::emit;
 use crate::session::Workspace;
@@ -36,6 +38,8 @@ fn run_checked(config_path: Option<PathBuf>, args: ConflictsArgs<'_>) -> Result<
     let Workspace {
         repo_root, config, ..
     } = Workspace::open(&[], config_path).map_err(refuse)?;
+    let ids = repo_relative_ids(&repo_root, args.ids);
+    let args = ConflictsArgs { ids: &ids, ..args };
     let unmerged = unmerged_paths(&repo_root).map_err(refuse)?;
     let identity = if args.apply {
         Some(resolve_attestation(args.by, args.actor, &repo_root, &config).map_err(refuse)?)

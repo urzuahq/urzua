@@ -1002,3 +1002,13 @@ fn a_record_under_a_path_gate_is_not_renewed() {
     );
     assert_eq!(read(&dir, &path(1)), before);
 }
+
+#[test]
+fn a_dot_slash_ids_entry_reviews_the_record_like_its_plain_path() {
+    let dir = fixture("ids-dot-slash", &config(RULE, ""), 1);
+    let out = run_urzua(&dir, &["reverify", "--ids", &format!("./{}", path(1))]);
+    let parsed = json(&out);
+    assert_eq!(out.status.code(), Some(0), "{parsed}");
+    assert_eq!(parsed["records"][0]["record"], path(1), "{parsed}");
+    assert!(parsed["failed"].as_array().unwrap().is_empty(), "{parsed}");
+}

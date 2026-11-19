@@ -2710,7 +2710,17 @@ impl Report for ConflictsReport {
                 let mut diff = vec!["git".to_string(), "diff".to_string(), "--".to_string()];
                 diff.extend(files.iter().map(|f| format!(":/{f}")));
                 if waiting == 0 {
-                    return take_side_next_action(&self.conflicts);
+                    return take_side_next_action(&self.conflicts).or_else(|| {
+                        self.failed
+                            .iter()
+                            .any(|f| f.error.contains("--ids entry"))
+                            .then(|| {
+                                NextAction::runs_as_printed(
+                                    "urzua fix --conflicts",
+                                    "lists the unmerged records, each by its repo-relative path",
+                                )
+                            })
+                    });
                 }
                 (waiting > 0).then(|| NextAction::runs_as_printed(
                     shell_command(&diff),

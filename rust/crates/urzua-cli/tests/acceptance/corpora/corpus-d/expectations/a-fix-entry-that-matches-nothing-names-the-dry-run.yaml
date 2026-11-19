@@ -1,0 +1,11 @@
+id: a-fix-entry-that-matches-nothing-names-the-dry-run
+corpus: corpus-d
+bugs: [BUG-207]
+# An --ids entry that names no pending repair fails, exits 1, and names the dry run
+# that lists what is pending.
+mutation_exempt: "fix is a command, not a rule, so there is no rule to switch off"
+invocation: [fix, --ids, records/ADR-9999-nothing.md]
+expect_exit: 1
+expect_json:
+  - {at: /status, equals: partial-failure}
+  - {at: /next_action, equals: urzua fix}
