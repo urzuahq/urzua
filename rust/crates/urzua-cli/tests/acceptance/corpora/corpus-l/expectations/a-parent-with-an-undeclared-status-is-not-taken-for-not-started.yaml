@@ -1,0 +1,22 @@
+id: a-parent-with-an-undeclared-status-is-not-taken-for-not-started
+corpus: corpus-l
+bugs: [BUG-206]
+# MILE-41 has a status its type does not declare, while a child is under way: that
+# is no claim that the work has not begun, so it is not reported. MILE-43 is at
+# the initial status with a child under way, which is reported.
+commits:
+  - write:
+      records/MILE-41-undeclared.md: "---\nStatus: Someday\n---\n# MILE-41 — undeclared\n"
+      records/MILE-42-child.md: "---\nStatus: Active\nPart-of: MILE-41\n---\n# MILE-42 — child\n"
+      records/MILE-43-parent.md: "---\nStatus: Planned\n---\n# MILE-43 — parent\n"
+      records/MILE-44-child.md: "---\nStatus: Active\nPart-of: MILE-43\n---\n# MILE-44 — child\n"
+invocation: [--config, .urzua/children.yaml, check]
+expect_exit: 1
+expect_findings:
+  - rule: status.children-agreement
+    file: records/MILE-43-parent.md
+    severity: error
+    message_contains: "'Planned', not started, while a child has begun"
+expect_no_findings:
+  - rule: status.children-agreement
+    file: records/MILE-41-undeclared.md

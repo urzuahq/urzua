@@ -87,10 +87,6 @@
 - bug: BUG-202
   reason: "the board page's style at phone width, a layout no urzua command's JSON output over a corpus shows; board_integration asserts the rules and the markup they act on"
 - bug: BUG-203
-  reason: "the board reading the configuration twice, visible only when the configuration is edited while a page builds; no corpus run does that, and board_integration changes it mid-build and asserts the page"
-- bug: BUG-204
-  reason: "a command-line flag combination the argument parser now refuses; it concerns no corpus, and board_integration asserts the exit code for each flag"
+  reason: "the board reading the configuration twice, visible only when the configuration changes while a page builds; a corpus case runs one command over fixed files and cannot edit the configuration mid-build, so board_integration changes it during a delayed build and asserts the page"
 - bug: BUG-205
-  reason: "the editor hook opening a second session before judging an edit; a cost with identical output, and children_agreement_integration holds its verdict and message unchanged"
-- bug: BUG-206
-  reason: "an opt-in rule reading an undeclared parent status as not started; no acceptance corpus enables status.children-agreement, and children_agreement_integration asserts the rule and the export on a configuration that does"
+  reason: "the editor hook opening a second session before judging an edit; a cost with identical verdict and output, which no corpus case can observe, and children_agreement_integration holds the verdict and message unchanged"
