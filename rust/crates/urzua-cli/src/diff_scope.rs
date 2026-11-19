@@ -609,6 +609,63 @@ fn cites_changed_path(locators: &[String], changes: &urzua_io::GitChanges) -> bo
     })
 }
 
+/// The parents of the changed records whose state a change may have moved, when
+/// `status.children-agreement` is on: a child the change added, or whose status
+/// or `part_of` value differs from the merge base's (a copy that cannot be read
+/// counts as different). The rule's finding sits on the parent's file, which no
+/// header of the child's names, so without this a change to a child that makes
+/// its parent disagree would be reported nowhere.
+fn parents_of_moved_children(
+    repo_root: &Path,
+    config: &Config,
+    records: &[Record],
+    changes: &urzua_io::GitChanges,
+) -> HashSet<PathBuf> {
+    let on = rules::effective_level(config, rules::RULE_STATUS_CHILDREN_AGREEMENT)
+        != urzua_core::config::RuleLevel::Off;
+    if !on {
+        return HashSet::new();
+    }
+    let index = rules::build_normalized_index(records);
+    let mut parents = HashSet::new();
+    for record in records.iter().filter(|r| changes.changed.contains(&r.path)) {
+        let Some(part_of) = config.part_of.get(&record.record_type) else {
+            continue;
+        };
+        let status_field =
+            rules::relation_field_name(config, &record.record_type, RelationRole::Status);
+        let base =
+            urzua_io::read_at_commit_if_present(repo_root, &changes.merge_base, &record.path);
+        let moved = match (base, config.record_types.get(&record.record_type)) {
+            (Ok(Some(content)), Some(type_config)) => {
+                let old = Record::parse_with_shape_and_prefix(
+                    record.path.clone(),
+                    record.record_type.clone(),
+                    &content,
+                    type_config.header_shape,
+                    type_config
+                        .prefix
+                        .clone()
+                        .unwrap_or_else(|| record.record_type.to_ascii_uppercase()),
+                );
+                let read =
+                    |r: &Record, field: &str| r.header.get(field).map(|v| v.trim().to_string());
+                read(&old, status_field) != read(record, status_field)
+                    || read(&old, part_of) != read(record, part_of)
+            }
+            _ => true,
+        };
+        if moved {
+            parents.extend(
+                urzua_core::view_model::parents_of(config, &index, record)
+                    .into_iter()
+                    .map(|p| p.path.clone()),
+            );
+        }
+    }
+    parents
+}
+
 pub(crate) fn examine(
     repo_root: &Path,
     config: &Config,
@@ -660,9 +717,14 @@ pub(crate) fn examine(
             .into_iter()
             .collect();
 
+    let parents_to_judge = parents_of_moved_children(repo_root, config, records, changes);
     let mut dependents: HashSet<PathBuf> = HashSet::new();
     for record in records {
         if changed_records.contains(record.path.as_path()) {
+            continue;
+        }
+        if parents_to_judge.contains(&record.path) {
+            dependents.insert(record.path.clone());
             continue;
         }
         let waiver_touched = waiver_scopes.contains("*")

@@ -1,0 +1,17 @@
+id: a-finished-parent-with-an-open-child-is-reported
+corpus: corpus-l
+# MILE-31 is finished while a record that is part of it is not. A finished
+# child and a dropped child do not count against it.
+commits:
+  - write:
+      records/MILE-31-parent.md: "---\nStatus: Done\n---\n# MILE-31 — parent\n"
+      records/MILE-32-child.md: "---\nStatus: Planned\nPart-of: MILE-31\n---\n# MILE-32 — child\n"
+      records/MILE-33-child.md: "---\nStatus: Done\nPart-of: MILE-31\n---\n# MILE-33 — child\n"
+      records/MILE-34-child.md: "---\nStatus: WontDo\nPart-of: MILE-31\n---\n# MILE-34 — child\n"
+invocation: [--config, .urzua/children.yaml, check]
+expect_exit: 1
+expect_findings:
+  - rule: status.children-agreement
+    file: records/MILE-31-parent.md
+    severity: error
+    message_contains: "which finishes it, while a child is not finished or dropped: 1 finished, 1 dropped, 1 not-started (MILE-32)"

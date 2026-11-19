@@ -1204,6 +1204,7 @@ const EDIT_P: &str = "urzua harness (editor-hook)";
 
 fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict {
     let rel = j.rel_text;
+    let parent_note = parent_note(j, &content);
     let report = match proposed_report(j, content) {
         Ok(r) => r,
         Err(verdict) => return *verdict,
@@ -1263,19 +1264,7 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
         (all, follow_up(&pending, false))
     };
 
-    let mut note = histnote.clone();
-    if !existing.is_empty() {
-        note.push_str(&format!(
-            "\nAlready failing on disk before this edit (not blocked):\n{}",
-            describe(&existing, true)
-        ));
-    }
-    if !others.is_empty() {
-        note.push_str(&format!(
-            "\nWarnings (shown, not blocking):\n{}",
-            describe(&others, true)
-        ));
-    }
+    let mut note = standing_note(&histnote, &existing, &others);
 
     if introduced.is_empty() {
         let shown: Vec<&Finding> = existing
@@ -1285,15 +1274,19 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
             .copied()
             .collect();
         let (kind, mut message) = allow_message(rel, &report, &shown, &histnote, &note);
-        if !pending.is_empty() {
+        let (kind, message) = if pending.is_empty() {
+            with_parent_note(kind, message, &parent_note)
+        } else {
             message = format!("{EDIT_P}: urzua judged {rel}; the edit is allowed as the first half of a relation pair.{pending_note}\n{}{note}", ran_summary(&report));
-        }
+            with_parent_note(kind, message, &parent_note)
+        };
         let mut v = Verdict::new(kind, Some(rel), message);
         v.findings = to_json(&shown);
         return v;
     }
     note.push_str(&pending_note);
     note.push_str(&protected_note);
+    note.push_str(&parent_note);
 
     // A "run:" hint repairs the record on disk, so it is shown only for a
     // finding the disk already has; an introduced finding is listed without it.
@@ -1301,6 +1294,66 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
     let mut v = Verdict::new("block", Some(rel), String::new());
     v.findings = to_json(&introduced);
     override_verdict(j, request, v, &introduced, &list, &note)
+}
+
+/// What the edit leaves standing: the history note, the errors the record on
+/// disk already has, and the warnings.
+fn standing_note(histnote: &str, existing: &[&Finding], others: &[&Finding]) -> String {
+    let mut note = histnote.to_string();
+    if !existing.is_empty() {
+        note.push_str(&format!(
+            "\nAlready failing on disk before this edit (not blocked):\n{}",
+            describe(existing, true)
+        ));
+    }
+    if !others.is_empty() {
+        note.push_str(&format!(
+            "\nWarnings (shown, not blocking):\n{}",
+            describe(others, true)
+        ));
+    }
+    note
+}
+
+/// An allowed edit's verdict with the parent note added; the note makes an
+/// otherwise plain allow one with a warning.
+fn with_parent_note(
+    kind: &'static str,
+    mut message: String,
+    parent_note: &str,
+) -> (&'static str, String) {
+    if parent_note.is_empty() {
+        return (kind, message);
+    }
+    message.push_str(parent_note);
+    ("allow-with-warnings", message)
+}
+
+/// What the proposed record does to the state of the record it is part of, as a
+/// note under the verdict; empty when `status.children-agreement` is off or the
+/// parent agrees. Never blocks: the finding is on the parent's file.
+fn parent_note(j: &Judging<'_>, content: &str) -> String {
+    if !super::parent_state::enabled(j.config) {
+        return String::new();
+    }
+    let Ok(mut session) = crate::session::Session::open(j.config_arg.clone()) else {
+        return String::new();
+    };
+    let Ok(record) = crate::discovery::parse_prospective_record(&session.config, &j.rel, content)
+    else {
+        return String::new();
+    };
+    session.records.retain(|r| r.path != j.rel);
+    session.records.push(record);
+    let changed = HashSet::from([j.rel.clone()]);
+    let lines = super::parent_state::lines(&session, &changed, &HashSet::new());
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\nParent state (shown, not blocking):\n{}",
+        lines.join("\n")
+    )
 }
 
 /// Whether a finding is only the missing other half of a declared relation,

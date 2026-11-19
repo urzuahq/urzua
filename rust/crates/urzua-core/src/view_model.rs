@@ -326,15 +326,45 @@ pub fn ancestors<'a>(config: &Config, index: &RecordIndex<'a>, record: &Record) 
     chain
 }
 
+/// How a parent's own state contradicts its children's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Disagreement {
+    /// Not started while a child is under way or finished.
+    NotStartedButChildBegun,
+    /// Finished while a child is neither finished nor dropped.
+    FinishedButChildOpen,
+}
+
+impl Disagreement {
+    /// Whether a child in `state` is what makes the parent's state disagree.
+    pub fn contradicted_by(self, state: StateCategory) -> bool {
+        match self {
+            Disagreement::NotStartedButChildBegun => {
+                matches!(state, StateCategory::UnderWay | StateCategory::Finished)
+            }
+            Disagreement::FinishedButChildOpen => state.is_open(),
+        }
+    }
+}
+
+/// How a parent's own state and its children's disagree, if they do.
+fn disagreement(state: StateCategory, children: &ChildrenByState) -> Option<Disagreement> {
+    match state {
+        StateCategory::Finished
+            if children.under_way + children.not_started + children.open + children.none > 0 =>
+        {
+            Some(Disagreement::FinishedButChildOpen)
+        }
+        StateCategory::NotStarted if children.under_way + children.finished > 0 => {
+            Some(Disagreement::NotStartedButChildBegun)
+        }
+        _ => None,
+    }
+}
+
 /// Whether a parent's own state and its children's disagree.
 fn disagrees(state: StateCategory, children: &ChildrenByState) -> bool {
-    match state {
-        StateCategory::Finished => {
-            children.under_way + children.not_started + children.open + children.none > 0
-        }
-        StateCategory::NotStarted => children.under_way + children.finished > 0,
-        _ => false,
-    }
+    disagreement(state, children).is_some()
 }
 
 /// Header fields whose value was written as a YAML list, which the header
@@ -595,6 +625,62 @@ fn title_of(record: &Record, id: Option<&str>, text: &str) -> (String, bool) {
     }
 }
 
+/// A record that has children, and whether its state agrees with theirs, as
+/// the export's `state_disagrees_with_children` decides it.
+#[derive(Debug, Clone)]
+pub struct ParentStanding<'a> {
+    pub parent: &'a Record,
+    pub status: Option<String>,
+    pub state: StateCategory,
+    pub children_by_state: ChildrenByState,
+    /// `None` when the parent's state and its children's agree.
+    pub disagreement: Option<Disagreement>,
+    /// The children whose state makes it disagree, in natural order.
+    pub contradicting: Vec<&'a Record>,
+}
+
+/// Every record with at least one child, in the order of `records`. Computed
+/// by the same state, containment and disagreement functions `compute` uses.
+pub fn parent_standings<'a>(config: &Config, records: &'a [Record]) -> Vec<ParentStanding<'a>> {
+    let decls = crate::rules::statuses_by_type(config);
+    let index = build_normalized_index(records);
+    let standings: Vec<(Option<String>, StateCategory, String)> = records
+        .iter()
+        .map(|r| state_of(config, &decls, r))
+        .collect();
+    let tree = containment(records, config, &index);
+    let mut found = Vec::new();
+    for (i, parent) in records.iter().enumerate() {
+        let counted: Vec<(String, usize)> = tree.children[i]
+            .iter()
+            .filter_map(|c| record_id(&records[*c]).map(|id| (id, *c)))
+            .collect();
+        if counted.is_empty() {
+            continue;
+        }
+        let mut by_state = ChildrenByState::default();
+        for (_, child) in &counted {
+            by_state.add(standings[*child].1);
+        }
+        let (status, state, _) = standings[i].clone();
+        let disagreement = disagreement(state, &by_state);
+        let mut contradicting: Vec<&(String, usize)> = counted
+            .iter()
+            .filter(|(_, c)| disagreement.is_some_and(|d| d.contradicted_by(standings[*c].1)))
+            .collect();
+        contradicting.sort_by(|a, b| natural_cmp(&a.0, &b.0));
+        found.push(ParentStanding {
+            parent,
+            status,
+            state,
+            children_by_state: by_state,
+            disagreement,
+            contradicting: contradicting.iter().map(|(_, c)| &records[*c]).collect(),
+        });
+    }
+    found
+}
+
 /// Computes every record's view.
 pub fn compute(input: &ViewInput<'_>) -> ViewModel {
     let ViewInput {
@@ -774,5 +860,84 @@ mod tests {
         assert!(disagrees(StateCategory::Finished, &open_child));
         assert!(!disagrees(StateCategory::UnderWay, &by(0, 0, 2)));
         assert!(!disagrees(StateCategory::NoStatuses, &by(1, 1, 1)));
+    }
+
+    #[test]
+    fn the_parent_standings_agree_with_the_export_flag_for_every_record() {
+        let config = crate::config::parse(
+            "schema_version: 2
+record_types:
+  work:
+    dir: docs/work
+    prefix: WORK
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Part-of]
+    narrative_fields: []
+    pointer_fields:
+      - {name: Part-of, targets: [work], part_of: true}
+    statuses:
+      values: [Planned, Active, Done, Dropped]
+      initial: [Planned]
+      progress: [Active]
+      success: [Done]
+      failure: [Dropped]
+      transitions:
+        Planned: [Active, Dropped]
+        Active: [Done, Dropped]
+        Done: [Active]
+",
+        )
+        .unwrap();
+        let record = |n: u32, status: &str, part_of: &str| {
+            let line = if part_of.is_empty() {
+                String::new()
+            } else {
+                format!("Part-of: {part_of}\n")
+            };
+            Record::parse_with_shape_and_prefix(
+                PathBuf::from(format!("docs/work/WORK-{n}-x.md")),
+                "work".to_string(),
+                &format!("---\nStatus: {status}\n{line}---\n# {n} - X\n"),
+                crate::header::HeaderShape::YamlFrontmatter,
+                "WORK".to_string(),
+            )
+        };
+        let records = vec![
+            record(1, "Planned", ""),
+            record(2, "Active", "WORK-1"),
+            record(3, "Done", ""),
+            record(4, "Planned", "WORK-3"),
+            record(5, "Active", ""),
+            record(6, "Done", "WORK-5"),
+            record(7, "Dropped", ""),
+            record(8, "Active", "WORK-7"),
+            record(9, "Done", "WORK-1, WORK-3"),
+        ];
+        let full_text = HashMap::new();
+        let model = compute(&ViewInput {
+            records: &records,
+            config: &config,
+            full_text: &full_text,
+            edges: &[],
+        });
+        let standings = parent_standings(&config, &records);
+        for (view, record) in model.records.iter().zip(&records) {
+            let standing = standings.iter().find(|s| s.parent.path == record.path);
+            assert_eq!(
+                standing.is_some_and(|s| s.disagreement.is_some()),
+                view.state_disagrees_with_children,
+                "{}",
+                record.path.display()
+            );
+        }
+        assert_eq!(
+            model
+                .records
+                .iter()
+                .filter(|v| v.state_disagrees_with_children)
+                .count(),
+            2
+        );
     }
 }

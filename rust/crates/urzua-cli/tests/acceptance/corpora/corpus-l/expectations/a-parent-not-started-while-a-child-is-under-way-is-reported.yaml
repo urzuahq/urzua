@@ -1,0 +1,27 @@
+id: a-parent-not-started-while-a-child-is-under-way-is-reported
+corpus: corpus-l
+# MILE-21 is still at its initial status while two of the records that are part
+# of it have begun. The finding is on the parent's file and offers the one
+# progress status. MILE-24 and its not-started child agree, and MILE-26 is under
+# way with every child finished, which the rule leaves to its own checklist.
+commits:
+  - write:
+      records/MILE-21-parent.md: "---\nStatus: Planned\n---\n# MILE-21 — parent\n"
+      records/MILE-22-child.md: "---\nStatus: Active\nPart-of: MILE-21\n---\n# MILE-22 — child\n"
+      records/MILE-23-child.md: "---\nStatus: Done\nPart-of: MILE-21\n---\n# MILE-23 — child\n"
+      records/MILE-24-agrees.md: "---\nStatus: Planned\n---\n# MILE-24 — agrees\n"
+      records/MILE-25-child.md: "---\nStatus: Planned\nPart-of: MILE-24\n---\n# MILE-25 — child\n"
+      records/MILE-26-under-way.md: "---\nStatus: Active\n---\n# MILE-26 — under way\n"
+      records/MILE-27-child.md: "---\nStatus: Done\nPart-of: MILE-26\n---\n# MILE-27 — child\n"
+invocation: [--config, .urzua/children.yaml, check]
+expect_exit: 1
+expect_findings:
+  - rule: status.children-agreement
+    file: records/MILE-21-parent.md
+    severity: error
+    message_contains: "'Planned', not started, while a child has begun: 1 finished, 1 under-way (MILE-22, MILE-23)"
+expect_no_findings:
+  - rule: status.children-agreement
+    file: records/MILE-24-agrees.md
+  - rule: status.children-agreement
+    file: records/MILE-26-under-way.md

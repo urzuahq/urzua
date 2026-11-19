@@ -132,7 +132,7 @@ again among the reference fields.
 
 The state comes only from what the configuration declares. A type that declares no `statuses.progress` cannot say work
 has begun, so its records that are neither finished nor dropped are *open*. *Not started* is used only for a type that declares a progress
-set, for a status outside it. Nothing is left off the page: its rows number as many as `urzua export` returns records.
+set, for a status outside it. A parent that *disagrees* is the one `check` reports, when the repository enables `status.children-agreement` ([config](config.md#containment-part_of)), so the same finding can fail a build instead of waiting to be seen on the page. Nothing is left off the page: its rows number as many as `urzua export` returns records.
 
 ## About this board
 

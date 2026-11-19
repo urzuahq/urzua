@@ -191,6 +191,19 @@ from it, and `roadmap.group_by` follows a record that carries no value for a gro
 nearest parent. A configuration without `part_of` has no tree, and its types are flat groups. `part_of`
 requires `targets`, and a type declares at most one.
 
+The opt-in rule `status.children-agreement` holds a parent's `Status` to its children's. Enable it under
+`rules:` (`status.children-agreement: error`); it has no options and reads only `part_of` and each type's
+`statuses`. On the parent's file it reports a parent that is not started (a status outside its type's
+`statuses.progress`) while a child is under way or finished, and a parent that is finished (`statuses.success`) while a
+child is neither finished nor dropped. A parent whose children are all finished and that is still under way is not
+reported, nor is a dropped parent, a parent of a type that declares no `statuses.progress` (unless it is finished), or a
+record whose `part_of` field names several records. Where the type declares exactly one progress status, its
+transitions lead there and no `authority` gate reserves the move, the finding's suggested action sets the parent's
+status to it; a gated move is never suggested, and the finding names who may make it. `urzua fix` does not apply it. With
+`--base`, a child the change added, or whose status or `part_of` value differs from the merge base's, brings its parent
+into the run, so the finding appears on the pull request that caused it. Enabled with no `part_of` field, or with a
+parent type that declares no `statuses.progress`, `check` says so in one notice.
+
 ### `statuses`
 
 | Key | What it does |

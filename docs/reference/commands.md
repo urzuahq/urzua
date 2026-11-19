@@ -482,7 +482,7 @@ Every record as plain JSON data. Output: `status`, `record_count`, `types`, `typ
 `state_disagrees_with_children`, `refers_to`, `unresolved_refs`, `referred_by` and, when the configuration
 declares an `export.link_prefix`, `link`. Records are in numeric order within a type. `--no-raw-text`
 leaves `raw_text` out of every record. The format must be named. `--format agdr` is not implemented and
-exits 2. [The board](board.md) is built from these keys alone; so can your own view be.
+exits 2. [The board](board.md) is built from these keys alone; so can your own view be. `state_disagrees_with_children` is the fact the opt-in `check` rule `status.children-agreement` reports, so a script that failed on the key can be replaced by enabling the rule.
 
 ```text
 urzua export --format json --no-raw-text
