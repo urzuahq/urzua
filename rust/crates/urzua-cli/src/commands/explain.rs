@@ -55,6 +55,10 @@ struct RuleExplanation {
     /// Every option the rule accepts, with the value this repository sets, or
     /// `null` when it sets none.
     options: serde_json::Map<String, serde_json::Value>,
+    /// The record types this repository's `types:` narrows the rule to;
+    /// omitted when it sets none, and the rule judges every type.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    types: Option<Vec<String>>,
 }
 
 #[derive(serde::Serialize)]
@@ -127,6 +131,7 @@ fn run_rule(config_path: Option<PathBuf>, id: &str) -> Result<ExitCode, Failure>
             severity_floor,
             waivable,
             options,
+            types: setting.and_then(|s| s.types.clone()),
         },
     }))
 }

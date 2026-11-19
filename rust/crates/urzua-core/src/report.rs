@@ -5,7 +5,7 @@
 //! `emit()` is the actual print, since printing is I/O and this crate stays
 //! pure (this module only defines the data shapes and `exit_code()`).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 // Implements: ADR-87 (a finding at `info` is reported and counted, never blocking)
@@ -519,6 +519,11 @@ pub enum Outcome {
     /// so `config.scope-matches-nothing` does not warn about a type the
     /// repository declared headerless on purpose.
     OutOfScopeNoHeader,
+    /// The record's type is not one the rule's `types:` lists: the
+    /// configuration chose not to have the rule judge it. Counted in
+    /// `out_of_scope`, and also apart, so `config.scope-matches-nothing` does
+    /// not warn about a deliberate narrowing.
+    OutOfTypes,
     /// The record's file name yields no identity under the type's convention
     /// (`BUG-61`). Counted in `out_of_scope`, and also apart, because
     /// `filename.identity-pattern` reports each such file with its rename.
@@ -543,6 +548,7 @@ pub fn census<T>(
     let mut deferred_by_scope = 0;
     let mut no_header = 0;
     let mut no_identity = 0;
+    let mut out_of_types = 0;
     for candidate in &candidates {
         match body(candidate) {
             Outcome::Examined => examined += 1,
@@ -555,6 +561,10 @@ pub fn census<T>(
                 out_of_scope += 1;
                 no_identity += 1;
             }
+            Outcome::OutOfTypes => {
+                out_of_scope += 1;
+                out_of_types += 1;
+            }
             Outcome::Unreadable => unreadable += 1,
             Outcome::DeferredByScope => deferred_by_scope += 1,
             Outcome::Absent => {}
@@ -563,6 +573,7 @@ pub fn census<T>(
     Population {
         no_header,
         no_identity,
+        out_of_types,
         ..Population::build(
             unit,
             eligible,
@@ -570,6 +581,36 @@ pub fn census<T>(
             (out_of_scope, unreadable, deferred_by_scope),
         )
     }
+}
+
+thread_local! {
+    /// The records a running rule's `types:` excludes; `None` outside such a
+    /// run. Set only by [`with_records_outside_types`].
+    static OUTSIDE_TYPES: std::cell::RefCell<Option<std::collections::HashSet<PathBuf>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn outside_types(path: &Path) -> bool {
+    OUTSIDE_TYPES.with(|s| s.borrow().as_ref().is_some_and(|set| set.contains(path)))
+}
+
+/// Runs `f` with `excluded` as the records every [`census_records`] inside it
+/// counts [`Outcome::OutOfTypes`]: the one place a rule's `types:` reaches
+/// its population, so no rule carries its own filter. Rules run on one thread
+/// and do not nest, so the set is restored, not stacked.
+pub fn with_records_outside_types<R>(
+    excluded: std::collections::HashSet<PathBuf>,
+    f: impl FnOnce() -> R,
+) -> R {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            OUTSIDE_TYPES.with(|s| *s.borrow_mut() = None);
+        }
+    }
+    OUTSIDE_TYPES.with(|s| *s.borrow_mut() = Some(excluded));
+    let _restore = Restore;
+    f()
 }
 
 /// `census`, also reporting *which* records were judged.
@@ -594,7 +635,13 @@ pub fn census_records<T>(
     let mut examined_records: std::collections::BTreeSet<PathBuf> =
         std::collections::BTreeSet::new();
     let population = census(unit, candidates, |candidate| {
-        let outcome = body(candidate);
+        // The body runs for a record outside the rule's `types:` too, so a
+        // rule that gathers context across records reads exactly what it read
+        // before; only the verdict on that record is set aside.
+        let mut outcome = body(candidate);
+        if outside_types(&record_of(candidate)) {
+            outcome = Outcome::OutOfTypes;
+        }
         if outcome == Outcome::Examined {
             examined_records.insert(record_of(candidate));
         }
@@ -661,6 +708,11 @@ pub struct Population {
     /// serialized.
     #[serde(skip)]
     no_identity: usize,
+    /// The part of `out_of_scope` whose record's type the rule's `types:` does
+    /// not list. Serialized only when non-zero, so a configuration that
+    /// declares no `types:` reports exactly what it did before.
+    #[serde(skip_serializing_if = "is_zero")]
+    out_of_types: usize,
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -710,7 +762,12 @@ impl Population {
         } else {
             0
         };
-        self.out_of_scope - self.no_header - identity
+        self.out_of_scope - self.no_header - identity - self.out_of_types
+    }
+
+    /// How many candidates the rule's `types:` left unjudged.
+    pub fn out_of_types(&self) -> usize {
+        self.out_of_types
     }
 
     /// How many lines a declared `ignore_marker` excused (`ADR-80` amendment).
@@ -777,6 +834,7 @@ impl Population {
             excused_lines: 0,
             no_header: 0,
             no_identity: 0,
+            out_of_types: 0,
         }
     }
 }

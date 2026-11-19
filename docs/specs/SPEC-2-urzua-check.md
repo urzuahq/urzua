@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.190'
+Version: '0.191'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:49868f6bea8f0d4cab51fdb94eff834ded0fe74bd144dd55dd5dad3aecbda7fe, code:rust/crates/urzua-core/src/rules.rs@sha256:07526fdfc27848d7d17b02628d29e23bc9053f867ca5f2968a9cc57bfaa7d198, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b129cc4d4755c2258133fe8106821c145cd7a4680eee048df51122526ef74ba7, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:64fe21f9effb68b4ddd8992044c2bf90d018bb2364a4c7985e64b8b3edb97016, code:rust/crates/urzua-core/src/rules.rs@sha256:80156a956de50cfdf976644986d2cb512b60477b55f0cd02a2270e3012c768d7, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b129cc4d4755c2258133fe8106821c145cd7a4680eee048df51122526ef74ba7, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -784,6 +784,16 @@ window), `drift_grace_days` (as a string) and `records` (the counted record path
 is the total). The dates follow `--as-of`. A record with several held-back drifts counts once, at its
 earliest. When no record is counted there is no notice. The notice never changes a finding or the exit code,
 and a configuration that declares no `drift_grace_days` reports exactly what it did before.
+
+A rule entry that declares `types:` (`ADR-104`) judges only records of the listed types. The runner
+applies it for every rule: a candidate whose record is of another type is counted in `out_of_scope` and in
+the additive `out_of_types` counter, present only when non-zero, and the rule's findings on such records
+are not reported; the rule still reads every record as context. `config.scope-matches-nothing` does not
+read those candidates as a configuration that reaches nothing. An unknown type name or an empty list is a
+load error, and a rule whose `scope` is `config`, `files`, `diff` or `run`, or whose findings sit on a
+type's directory, refuses the key. A listed type the rule can never judge is named in one
+`rule-types-never-judged` warning notice. A configuration that declares no `types:` reports exactly what
+it did before.
 
 A rule that declares `scope: changed` (`SPEC-3`, "Judging only the changed records"; `ADR-90`) judges only
 the records a `--base` diff adds or changes, and none on a plain `check`. Its population gains one additive
@@ -1679,3 +1689,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-19 | Bumped to `0.189`. States that `fix` exits 2 on a configuration or repository `check` cannot run on, in every mode. **Why:** `fix` and `check` share one load path and the exit code was documented for `check` only (`BUG-207`). | **structural** |
 > | 2026-11-19 | Bumped to `0.190`. The `status.children-agreement` row says a parent whose `Status` its type does not declare is not reported. **Why:** the rule read an undeclared status as not started, so a value nobody declared was reported as a claim that the work had not begun (BUG-206). | **substantive** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 3c21c622aeac -> 49868f6bea8f. Reason: `execute` is split into `execute`, which opens the session, and `run_opened`, plus a new `execute_on` for a session already open; what `check` reports is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-19 | Bumped to `0.191`. A rule entry may declare `types:`, the record types it judges; a population gains the additive `out_of_types` counter, present only when non-zero; an unknown type or an empty list is a load error, rules that judge no record of a type refuse the key, and a type the rule can never judge is named in one `rule-types-never-judged` notice. **Why:** `MILE-351`, deciding in `ADR-104`. | **substantive** |
+> | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 49868f6bea8f -> 64fe21f9effb, `rust/crates/urzua-core/src/rules.rs` 07526fdfc278 -> 80156a956de5. Reason: check.rs emits the rule-types-never-judged notice; rules.rs registers the new rule_types module **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

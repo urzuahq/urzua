@@ -1871,6 +1871,7 @@ fn index_with_disclosures<'a>(
     }
 
     notices.extend(rules::status_children_agreement_notices(config));
+    notices.extend(rules::rule_types_notices(config));
 
     // A declared non-reference id that now matches a real record is disclosed
     // (`ADR-75`), only when `citation.resolution` is on.

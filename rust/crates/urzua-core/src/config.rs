@@ -696,6 +696,16 @@ impl Config {
             .unwrap_or(DEFAULT_SUPPRESSION_TYPE)
     }
 
+    /// Whether `rule` judges records of `record_type`: true unless the rule
+    /// declares `types` and the list does not name it. The one predicate the
+    /// runner, `fix` and the notices read.
+    pub fn rule_judges_type(&self, rule: &str, record_type: &str) -> bool {
+        self.rules
+            .get(rule)
+            .and_then(|s| s.types.as_ref())
+            .is_none_or(|types| types.iter().any(|t| t == record_type))
+    }
+
     /// Every declared record type's name, in `record_types`' own (sorted)
     /// order.
     pub fn sorted_type_names(&self) -> Vec<&String> {
@@ -735,6 +745,13 @@ pub struct RuleSetting {
     /// any other rule is a load-time error. Omitted means every record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<RuleScope>,
+    /// The record types the rule judges; a record of any other type is counted
+    /// out of scope and its findings are not reported. Accepted by every rule
+    /// that judges records ([`crate::rules::types_refusal`]); a name that
+    /// is no declared type, or an empty list, is a load-time error. Omitted
+    /// means every type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<Vec<String>>,
     /// Statuses a reference's target may not be in. Only meaningful to
     /// `pointer.target-status`; declaring it on any other rule is a load-time
     /// error, because a silently-ignored option is a check that never fires.
@@ -2135,6 +2152,16 @@ pub enum ConfigError {
     UnknownRule { found: String, known: Vec<String> },
     #[error("rule '{rule}' does not take the option '{option}'")]
     OptionNotApplicable { rule: String, option: String },
+    #[error("rule '{rule}' does not take the option 'types': {reason}")]
+    TypesNotApplicable { rule: String, reason: &'static str },
+    #[error("rule '{rule}' option 'types' names '{record_type}', which is not a declared record type (declared: {})", declared.join(", "))]
+    UnknownRuleType {
+        rule: String,
+        record_type: String,
+        declared: Vec<String>,
+    },
+    #[error("rule '{rule}' option 'types' is an empty list; list the record types it judges, or remove the key to judge every type")]
+    EmptyRuleTypes { rule: String },
     #[error("rule '{rule}' option 'fields' names '{field}', which is not a declared pointer_fields or narrative_fields entry of any record type")]
     UndeclaredRuleField { rule: String, field: String },
     #[error("rule '{rule}' option 'field_levels' {reason}")]
@@ -3836,6 +3863,7 @@ fn validate_issue_refs_options(config: &Config) -> Result<(), ConfigError> {
 fn validate_rule_settings(config: &Config) -> Result<(), ConfigError> {
     for (name, setting) in &config.rules {
         check_rule_option_applicability(name, setting, config)?;
+        check_rule_types(name, setting, config)?;
         check_rule_date_options(name, setting, config)?;
         check_rule_field_levels(name, setting, config)?;
         check_rule_decision_gate(name, setting, config)?;
@@ -3946,6 +3974,33 @@ fn check_rule_option_applicability(
         return Err(ConfigError::OptionNotApplicable {
             rule: name.to_string(),
             option: "template_placeholders".to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// `types` lists declared record types, at least one, on a rule that judges
+/// records.
+fn check_rule_types(name: &str, setting: &RuleSetting, config: &Config) -> Result<(), ConfigError> {
+    let Some(types) = &setting.types else {
+        return Ok(());
+    };
+    if let Some(reason) = crate::rules::types_refusal(name) {
+        return Err(ConfigError::TypesNotApplicable {
+            rule: name.to_string(),
+            reason,
+        });
+    }
+    if types.is_empty() {
+        return Err(ConfigError::EmptyRuleTypes {
+            rule: name.to_string(),
+        });
+    }
+    if let Some(unknown) = types.iter().find(|t| !config.record_types.contains_key(*t)) {
+        return Err(ConfigError::UnknownRuleType {
+            rule: name.to_string(),
+            record_type: unknown.clone(),
+            declared: config.record_types.keys().cloned().collect(),
         });
     }
     Ok(())
@@ -7864,6 +7919,91 @@ mod exclude_files_tests {
     }
 }
 
+/// `types:` on a rule entry: declared record types, at least one, on a rule
+/// that judges records.
+#[cfg(test)]
+mod rule_types_tests {
+    use super::*;
+
+    const BASE: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\n  rfc:\n    dir: docs/rfc\n    required_fields: [Status]\nrules:\n";
+
+    fn entry(rule: &str, types: &str) -> Result<Config, ConfigError> {
+        parse(&format!(
+            "{BASE}  {rule}:\n    level: error\n    types: {types}\n"
+        ))
+    }
+
+    #[test]
+    fn declared_types_load_and_an_absent_key_judges_every_type() {
+        let config = entry("header.required-fields", "[adr]").unwrap();
+        assert_eq!(
+            config.rules["header.required-fields"].types,
+            Some(vec!["adr".to_string()])
+        );
+        assert!(config.rule_judges_type("header.required-fields", "adr"));
+        assert!(!config.rule_judges_type("header.required-fields", "rfc"));
+        let bare = parse(&format!("{BASE}  header.required-fields: error\n")).unwrap();
+        assert_eq!(bare.rules["header.required-fields"].types, None);
+        assert!(bare.rule_judges_type("header.required-fields", "rfc"));
+    }
+
+    #[test]
+    fn an_unknown_type_is_refused_naming_the_rule_and_the_type() {
+        let err = entry("header.required-fields", "[adr, spec]")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("'header.required-fields'") && err.contains("'spec'"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn an_empty_or_valueless_list_is_refused() {
+        let err = entry("header.required-fields", "[]")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("'header.required-fields'") && err.contains("empty"),
+            "{err}"
+        );
+        let err = parse(&format!(
+            "{BASE}  header.required-fields:\n    level: error\n    types:\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("types"), "{err}");
+    }
+
+    #[test]
+    fn a_rule_that_judges_no_record_of_a_type_refuses_types() {
+        for rule in [
+            "type.dir-matches-nothing",
+            "config.scope-matches-nothing",
+            "diff.source-requires-record",
+            "claim.status-agreement",
+            "filename.identity-pattern",
+        ] {
+            let err = entry(rule, "[adr]").unwrap_err().to_string();
+            assert!(
+                err.contains(&format!("rule '{rule}' does not take the option 'types'")),
+                "{rule}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn types_survives_a_serialization_round_trip() {
+        let config = entry("header.required-fields", "[adr, rfc]").unwrap();
+        let yaml = yaml_serde::to_string(&config.rules["header.required-fields"]).unwrap();
+        let again: RuleSetting = yaml_serde::from_str(&yaml).unwrap();
+        assert_eq!(
+            again.types,
+            Some(vec!["adr".to_string(), "rfc".to_string()])
+        );
+    }
+}
+
 /// `ADR-90`, `MILE-203`: the `scope` rule option is a scalar, so it is
 /// validated by its own checks, not by the list-option reader.
 #[cfg(test)]
@@ -7991,6 +8131,7 @@ mod option_table_tests {
         "ignore_marker",
         "unread_markers",
         "scope",
+        "types",
         "code_comment_prefixes",
         "implements_marker",
         "verifies_marker",
@@ -8058,7 +8199,8 @@ mod option_table_tests {
                 );
             }
         }
-        for option in &in_struct {
+        // `types` is accepted by the rule's category, not listed per rule.
+        for option in in_struct.iter().filter(|o| *o != "types") {
             assert!(
                 crate::rules::RULE_TABLE
                     .iter()

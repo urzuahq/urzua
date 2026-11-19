@@ -342,3 +342,32 @@ fn a_type_declaring_no_unevidenced_tiers_never_reports_a_success_status_without_
     assert!(!notices.contains("no delivery evidence"), "{fixed}");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// A rule's `types:` holds for `fix` as for `check`: with
+/// `status.delivery-agreement` narrowed to another type, no milestone's
+/// `Status` is repaired or reported.
+#[test]
+fn fix_repairs_no_status_of_a_type_the_rules_types_does_not_list() {
+    let narrowed = config(DELIVERY, "")
+        .replace(
+            "  status.delivery-agreement: error\n",
+            "  status.delivery-agreement:\n    level: error\n    types: [other]\n",
+        )
+        .replace(
+            "record_types:\n",
+            "record_types:\n  other:\n    dir: \"docs/other\"\n    prefix: \"OTH\"\n",
+        );
+    let dir = repo("fix-types", &narrowed);
+    let report = parsed(&run_urzua(&dir, &["fix"]));
+    assert!(report["repairs"].as_array().unwrap().is_empty(), "{report}");
+    let notices = serde_json::to_string(&report["notices"]).unwrap();
+    assert!(!notices.contains("no delivery evidence"), "{report}");
+    let checked = parsed(&run_urzua(&dir, &["check"]));
+    let delivery = checked["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "status.delivery-agreement")
+        .count();
+    assert_eq!(delivery, 0, "{checked}");
+}
