@@ -53,7 +53,7 @@ pub(crate) fn rule_enabled(config: &Config, rule: &str) -> bool {
 }
 
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
-fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, Refusal> {
+fn run_checked(config_path: Option<PathBuf>, mut args: FixArgs) -> Result<ExitCode, Refusal> {
     if args.pin || args.replace.is_some() || args.remove.is_some() {
         return run_pin(config_path, &args);
     }
@@ -77,6 +77,7 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
         mut records,
         ..
     } = Session::open(config_path).map_err(refuse)?;
+    args.ids = repo_relative_ids(&repo_root, &args.ids);
     // `PATHS` narrow what is examined, drifted and repaired (`MILE-159`); the
     // corpus a back-pointer resolves against stays whole. A path that matches
     // no record is a failure naming it, never a silent skip.
@@ -138,16 +139,77 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
             unmatched,
             "matched no pending repair (an entry is a record's repo-relative path, e.g. docs/adr/ADR-1-title.md)",
         );
-        return Ok(emit(&build_fix_report(
+        let mut report = build_fix_report(
             detected.population,
             repairs,
             unmatched,
             None,
             false,
             detected.notices,
-        )));
+        );
+        report.failure_action = unmatched_action(&report, false);
+        return Ok(emit(&report));
     }
     apply_repairs(&tree, &args, detected, unmatched)
+}
+
+/// `--ids` entries as the repo-relative, `/`-separated paths a record is
+/// matched by. An entry that is `./`-prefixed, absolute inside the repository
+/// or written with the OS separator names the same record as its plain form;
+/// one that leaves the repository is kept as written, so it fails naming it.
+pub(crate) fn repo_relative_ids(repo_root: &Path, ids: &[String]) -> Vec<String> {
+    ids.iter()
+        .map(|id| repo_relative_id(repo_root, id))
+        .collect()
+}
+
+fn repo_relative_id(repo_root: &Path, id: &str) -> String {
+    use std::path::Component;
+    let path = Path::new(id);
+    let rel = if path.is_absolute() {
+        match crate::discovery::relative_to_root(repo_root, path) {
+            Ok(rel) => rel,
+            Err(_) => return id.to_string(),
+        }
+    } else {
+        path.to_path_buf()
+    };
+    let mut parts: Vec<String> = Vec::new();
+    for component in rel.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir if parts.pop().is_some() => {}
+            Component::Normal(part) => parts.push(part.to_string_lossy().into_owned()),
+            _ => return id.to_string(),
+        }
+    }
+    parts.join("/")
+}
+
+/// The pending-repairs listing when a failure names an `--ids` entry that
+/// matched nothing.
+fn unmatched_action(report: &FixReport, rebaseline: bool) -> Option<NextAction> {
+    report
+        .failed
+        .iter()
+        .any(|f| f.error.contains("--ids entry"))
+        .then(|| pending_action(rebaseline))
+}
+
+/// The dry-run that lists what is pending: what to run after a failure that
+/// names an entry no repair matched.
+fn pending_action(rebaseline: bool) -> NextAction {
+    if rebaseline {
+        NextAction::runs_as_printed(
+            "urzua fix --rebaseline".to_string(),
+            "lists the stale pins pending a re-pin, by repo-relative path".to_string(),
+        )
+    } else {
+        NextAction::runs_as_printed(
+            "urzua fix".to_string(),
+            "lists the repairs pending, each record by its repo-relative path".to_string(),
+        )
+    }
 }
 
 /// The usage errors of the command line that need no repository, in the order
@@ -475,14 +537,16 @@ fn apply_repairs(
         }
     }
 
-    Ok(emit(&build_fix_report(
+    let mut report = build_fix_report(
         detected.population,
         applied,
         failed,
         Some(identity),
         true,
         detected.notices,
-    )))
+    );
+    report.failure_action = unmatched_action(&report, false);
+    Ok(emit(&report))
 }
 
 /// Writes one repair into its record; the error is the failure's message.
@@ -955,7 +1019,7 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
                 .chain(args.history.notice(created))
                 .collect(),
         });
-        report.failure_action = failure_action;
+        report.failure_action = failure_action.or_else(|| unmatched_action(&report, true));
         report.revision_log_base = args.history.report(created);
         return Ok(emit(&report));
     };
@@ -1007,7 +1071,7 @@ fn apply_rebaselines(
         ran_apply: true,
         extra_notices: args.history.notice(created).into_iter().collect(),
     });
-    report.failure_action = failure_action;
+    report.failure_action = failure_action.or_else(|| unmatched_action(&report, true));
     report.revision_log_base = args.history.report(created);
     emit(&report)
 }

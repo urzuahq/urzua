@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.189'
+Version: '0.190'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:3c21c622aeac6d3e70cb24385b433179be9c222113d1bb1c69f6ab790c6a0835, code:rust/crates/urzua-core/src/rules.rs@sha256:07526fdfc27848d7d17b02628d29e23bc9053f867ca5f2968a9cc57bfaa7d198, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b129cc4d4755c2258133fe8106821c145cd7a4680eee048df51122526ef74ba7, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
@@ -304,6 +304,8 @@ the tracked set or nothing. Outside a git repository, every command that reads o
 `{"status":"not-run","error":"urzua needs a git repository: ..."}` (`BUG-170`), whether or not a config and records
 sit on disk. `rules` prints the static rule table and reads no repository, so it runs anywhere. The
 `scope.source` table has no directory-walk value for the same reason.
+
+`fix` exits as `check` does when the configuration fails to load or the repository cannot be read: `not-run`, exit 2, in every mode (`SPEC-8` states the rest of its exit codes).
 
 ## Rules
 
@@ -1674,4 +1676,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 487d9326aea8 -> 69ff803c6ba9. Reason: check.rs reads the changed records carrying a receipt row in the diff loader (from the merge-base copy and blame dates) and drops them on a run with an actors file; nothing else in check changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Bumped to `0.188`. Adds the opt-in rule `status.children-agreement` (a record's `Status` against the records that are part of it) to the generated rule and action tables. **Why:** an adopting repository moved 18 child records to an in-progress or finished status over two days and left 12 parents at their initial status; nothing in `check` objected and the first sign was the board. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 69ff803c6ba9 -> 3c21c622aeac, `rust/crates/urzua-core/src/rules.rs` 882c72ff9404 -> 07526fdfc278. Reason: check.rs adds one call that emits the new rule's configuration notices; nothing else in check changed; rules.rs registers the new children_agreement module and its re-export; nothing existing changed. The claim this record makes about that code still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
-> | 2026-11-19 | Bumped to `0.189`. The `status.children-agreement` row says a parent whose `Status` its type does not declare is not reported. **Why:** the rule read an undeclared status as not started, so a value nobody declared was reported as a claim that the work had not begun (BUG-206). | **substantive** |
+> | 2026-11-19 | Bumped to `0.189`. States that `fix` exits 2 on a configuration or repository `check` cannot run on, in every mode. **Why:** `fix` and `check` share one load path and the exit code was documented for `check` only (`BUG-207`). | **structural** |
+> | 2026-11-19 | Bumped to `0.190`. The `status.children-agreement` row says a parent whose `Status` its type does not declare is not reported. **Why:** the rule read an undeclared status as not started, so a value nobody declared was reported as a claim that the work had not begun (BUG-206). | **substantive** |

@@ -1253,3 +1253,45 @@ fn a_hand_merged_pinned_file_leads_to_a_sequence_that_passes_check_base() {
         .collect();
     assert!(pins.is_empty(), "{v}");
 }
+
+#[test]
+fn a_dot_slash_ids_entry_resolves_the_conflicted_record() {
+    let dir = fixture("ids-dot-slash", None, None);
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    let (code, v) = urzua(
+        &dir,
+        &[
+            "fix",
+            "--conflicts",
+            "--apply",
+            "--ids",
+            &format!("./{REC}"),
+            "--by",
+            "tester",
+            "--actor",
+            "agent",
+        ],
+    );
+    assert_eq!(
+        (code, v["status"].as_str()),
+        (Some(0), Some("resolved")),
+        "{v}"
+    );
+    assert_resolved(&dir);
+}
+
+#[test]
+fn an_unmatched_conflicts_entry_names_the_dry_run_that_lists_the_conflicts() {
+    let dir = fixture("ids-unmatched", None, None);
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    let (code, v) = urzua(
+        &dir,
+        &["fix", "--conflicts", "--ids", "docs/adr/ADR-9-x.md"],
+    );
+    assert_eq!(
+        (code, v["status"].as_str()),
+        (Some(1), Some("partial-failure")),
+        "{v}"
+    );
+    assert_eq!(v["next_action"], "urzua fix --conflicts", "{v}");
+}

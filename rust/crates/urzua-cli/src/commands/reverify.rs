@@ -25,7 +25,8 @@ use urzua_core::rules::{self, ClaimExpiredOpts, ClaimSkip};
 
 use crate::commands::fix::{
     back_pointer_evidence, excused_evidence_notice, identity_notices, into_failures, refuse,
-    resolve_attestation, rule_enabled, validate_reason, Refusal, ResolvedAttestation,
+    repo_relative_ids, resolve_attestation, rule_enabled, validate_reason, Refusal,
+    ResolvedAttestation,
 };
 use crate::discovery::{ClaimMeasures, DriftedRecords};
 use crate::emit;
@@ -59,7 +60,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
 }
 
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
-fn run_checked(config_path: Option<PathBuf>, args: ReverifyArgs) -> Result<ExitCode, Refusal> {
+fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<ExitCode, Refusal> {
     let reason = check_usage(&args)?;
     let Session {
         repo_root,
@@ -68,6 +69,7 @@ fn run_checked(config_path: Option<PathBuf>, args: ReverifyArgs) -> Result<ExitC
         records,
         ..
     } = Session::open(config_path).map_err(refuse)?;
+    args.ids = repo_relative_ids(&repo_root, &args.ids);
     if args.apply {
         config
             .attestation
