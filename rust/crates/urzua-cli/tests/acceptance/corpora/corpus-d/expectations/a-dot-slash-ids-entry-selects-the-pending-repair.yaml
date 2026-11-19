@@ -1,0 +1,12 @@
+id: a-dot-slash-ids-entry-selects-the-pending-repair
+corpus: corpus-d
+bugs: [BUG-208]
+# ADR-0006 supersedes ADR-0001 without the inverse, so the repair is ADR-0001's. The
+# entry names it `./`-prefixed; it selects the same record as the plain path.
+mutation_exempt: "fix is a command, not a rule, so there is no rule to switch off"
+invocation: [fix, --ids, ./records/ADR-0001-queue.md]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: repairs-available}
+  - {at: /repairs/0/record, equals: records/ADR-0001-queue.md}
+  - {at: /failed, equals: []}
