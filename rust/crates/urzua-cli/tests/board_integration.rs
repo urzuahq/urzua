@@ -3423,10 +3423,61 @@ fn the_prompt_is_the_same_in_the_page_and_a_flag_that_takes_no_other() {
     for args in [
         &["board", "--prompt", "--serve"][..],
         &["board", "--prompt", "--out", "x.html"][..],
+        &["board", "--prompt", "--port", "8080"][..],
+        &["board", "--prompt", "--allowed-host", "box.example"][..],
     ] {
         let out = run(&dir, args);
         assert_eq!(out.status.code(), Some(2), "{args:?}");
     }
+}
+
+fn check_summary(html: &str) -> String {
+    html.split("urzua check: ")
+        .nth(1)
+        .and_then(|rest| rest.split('<').next())
+        .unwrap_or_else(|| panic!("no check summary in the page"))
+        .to_string()
+}
+
+#[test]
+fn a_page_is_drawn_from_the_one_configuration_its_records_were_read_with() {
+    let dir = flat("one-config");
+    let (before, _) = board_page(&dir);
+    let summary = check_summary(&before);
+    let target = dir.join("out/board.html");
+    let mut child = common::urzua()
+        .args(["board", "--out", target.to_str().unwrap()])
+        .env("URZUA_BOARD_TEST_BUILD_DELAY_MS", "1500")
+        .current_dir(&*dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(600));
+    let config = dir.join(".urzua/config.yaml");
+    let edited = std::fs::read_to_string(&config)
+        .unwrap()
+        .replace(
+            "values: [Todo, Doing, Done, Dropped]",
+            "values: [Todo, Doing, Done, Dropped, Parked]",
+        )
+        .replace(
+            "    required_fields: [Status]\n    known_fields: [Needs, Gates, Area]",
+            "    required_fields: [Status, Owner]\n    known_fields: [Needs, Gates, Area, Owner]",
+        )
+        + "rules:\n  header.required-fields: error\n";
+    std::fs::write(&config, edited).unwrap();
+    assert!(child.wait().unwrap().success());
+    let html = std::fs::read_to_string(&target).unwrap();
+    assert!(
+        !html.contains("Parked"),
+        "the page names a status the records were not read with"
+    );
+    assert_eq!(
+        check_summary(&html),
+        summary,
+        "the check summary comes from a configuration the records were not read with"
+    );
 }
 
 fn rendered_shell(dir: &Path) -> String {

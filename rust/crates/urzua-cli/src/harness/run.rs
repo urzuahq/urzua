@@ -1204,11 +1204,12 @@ const EDIT_P: &str = "urzua harness (editor-hook)";
 
 fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict {
     let rel = j.rel_text;
-    let parent_note = parent_note(j, &content);
+    let kept = super::parent_state::enabled(j.config).then(|| content.clone());
     let report = match proposed_report(j, content) {
         Ok(r) => r,
         Err(verdict) => return *verdict,
     };
+    let parent_note = kept.map_or_else(String::new, |c| parent_note(j, &c));
 
     // Missing history costs only the rules that read it (embodiment drift).
     // Every other finding is still judged and still blocks; the message says

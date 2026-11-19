@@ -80,6 +80,16 @@ pub(crate) fn build_with(
     // record that resolves outside the repository or its type's directory, so an
     // export cannot disclose an arbitrary file under a repository path.
     let session = Session::open(config_path)?;
+    Ok(build_from(&session, filter, options))
+}
+
+/// The export of a session already open, so a caller that also reads the
+/// configuration reads it once.
+pub(crate) fn build_from(
+    session: &Session,
+    filter: &RecordFilter,
+    options: &ExportOptions,
+) -> ExportReport {
     let Session {
         repo_root,
         config_path,
@@ -87,7 +97,7 @@ pub(crate) fn build_with(
         records,
         full_text,
         ..
-    } = &session;
+    } = session;
 
     let (edges, _) = crate::commands::graph::edges_of(records, config);
     let model = view_model::compute(&ViewInput {
@@ -97,7 +107,7 @@ pub(crate) fn build_with(
         edges: &edges,
     });
     let checklists = if options.checklist_items {
-        checklists(&session)
+        checklists(session)
     } else {
         Checklists::new()
     };
@@ -130,7 +140,7 @@ pub(crate) fn build_with(
         })
         .collect();
 
-    Ok(ExportReport {
+    ExportReport {
         status: ReportStatus::Ok,
         record_count: exported.len(),
         types,
@@ -140,7 +150,7 @@ pub(crate) fn build_with(
         roadmap: (!config.roadmap.pairs.is_empty())
             .then(|| urzua_core::rules::compute_roadmap(records, config)),
         notices,
-    })
+    }
 }
 
 /// A declared checklist section's name and its items, as the delivery rule

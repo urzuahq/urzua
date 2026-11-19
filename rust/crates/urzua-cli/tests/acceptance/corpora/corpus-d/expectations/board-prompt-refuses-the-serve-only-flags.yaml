@@ -1,0 +1,8 @@
+id: board-prompt-refuses-the-serve-only-flags
+corpus: corpus-d
+bugs: [BUG-204]
+# `--port` and `--allowed-host` mean something only with `--serve`; `--prompt` with
+# either is a usage error, as `--prompt` with `--serve` or `--out` is.
+invocation: [board, --prompt, --port, "8080"]
+expect_exit: 2
+mutation_exempt: "board is a command, not a rule, so there is no rule to switch off"

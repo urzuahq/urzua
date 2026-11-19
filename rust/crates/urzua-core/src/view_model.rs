@@ -362,6 +362,24 @@ fn disagreement(state: StateCategory, children: &ChildrenByState) -> Option<Disa
     }
 }
 
+/// Whether a written status is one its type's declaration names. A status the
+/// declaration does not name is classified `NotStarted` for the export, but it
+/// is no claim that the work has not started, so it cannot contradict a child.
+fn status_is_declared(
+    decls: &HashMap<String, StatusDecl>,
+    record: &Record,
+    status: &Option<String>,
+) -> bool {
+    let Some(value) = status.as_deref() else {
+        return true;
+    };
+    decls.get(&record.record_type).is_some_and(|d| {
+        [&d.values, &d.success, &d.failure, &d.progress]
+            .iter()
+            .any(|list| list.iter().any(|v| v == value))
+    })
+}
+
 /// Whether a parent's own state and its children's disagree.
 fn disagrees(state: StateCategory, children: &ChildrenByState) -> bool {
     disagreement(state, children).is_some()
@@ -663,7 +681,9 @@ pub fn parent_standings<'a>(config: &Config, records: &'a [Record]) -> Vec<Paren
             by_state.add(standings[*child].1);
         }
         let (status, state, _) = standings[i].clone();
-        let disagreement = disagreement(state, &by_state);
+        let disagreement = status_is_declared(&decls, parent, &status)
+            .then(|| disagreement(state, &by_state))
+            .flatten();
         let mut contradicting: Vec<&(String, usize)> = counted
             .iter()
             .filter(|(_, c)| disagreement.is_some_and(|d| d.contradicted_by(standings[*c].1)))
@@ -760,7 +780,8 @@ pub fn compute(input: &ViewInput<'_>) -> ViewModel {
                     && matches!(state, StateCategory::NotStarted | StateCategory::Open)
                     && waiting_on.is_empty(),
                 waiting_on,
-                state_disagrees_with_children: disagrees(state, &by_state),
+                state_disagrees_with_children: status_is_declared(&decls, record, &status)
+                    && disagrees(state, &by_state),
                 children_by_state: by_state,
                 children,
                 parent: tree.parent[i].and_then(|p| ids[p].clone()),

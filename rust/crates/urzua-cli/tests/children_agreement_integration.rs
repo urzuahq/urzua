@@ -391,6 +391,29 @@ fn the_export_flag_and_the_rule_agree_on_which_records_disagree() {
     assert_eq!(from_rule, from_export);
 }
 
+#[test]
+fn a_parent_whose_status_is_not_declared_is_not_taken_for_one_not_started() {
+    let dir = repo(
+        "undeclared",
+        &on(),
+        &[(1, "Someday", ""), (2, "Active", "WORK-1")],
+    );
+    let (_, _, check) = run(&dir, &["check"]);
+    assert!(findings(&check).is_empty(), "{check}");
+    let (_, _, export) = run(&dir, &["export", "--format", "json"]);
+    let parent = export["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["path"] == path(1))
+        .unwrap();
+    assert_eq!(parent["state_disagrees_with_children"], false, "{parent}");
+    assert_eq!(
+        parent["state"], "not-started",
+        "the export's state is unchanged"
+    );
+}
+
 // ---------------------------------------------------------- the edit-time report
 
 const HARNESS: &str = "harness:
@@ -595,6 +618,25 @@ fn an_edit_says_nothing_about_the_parent_when_the_rule_is_off() {
     assert_eq!(v["verdict"], "allow", "{v}");
     assert!(
         !v["message"].as_str().unwrap().contains("WORK-1 is still"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_blocked_edit_still_names_the_parent_it_contradicts() {
+    let dir = harness_repo(
+        "edit-blocked",
+        "rules:\n  pointer.resolution: error\n  status.children-agreement: error\n",
+        &[(1, "Planned", ""), (2, "Planned", "WORK-1")],
+    );
+    let (code, v) = edit(&dir, 2, &record(2, "Active", "WORK-1, WORK-99"));
+    assert_ne!(code, 0, "the dangling pointer blocks: {v}");
+    assert_eq!(v["verdict"], "block", "{v}");
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("WORK-1 is still 'Planned' while WORK-2 is now 'Active'"),
         "{v}"
     );
 }

@@ -20,7 +20,7 @@ use super::board_page::{progress_gap_sentence, progress_gaps, render, CheckLine,
 use super::check::{self, CheckArgs};
 use super::export::{self, ExportOptions, RecordFilter};
 use crate::emit;
-use crate::session::{emit_or_not_run, Workspace};
+use crate::session::{emit_or_not_run, Session, Workspace};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// How long the last `GET /check` took, in seconds; 0 until one has run. The
@@ -115,6 +115,10 @@ pub fn run(config_path: Option<PathBuf>, args: BoardArgs) -> ExitCode {
 
 pub(super) fn check_line(config_path: &Option<PathBuf>) -> Option<CheckLine> {
     let report = check::execute(config_path.clone(), CheckArgs::default()).ok()?;
+    Some(line_of(&report))
+}
+
+fn line_of(report: &urzua_core::report::CheckReport) -> CheckLine {
     let count = |severity: FindingSeverity| {
         report
             .findings
@@ -122,7 +126,7 @@ pub(super) fn check_line(config_path: &Option<PathBuf>) -> Option<CheckLine> {
             .filter(|f| f.waived.is_none() && f.severity == severity)
             .count()
     };
-    Some(CheckLine {
+    CheckLine {
         status: serde_json::to_value(report.status)
             .ok()
             .and_then(|v| v.as_str().map(str::to_string))
@@ -135,7 +139,7 @@ pub(super) fn check_line(config_path: &Option<PathBuf>) -> Option<CheckLine> {
             .iter()
             .filter(|f| f.waived.is_some())
             .count(),
-    })
+    }
 }
 
 /// The page, and the export it was drawn from. The file carries the check
@@ -151,12 +155,14 @@ pub(super) fn build_page(
         section_text: false,
         ..ExportOptions::default()
     };
-    let export = export::build_with(config_path.clone(), &RecordFilter::default(), &options)?;
+    let session = Session::open(config_path.clone())?;
+    let export = export::build_from(&session, &RecordFilter::default(), &options);
     #[cfg(feature = "test-seams")]
     super::board_server::test_delay("URZUA_BOARD_TEST_BUILD_DELAY_MS");
+    let declared = declared(&session.config);
     let line = served_at
         .is_none()
-        .then(|| check_line(config_path))
+        .then(|| check::execute_on(session).ok().map(|r| line_of(&r)))
         .flatten();
     let note = match (&line, served_at) {
         (_, Some(_)) => CheckNote::Linked(match LAST_CHECK_SECS.load(Ordering::Relaxed) {
@@ -166,8 +172,7 @@ pub(super) fn build_page(
         (Some(line), None) => CheckNote::Line(line),
         (None, None) => CheckNote::Unavailable,
     };
-    let ws = Workspace::open(&[], config_path.clone())?;
-    let page = render(&export, &note, served_at, &declared(&ws.config));
+    let page = render(&export, &note, served_at, &declared);
     Ok((page, export))
 }
 
