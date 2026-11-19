@@ -606,28 +606,42 @@ fn load_waivers(
 
 pub(crate) fn execute(
     config_path: Option<PathBuf>,
-    args: CheckArgs,
+    mut args: CheckArgs,
 ) -> Result<CheckReport, Failure> {
     reject_flag_conflicts(&args)?;
+    let opened = open_session(
+        &args.paths,
+        config_path,
+        args.base.as_deref(),
+        args.stdin_path.as_deref(),
+        args.proposed.take(),
+    )?;
+    run_opened(opened, args)
+}
+
+/// `check` over a session the caller already opened, with the default scope: the
+/// report is of the configuration and records that session holds.
+pub(crate) fn execute_on(session: Session) -> Result<CheckReport, Failure> {
+    let opened = Opened {
+        session,
+        requested_scopes: Vec::new(),
+        changed: None,
+        prospective: None,
+    };
+    run_opened(opened, CheckArgs::default())
+}
+
+fn run_opened(mut opened: Opened, args: CheckArgs) -> Result<CheckReport, Failure> {
     let CheckArgs {
-        paths,
         base,
         fail_on,
-        stdin_path,
-        proposed,
         rules: requested_rules,
         actors: actors_path,
         extra_notices,
         added_records,
+        ..
     } = args;
     let actors = actors_path.as_deref().map(read_actors).transpose()?;
-    let mut opened = open_session(
-        &paths,
-        config_path,
-        base.as_deref(),
-        stdin_path.as_deref(),
-        proposed,
-    )?;
     add_records(&mut opened.session, added_records)?;
     let session = &opened.session;
     let selection = validate_selection(&session.config, &requested_rules)?;

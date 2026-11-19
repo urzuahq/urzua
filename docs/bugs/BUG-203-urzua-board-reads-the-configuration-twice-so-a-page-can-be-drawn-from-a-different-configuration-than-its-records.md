@@ -8,7 +8,7 @@ Realized-by: test:rust/crates/urzua-cli/tests/board_integration.rs#a_page_is_dra
 
 ## What was wrong
 
-`urzua board` opened the repository once to read the records and a second time to read the declared types and statuses it prints in the page's prompt and About panel. A configuration edit between the two reads gave a page whose records came from one configuration and whose declared vocabulary came from another.
+`urzua board` opened the repository once to read the records and a second time to read the declared types and statuses it prints in the page's prompt and About panel, and the check summary it prints in file mode ran `check` through a third session. A configuration edit between the reads gave a page whose records came from one configuration and whose declared vocabulary or check summary came from another.
 
 ## Why nothing caught it
 
@@ -16,7 +16,7 @@ Both reads happened in one short call, and no test changed the configuration bet
 
 ## References
 
-The page is now built from one session, so the records and the declared vocabulary come from the same configuration. `board_integration::a_page_is_drawn_from_the_one_configuration_its_records_were_read_with` adds a status to the configuration while the build waits, and asserts the page does not name it.
+The page is now built from one session, and the check summary is computed on that session (`check::execute_on`), so the records, the declared vocabulary and the summary come from the same configuration. `board_integration::a_page_is_drawn_from_the_one_configuration_its_records_were_read_with` adds a status to the configuration while the build waits, and asserts the page does not name it and that its check summary is the one the unedited configuration gives.
 
 > **Revision log**
 >

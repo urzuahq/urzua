@@ -196,10 +196,9 @@ The opt-in rule `status.children-agreement` holds a parent's `Status` to its chi
 `statuses`. On the parent's file it reports a parent that is not started (a status outside its type's
 `statuses.progress`) while a child is under way or finished, and a parent that is finished (`statuses.success`) while a
 child is neither finished nor dropped. A parent whose children are all finished and that is still under way is not
-reported, nor is a dropped parent, a parent of a type that declares no `statuses.progress` (unless it is finished), a
-parent whose `Status` its type does not declare, or a
-record whose `part_of` field names several records. Where the type declares exactly one progress status, its
-transitions lead there and no `authority` gate reserves the move, the finding's suggested action sets the parent's
+reported, nor is a dropped parent, a parent of a type that declares no `statuses.progress` (unless it is finished), a parent whose
+`Status` its type does not declare, or a record whose `part_of` field names several records. Where the type declares
+exactly one progress status, its transitions lead there and no `authority` gate reserves the move, the finding's suggested action sets the parent's
 status to it; a gated move is never suggested, and the finding names who may make it. `urzua fix` does not apply it. With
 `--base`, a child the change added, or whose status or `part_of` value differs from the merge base's, brings its parent
 into the run, so the finding appears on the pull request that caused it. Enabled with no `part_of` field, or with a

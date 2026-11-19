@@ -115,6 +115,10 @@ pub fn run(config_path: Option<PathBuf>, args: BoardArgs) -> ExitCode {
 
 pub(super) fn check_line(config_path: &Option<PathBuf>) -> Option<CheckLine> {
     let report = check::execute(config_path.clone(), CheckArgs::default()).ok()?;
+    Some(line_of(&report))
+}
+
+fn line_of(report: &urzua_core::report::CheckReport) -> CheckLine {
     let count = |severity: FindingSeverity| {
         report
             .findings
@@ -122,7 +126,7 @@ pub(super) fn check_line(config_path: &Option<PathBuf>) -> Option<CheckLine> {
             .filter(|f| f.waived.is_none() && f.severity == severity)
             .count()
     };
-    Some(CheckLine {
+    CheckLine {
         status: serde_json::to_value(report.status)
             .ok()
             .and_then(|v| v.as_str().map(str::to_string))
@@ -135,7 +139,7 @@ pub(super) fn check_line(config_path: &Option<PathBuf>) -> Option<CheckLine> {
             .iter()
             .filter(|f| f.waived.is_some())
             .count(),
-    })
+    }
 }
 
 /// The page, and the export it was drawn from. The file carries the check
@@ -155,9 +159,10 @@ pub(super) fn build_page(
     let export = export::build_from(&session, &RecordFilter::default(), &options);
     #[cfg(feature = "test-seams")]
     super::board_server::test_delay("URZUA_BOARD_TEST_BUILD_DELAY_MS");
+    let declared = declared(&session.config);
     let line = served_at
         .is_none()
-        .then(|| check_line(config_path))
+        .then(|| check::execute_on(session).ok().map(|r| line_of(&r)))
         .flatten();
     let note = match (&line, served_at) {
         (_, Some(_)) => CheckNote::Linked(match LAST_CHECK_SECS.load(Ordering::Relaxed) {
@@ -167,7 +172,7 @@ pub(super) fn build_page(
         (Some(line), None) => CheckNote::Line(line),
         (None, None) => CheckNote::Unavailable,
     };
-    let page = render(&export, &note, served_at, &declared(&session.config));
+    let page = render(&export, &note, served_at, &declared);
     Ok((page, export))
 }
 
