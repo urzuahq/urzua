@@ -286,6 +286,28 @@ fn a_tree_with_nothing_unmerged_says_so_distinctly() {
     assert_eq!(v["conflicts"].as_array().map(Vec::len), Some(0), "{v}");
 }
 
+#[test]
+fn an_ids_entry_matching_nothing_in_a_tree_with_nothing_unmerged_is_a_failure() {
+    let dir = fixture("none-ids", None, None);
+    let (code, v) = urzua(
+        &dir,
+        &["fix", "--conflicts", "--ids", "docs/adr/ADR-1-x.md"],
+    );
+    assert_eq!(code, Some(1), "{v}");
+    assert_eq!(v["status"], "partial-failure", "{v}");
+    let failed = v["failed"].as_array().unwrap_or_else(|| panic!("{v}"));
+    assert_eq!(failed.len(), 1, "{v}");
+    assert_eq!(failed[0]["record"], "docs/adr/ADR-1-x.md", "{v}");
+    assert!(
+        failed[0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("--ids entry 'docs/adr/ADR-1-x.md' matched no unmerged record"),
+        "{v}"
+    );
+    assert_eq!(v["next_action"], "urzua fix --conflicts", "{v}");
+}
+
 fn assert_refused_untouched(dir: &Path, needle: &str) {
     let before = std::fs::read_to_string(dir.join(REC)).unwrap();
     let (code, v) = apply(dir);

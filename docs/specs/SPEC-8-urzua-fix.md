@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.68'
+Version: '0.69'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -508,7 +508,7 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   the merge or rebase is continued by the user.
 - **Status:** `nothing-conflicted` (git lists no unmerged file), `no-record-conflicts` (unmerged files,
   none a record), `resolvable`, `resolved`, `partial-failure` (a record refused or an `--ids` entry
-  matching no unmerged record; exit 1), or `not-run`. So a run with nothing conflicted is told apart
+  matching no unmerged record, also when git lists no unmerged file at all; exit 1), or `not-run`. So a run with nothing conflicted is told apart
   from one that resolved nothing (`SPEC-1`).
 - **Suggested next action.** While git lists unmerged records, `check` and `fix --rebaseline` raise an
   `unmerged-records` warning notice and their `next_action` is `urzua fix --conflicts`.
@@ -841,3 +841,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-19 | Bumped to `0.67`. An `--ids` entry written `./`-prefixed, absolute inside the repository or with the OS separator names the same record as its repo-relative path in every mode that takes `--ids`, and a failed `--ids` entry names the dry run that lists the pending repairs as `next_action`; the exit codes of each status are stated. **Why:** a repair the editor hook named, run with an entry in another path form, wrote nothing and left no next step (`BUG-207`, `BUG-208`). | **substantive** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 4b3453510163 -> 07c6e30fd14e. Reason: Read the diff of fix.rs since the old pin and the claim still holds. fix.rs adds repo_relative_ids, which normalises each --ids entry (./ prefix, absolute path inside the repository, OS separator) to the repo-relative path before matching, applied once after the session opens, and adds unmatched_action and pending_action, which set next_action to the dry-run urzua fix (urzua fix --rebaseline for a re-pin) when an --ids entry matched nothing; no repair, drift or write logic changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-19 | Bumped to `0.68`. `reverify --ids` takes the same path forms as `fix --ids`, and an unmatched `--conflicts` entry names `urzua fix --conflicts` as `next_action`. **Why:** review of the pull request found `reverify` and `--conflicts` left out (`BUG-207`, `BUG-208`). | **substantive** |
+> | 2026-11-19 | Bumped to `0.69`. A `--conflicts --ids` entry that matches no unmerged record is `partial-failure` (exit 1, `next_action` `urzua fix --conflicts`) when git lists no unmerged file too; `nothing-conflicted` is only a run with no entry that failed. **Why:** it reported `nothing-conflicted` and exited 0, a silent no-op (`BUG-209`). | **substantive** |

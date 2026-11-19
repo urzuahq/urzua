@@ -104,7 +104,9 @@ fn status_of(
     failed: &[FixFailure],
     applied: bool,
 ) -> ConflictsStatus {
-    if unmerged.is_empty() {
+    if unmerged.is_empty() && !failed.is_empty() {
+        ConflictsStatus::PartialFailure
+    } else if unmerged.is_empty() {
         ConflictsStatus::NothingConflicted
     } else if records.is_empty() {
         ConflictsStatus::NoRecordConflicts
