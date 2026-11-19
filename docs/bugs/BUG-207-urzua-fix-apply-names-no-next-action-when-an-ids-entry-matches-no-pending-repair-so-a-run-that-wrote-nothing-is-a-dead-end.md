@@ -2,7 +2,7 @@
 Stable-Id: 01M7SKPPHC3WJNHW1SXX7CGKTV
 Status: Fixed
 Found-in: an agent ran the command the editor hook named, urzua fix --apply --ids <record path> --actor agent, which wrote nothing and left next_action null
-Realized-by: test:rust/crates/urzua-cli/tests/fix_exit_codes_integration.rs#a_failed_apply_exits_1_and_names_the_dry_run_that_lists_what_is_pending@sha256:ce20c7dcde9e076b3b2700a2be483cefe7cd8607467c9359eb8b637e51e19faa
+Realized-by: test:rust/crates/urzua-cli/tests/fix_exit_codes_integration.rs#a_failed_apply_exits_1_and_names_the_dry_run_that_lists_what_is_pending@sha256:ce20c7dcde9e076b3b2700a2be483cefe7cd8607467c9359eb8b637e51e19faa, test:rust/crates/urzua-cli/tests/fix_conflicts_integration.rs#an_unmatched_conflicts_entry_names_the_dry_run_that_lists_the_conflicts@sha256:35776984af76535ab302c0276427431cd6e851a5dc8cd68cf28a7118a2b27fb3, test:rust/crates/urzua-cli/tests/fix_exit_codes_integration.rs#an_unmatched_re_pin_entry_names_the_re_pin_listing@sha256:c89864732898da630a40c77f018dabb771cded09770aa66706a28bfc601e99bb
 ---
 # 207 — urzua fix --apply names no next action when an --ids entry matches no pending repair, so a run that wrote nothing is a dead end
 
@@ -16,9 +16,10 @@ No test asserted the `next_action` of a failed `fix` run, only that it failed, a
 
 ## References
 
-`BUG-208` is the cause of the entry not matching in the case that surfaced this. Fixed in `rust/crates/urzua-cli/src/commands/fix.rs`: a failure naming an `--ids` entry carries `urzua fix` (`urzua fix --rebaseline` for a re-pin) as its next action. `SPEC-8` and `docs/reference/commands.md` state it.
+`BUG-208` is the cause of the entry not matching in the case that surfaced this. Fixed in `rust/crates/urzua-cli/src/commands/fix.rs`: a failure naming an `--ids` entry carries `urzua fix` (`urzua fix --rebaseline` for a re-pin, `urzua fix --conflicts` for a conflicts run) as its next action. `SPEC-8` and `docs/reference/commands.md` state it.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-19 | Review of the pull request found an unmatched `--conflicts` entry still left `next_action` null, and no test covered the re-pin listing's next action. `--conflicts` now names `urzua fix --conflicts`; `Realized-by` gains a test for each. | **structural** |

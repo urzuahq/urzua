@@ -167,3 +167,73 @@ fn a_config_that_fails_to_load_exits_2_in_every_fix_mode() {
         );
     }
 }
+
+const PINNED_CONFIG: &str = "schema_version: 2
+rules:
+  header.required-fields: error
+record_types:
+  adr:
+    dir: \"docs/adr\"
+    required_fields: [\"Status\"]
+    known_fields: [\"Realized-by\"]
+    revision_log: {marker: \"**Revision log**\"}
+";
+
+/// One ADR pinning `src/a.rs` at a hash the file no longer has.
+fn stale_pin_project(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-fix-exit-{name}"));
+    for d in ["docs/adr", "src", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    common::git(&dir, &["init", "-q"]);
+    common::git(&dir, &["config", "user.email", "t@example.com"]);
+    common::git(&dir, &["config", "user.name", "t"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), PINNED_CONFIG).unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    let pin = format!("code:src/a.rs@sha256:{}", "0".repeat(64));
+    std::fs::write(dir.join(A), record(1, &format!("Realized-by: {pin}\n"))).unwrap();
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+#[test]
+fn a_dot_slash_ids_entry_selects_the_stale_pin_for_a_re_pin() {
+    let dir = stale_pin_project("rebaseline-dot-slash");
+    let (code, v) = run(&dir, &["fix", "--rebaseline", "--ids", &format!("./{A}")]);
+    assert_eq!(
+        (code, v["status"].as_str().unwrap()),
+        (0, "repairs-available"),
+        "{v}"
+    );
+    assert_eq!(v["rebaselines"][0]["record"], A, "{v}");
+}
+
+#[test]
+fn an_unmatched_re_pin_entry_names_the_re_pin_listing() {
+    let dir = stale_pin_project("rebaseline-unmatched");
+    for args in [
+        vec!["fix", "--rebaseline", "--ids", "docs/adr/ADR-9-x.md"],
+        vec![
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            "./docs/adr/ADR-9-x.md",
+            "--by",
+            "tester",
+            "--actor",
+            "agent",
+            "--reason",
+            "Read the diff of the pinned file and the claim still holds.",
+        ],
+    ] {
+        let (code, v) = run(&dir, &args);
+        assert_eq!(
+            (code, v["status"].as_str().unwrap()),
+            (1, "partial-failure"),
+            "{args:?}: {v}"
+        );
+        assert_eq!(v["next_action"], "urzua fix --rebaseline", "{args:?}: {v}");
+    }
+}

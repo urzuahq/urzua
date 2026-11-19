@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.67'
+Version: '0.68'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -241,10 +241,10 @@ Every one of the following is a hard gate — none are optional, none are defaul
 - **An `--ids` entry that matches no pending repair is a failure.** It is reported in `failed` naming
   the entry (`partial-failure`, exit 1) and writes nothing, never a clean `ok` (`BUG-166`), and its
   `next_action` is `urzua fix` (`urzua fix --rebaseline` for a re-pin), the dry run that lists the pending
-  repairs by path (`BUG-207`). An entry is matched against a record's repo-relative path; accepting a
+  repairs by path, and `urzua fix --conflicts` for an unmatched `--conflicts` entry (`BUG-207`). An entry is matched against a record's repo-relative path; accepting a
   record id is not defined here. An entry written `./`-prefixed, as an absolute path inside the
   repository or with the OS separator names the same record as its repo-relative form, in every mode that
-  takes `--ids` (plain, `--rebaseline`, `--pin`, `--conflicts`); an absolute path outside the repository is
+  takes `--ids` (plain, `--rebaseline`, `--pin`, `--conflicts`), and in `reverify --ids`; an absolute path outside the repository is
   kept as written and fails naming it (`BUG-208`).
 - **The exit code says whether the command wrote what it was asked to.** `not-run` is exit 2 in every mode
   (a configuration that fails to load exits as `check` does), `partial-failure` or any `failed` entry is
@@ -840,3 +840,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-18 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/fix.rs` (Realized-by) 931921fb10f9 and d9398b0c5717 -> ef63c51c34e0; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-19 | Bumped to `0.67`. An `--ids` entry written `./`-prefixed, absolute inside the repository or with the OS separator names the same record as its repo-relative path in every mode that takes `--ids`, and a failed `--ids` entry names the dry run that lists the pending repairs as `next_action`; the exit codes of each status are stated. **Why:** a repair the editor hook named, run with an entry in another path form, wrote nothing and left no next step (`BUG-207`, `BUG-208`). | **substantive** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 4b3453510163 -> 07c6e30fd14e. Reason: Read the diff of fix.rs since the old pin and the claim still holds. fix.rs adds repo_relative_ids, which normalises each --ids entry (./ prefix, absolute path inside the repository, OS separator) to the repo-relative path before matching, applied once after the session opens, and adds unmatched_action and pending_action, which set next_action to the dry-run urzua fix (urzua fix --rebaseline for a re-pin) when an --ids entry matched nothing; no repair, drift or write logic changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-19 | Bumped to `0.68`. `reverify --ids` takes the same path forms as `fix --ids`, and an unmatched `--conflicts` entry names `urzua fix --conflicts` as `next_action`. **Why:** review of the pull request found `reverify` and `--conflicts` left out (`BUG-207`, `BUG-208`). | **substantive** |
