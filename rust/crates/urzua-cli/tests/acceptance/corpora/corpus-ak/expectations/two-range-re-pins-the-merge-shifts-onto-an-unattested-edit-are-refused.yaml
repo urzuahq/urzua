@@ -1,0 +1,78 @@
+id: two-range-re-pins-the-merge-shifts-onto-an-unattested-edit-are-refused
+corpus: corpus-ak
+bugs: [BUG-211]
+# Branch x edits the first spacer, which its range pins, and the line of `g`, which it does not;
+# branch y deletes the first function (three lines above the range) and edits the third spacer;
+# each re-pins `src/a.rs#L5-L7`. Merged, lines 5-7 are other code, among them x's unpinned edit.
+# The pin is not recomputed over it: the record is refused and left as the merge wrote it.
+mutation_exempt: "fix is a command, not a rule, so there is no rule to switch off"
+commits:
+  - branch: x
+    write:
+      src/a.rs: |
+        fn f() {
+            1;
+        }
+
+        fn spacer() { 1 }
+        fn spacer2() {}
+        fn spacer3() {}
+
+        fn g() { // EVIL
+            1;
+        }
+      docs/milestones/MILE-1-shifted-range.md: |
+        ---
+        Status: Done
+        Version: '2'
+        Embodiment: Implemented
+        Realized-by: 'code:src/a.rs#L5-L7@sha256:493c76df66ee5d731cf64f9df2c5f5eefeae73b91b16d9bebb0bd9f3d9894ba2, test:t.rs'
+        ---
+        # MILE-1: Queue
+
+        ## Done means
+
+        - The spacers work. — evidence: code:src/a.rs#L5-L7@sha256:493c76df66ee5d731cf64f9df2c5f5eefeae73b91b16d9bebb0bd9f3d9894ba2
+
+        > **Revision log**
+        >
+        > | Date | Change | Class |
+        > |---|---|---|
+        > | 2026-01-01 | Initial. | **structural** |
+        > | 2026-03-02 | Re-baselined (attested by x, identity: asserted, actor: agent): re-pinned `src/a.rs#L5-L7` 9890b848db61 -> 493c76df66ee. Reason: the first spacer changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds. | **structural** |
+  - branch: y
+    write:
+      src/a.rs: |
+
+        fn spacer() {}
+        fn spacer2() {}
+        fn spacer3() { 3 }
+
+        fn g() {
+            1;
+        }
+      docs/milestones/MILE-1-shifted-range.md: |
+        ---
+        Status: Done
+        Version: '2'
+        Embodiment: Implemented
+        Realized-by: 'code:src/a.rs#L5-L7@sha256:3b65bac02c89b5ac0ab17eedd2cd16890c5364466aaf2df2557d298c3ba3e45c, test:t.rs'
+        ---
+        # MILE-1: Queue
+
+        ## Done means
+
+        - The spacers work. — evidence: code:src/a.rs#L5-L7@sha256:3b65bac02c89b5ac0ab17eedd2cd16890c5364466aaf2df2557d298c3ba3e45c
+
+        > **Revision log**
+        >
+        > | Date | Change | Class |
+        > |---|---|---|
+        > | 2026-01-01 | Initial. | **structural** |
+        > | 2026-03-01 | Re-baselined (attested by y, identity: asserted, actor: agent): re-pinned `src/a.rs#L5-L7` 9890b848db61 -> 3b65bac02c89. Reason: the third spacer changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds. | **structural** |
+merge: x
+invocation: [fix, --conflicts, --apply, --force, --by, acceptance, --actor, agent]
+expect_exit: 1
+expect_json:
+  - {at: /status, equals: partial-failure}
+  - {at: /conflicts/0/outcome, equals: refused}

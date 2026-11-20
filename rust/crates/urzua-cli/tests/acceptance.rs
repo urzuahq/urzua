@@ -84,6 +84,11 @@ struct Case {
     /// Not allowed with `corpus: "@repo"`.
     #[serde(default)]
     commits: Vec<Commit>,
+    /// A branch to merge into the checked-out one after `commits`, so a case
+    /// can run over a repository left unmerged (`fix --conflicts`). Git must
+    /// list an unmerged file afterwards, or the case is a harness error; not
+    /// allowed with `shallow`.
+    merge: Option<String>,
     /// Run in a `--depth 1` clone of the corpus repository once `commits` are
     /// made, so a case can assert how a truncated history is reported.
     #[serde(default)]
@@ -140,6 +145,9 @@ struct NoticeMatcher {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Commit {
+    /// Cut this commit on a new branch of that name from the `base` tag
+    /// instead of on top of the previous commit.
+    branch: Option<String>,
     #[serde(default)]
     write: std::collections::BTreeMap<String, String>,
     #[serde(default)]
@@ -458,6 +466,11 @@ impl Drop for TempFile {
 /// after `setup` has run, and a config the mutation breaks is a harness error
 /// (a rejected config proves nothing about the rule).
 fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<String>, String> {
+    if case.shallow && case.merge.is_some() {
+        return Err(
+            "a case cannot be both shallow and merge: a depth-1 clone has no merge state".into(),
+        );
+    }
     let (cwd, temp) = if case.corpus == "@repo" {
         (repo_root(), None)
     } else {
@@ -473,6 +486,9 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
         git(&t, &["commit", "-q", "-m", "fixture"])?;
         git(&t, &["tag", "base"])?;
         for (n, c) in case.commits.iter().enumerate() {
+            if let Some(branch) = &c.branch {
+                git(&t, &["checkout", "-q", "-b", branch, "base"])?;
+            }
             for r in &c.rename {
                 if let Some(parent) = t.join(&r.to).parent() {
                     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -494,6 +510,19 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
             }
             git(&t, &["add", "-A"])?;
             git(&t, &["commit", "-q", "-m", &format!("change {}", n + 1)])?;
+        }
+        if let Some(other) = &case.merge {
+            let _ = git(&t, &["merge", "-q", "--no-edit", other]);
+            let unmerged = Command::new("git")
+                .args(["ls-files", "-u"])
+                .current_dir(&t)
+                .output()
+                .map_err(|e| format!("git ls-files -u: {e}"))?;
+            if unmerged.stdout.is_empty() {
+                return Err(format!(
+                    "merge of '{other}' left no unmerged file: it did not stop on a conflict"
+                ));
+            }
         }
         if case.shallow {
             let clone = PathBuf::from(format!("{}-shallow", t.display()));

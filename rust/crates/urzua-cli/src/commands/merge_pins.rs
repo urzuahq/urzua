@@ -130,16 +130,16 @@ pub(crate) fn verified_hash(
         .into());
     }
     let at = |commit: &str| show(repo_root, &format!("{commit}:{path}"));
-    for (side, commit, want) in [
-        ("our commit (HEAD)", &heads.ours, &pin.ours),
-        ("their commit", &heads.theirs, &pin.theirs),
-    ] {
-        let bytes = at(commit).map_err(|_| format!("{path} does not exist at {side}"))?;
-        let got = hash_under_scope(config, &locator, &bytes)
-            .map_err(|e| format!("{path} at {side} cannot be hashed: {e}"))?;
-        if Some(&got) != want.as_ref() {
+    check_narrowing(pin, &locator)?;
+    for a in attested_sides(heads, pin, &locator)? {
+        let (side, file) = (a.side, a.locator.path.clone());
+        let bytes = show(repo_root, &format!("{}:{file}", a.commit))
+            .map_err(|_| format!("{file} does not exist at {side}"))?;
+        let got = hash_under_scope(config, &a.locator, &bytes)
+            .map_err(|e| format!("{file} at {side} cannot be hashed: {e}"))?;
+        if Some(&got) != a.want.as_ref() {
             return Err(format!(
-                "{path} at {side} does not hash to that side's pin: the file changed there without a re-pin"
+                "{file} at {side} does not hash to that side's pin: the file changed there without a re-pin"
             )
             .into());
         }
@@ -172,8 +172,178 @@ pub(crate) fn verified_hash(
             .into())
         }
     }
+    let base_text = String::from_utf8_lossy(&base).into_owned();
+    let merged_text = String::from_utf8_lossy(&index).into_owned();
+    let scoped: Vec<Attested> = attested_sides(heads, pin, &locator)?
+        .into_iter()
+        .filter(|a| a.locator.scope.is_some())
+        .collect();
+    let mut spans = Vec::new();
+    for a in &scoped {
+        spans.push(side_span(repo_root, config, a, &base_text)?);
+    }
+    for (a, span) in scoped.iter().zip(&spans) {
+        check_merged_span(config, a, span, &merged_text, scoped.len() > 1)?;
+    }
     Ok(hash_under_scope(config, &locator, &index)
         .map_err(|e| format!("{path} cannot be hashed: {e}"))?)
+}
+
+/// The lines of `text`, each with its line ending, so a comparison is exact.
+fn lines_of(text: &str) -> Vec<&str> {
+    text.split_inclusive('\n').collect()
+}
+
+/// A side that pinned a scope attests that scope and nothing else, so its file
+/// must equal the base outside the scope's span (the same lines before it and
+/// after it). Returns the side's own text and the scope's span in it.
+fn side_span(
+    repo_root: &Path,
+    config: &Config,
+    a: &Attested,
+    base: &str,
+) -> Result<(String, urzua_core::locator::Span), String> {
+    let (side, file) = (a.side, a.locator.path.clone());
+    let bytes = show(repo_root, &format!("{}:{file}", a.commit))
+        .map_err(|_| format!("{file} does not exist at {side}"))?;
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    let span = scope_span(config, a, &text, &format!("at {side}"))?;
+    let (b, s) = (lines_of(base), lines_of(&text));
+    let (before, after) = (span.start - 1, s.len().saturating_sub(span.end));
+    let confined = b.len() >= before + after
+        && b[..before] == s[..before]
+        && b[b.len() - after..] == s[s.len() - after..];
+    if !confined {
+        return Err(format!(
+            "{file} at {side} changed code outside what that side pinned ('{}'): the merged pin would cover lines nobody attested",
+            a.locator.display()
+        ));
+    }
+    Ok((text, span))
+}
+
+fn scope_span(
+    config: &Config,
+    a: &Attested,
+    text: &str,
+    where_: &str,
+) -> Result<urzua_core::locator::Span, String> {
+    let file = &a.locator.path;
+    let scope = a.locator.scope.as_ref().ok_or("the locator has no scope")?;
+    urzua_core::locator::select_resolver(&config.locator_resolvers, file)
+        .and_then(|r| urzua_core::locator::resolve_scope(text, r, scope))
+        .map_err(|e| format!("{file} {where_} cannot be resolved: {e}"))
+}
+
+/// The scope resolved in the merged file must keep the lines before it that the
+/// side has (a merge that moved it is refused) and, when every pin of the
+/// merge is scoped (`both`), the lines after it as well: the merged span then
+/// lies inside each side's span, so a merge that combined both sides' changes
+/// across the span's edge pins no line a side did not pin. With a side that
+/// pinned the whole file, that side attests every line, so only the lines
+/// before the scope are held.
+fn check_merged_span(
+    config: &Config,
+    a: &Attested,
+    (side_text, side_span): &(String, urzua_core::locator::Span),
+    merged: &str,
+    both: bool,
+) -> Result<(), String> {
+    let file = &a.locator.path;
+    let (s, m) = (lines_of(side_text), lines_of(merged));
+    let merged_span = scope_span(config, a, merged, "in the merged file")?;
+    let (before, after) = (side_span.start - 1, s.len().saturating_sub(side_span.end));
+    let (m_before, m_after) = (
+        merged_span.start - 1,
+        m.len().saturating_sub(merged_span.end),
+    );
+    if m[..m_before] != s[..before] || (both && m[m.len() - m_after..] != s[s.len() - after..]) {
+        return Err(format!(
+            "the merged span of '{}' in {file} does not start and end where {}'s does: the merge moved it or combined both sides' changes across its edge, so the merged pin would cover lines that side did not pin",
+            a.locator.display(),
+            a.side
+        ));
+    }
+    Ok(())
+}
+
+/// A locator one side replaced is recomputed only when the old one is the whole
+/// file and the new one a scope of that same file. That is a precondition, not
+/// the whole argument: the merged file also carries the changer's edits outside
+/// its scope and the other side's edits anywhere, so `side_span` and `check_merged_span` still has
+/// to hold. An old range or symbol is refused outright: its re-pin covers what
+/// that scope held in the other side's file, whose lines can sit elsewhere than
+/// in the changer's.
+fn check_narrowing(pin: &PinSides, new: &Locator) -> Result<(), String> {
+    let Some(moved) = &pin.moved_from else {
+        return Ok(());
+    };
+    let old = urzua_core::locator::parse_locator(&moved.spelling)
+        .map_err(|e| format!("its old locator '{}' does not parse: {e}", moved.spelling))?;
+    let (new_name, old_name) = (&pin.spelling, &moved.spelling);
+    if old.path != new.path {
+        return Err(format!(
+            "one side replaced '{old_name}' with '{new_name}', a different file, and the other side's re-pin of '{old_name}' does not cover it; only a whole file narrowed to a scope of itself is resolved on merge"
+        ));
+    }
+    if old.scope.is_some() {
+        return Err(format!(
+            "one side replaced '{old_name}' with '{new_name}', and '{old_name}' is a range or symbol, not the whole file: the other side's re-pin of it covers what it held in that side's file, which may not be the lines '{new_name}' covers in the merged file; only a whole file narrowed to a scope of itself is resolved on merge"
+        ));
+    }
+    Ok(())
+}
+
+/// One side of a merge and the pin it attests: its commit, the locator the pin
+/// is over and the hash the file must have under it.
+struct Attested {
+    side: &'static str,
+    commit: String,
+    locator: Locator,
+    want: Option<String>,
+}
+
+/// Each side's commit, the locator that side's pin is over and the hash it
+/// must have. A pin one side wrote in place of another locator is attested at
+/// that side by its own pin and at the other side by that old locator's.
+fn attested_sides(
+    heads: &Heads,
+    pin: &PinSides,
+    locator: &Locator,
+) -> Result<Vec<Attested>, String> {
+    let ours = ("our commit (HEAD)", heads.ours.clone());
+    let theirs = ("their commit", heads.theirs.clone());
+    let Some(moved) = &pin.moved_from else {
+        return Ok(vec![
+            attested(ours, locator.clone(), pin.ours.clone()),
+            attested(theirs, locator.clone(), pin.theirs.clone()),
+        ]);
+    };
+    let old = urzua_core::locator::parse_locator(&moved.spelling)
+        .map_err(|e| format!("its old locator '{}' does not parse: {e}", moved.spelling))?;
+    let (changer, other) = if moved.changed_by_ours {
+        (ours, theirs)
+    } else {
+        (theirs, ours)
+    };
+    let changer_pin = if moved.changed_by_ours {
+        &pin.ours
+    } else {
+        &pin.theirs
+    };
+    Ok(vec![
+        attested(changer, locator.clone(), changer_pin.clone()),
+        attested(other, old, Some(moved.other_hash.clone())),
+    ])
+}
+
+fn attested(side: (&'static str, String), locator: Locator, want: Option<String>) -> Attested {
+    Attested {
+        side: side.0,
+        commit: side.1,
+        locator,
+        want,
+    }
 }
 
 /// A regular file of one mode at both commits and in the index, and not a

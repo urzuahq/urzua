@@ -9,6 +9,9 @@ use crate::fix::Attestation;
 use crate::line_edit::LineDoc;
 
 const PIN_MARK: &str = "@sha256:URZUA-MERGED-PIN";
+/// Stands for a pinned locator in an item's comparison text: a side that
+/// replaced the locator is not a difference in the item.
+const LOCATOR_MARK: &str = "URZUA-ITEM-LOCATOR";
 const VERSION_MARK: &str = "URZUA-MERGED-VERSION";
 
 /// The three index stages of an unmerged record.
@@ -55,13 +58,30 @@ pub struct PinSides {
     pub base: Option<String>,
     pub ours: Option<String>,
     pub theirs: Option<String>,
+    /// Set when one side replaced another locator of this site with this one
+    /// while the other side only re-pinned the old locator.
+    #[serde(skip)]
+    pub moved_from: Option<MovedFrom>,
+}
+
+/// The locator a pin replaced on the side that changed it, and what the other
+/// side re-pinned that old locator to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MovedFrom {
+    pub spelling: String,
+    pub path: String,
+    pub other_hash: String,
+    /// The side that wrote the new locator is ours (stage 2), else theirs.
+    pub changed_by_ours: bool,
 }
 
 impl PinSides {
-    /// Both sides moved the pin away from the base to different hashes: only
-    /// the merged file can say what it pins now.
+    /// Both sides moved the pin away from the base to different hashes, or one
+    /// side wrote this locator in place of another that the other side
+    /// re-pinned: only the merged file can say what it pins now.
     pub fn needs_recompute(&self) -> bool {
-        matches!((&self.ours, &self.theirs), (Some(o), Some(t)) if o != t
+        self.moved_from.is_some()
+            || matches!((&self.ours, &self.theirs), (Some(o), Some(t)) if o != t
             && Some(o) != self.base.as_ref() && Some(t) != self.base.as_ref())
     }
 
@@ -102,6 +122,9 @@ pub struct Prepared {
     /// Why the Done-means items differ beyond their pin hashes while a pin in
     /// them moved; such a record is refused.
     pub item_mismatch: Option<String>,
+    /// Why a locator both sides replaced with different ones cannot be taken
+    /// from either; such a record is refused.
+    pub locator_conflict: Option<String>,
 }
 
 /// A row with runs of whitespace collapsed, so padding does not make two
@@ -151,7 +174,8 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
     if base.items != ours.items {
         base.pins.retain(|p| p.item.is_none());
     }
-    let pins = pin_table([&base.pins, &ours.pins, &theirs.pins]);
+    let mut pins = pin_table([&base.pins, &ours.pins, &theirs.pins]);
+    let locator_conflict = pair_moved_locators(&mut pins);
     let only = |a: &[LogRow], b: &[LogRow]| -> Vec<String> {
         a.iter()
             .filter(|r| !b.iter().any(|o| row_key(&o.raw) == row_key(&r.raw)))
@@ -185,6 +209,7 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
         added_rows,
         one_sided_classes,
         item_mismatch,
+        locator_conflict,
     })
 }
 
@@ -207,6 +232,7 @@ fn pin_table(stages: [&[FoundPin]; 3]) -> Vec<PinSides> {
                         base: None,
                         ours: None,
                         theirs: None,
+                        moved_from: None,
                     });
                     pins.len() - 1
                 }
@@ -220,6 +246,124 @@ fn pin_table(stages: [&[FoundPin]; 3]) -> Vec<PinSides> {
         }
     }
     pins
+}
+
+/// Names a new locator that could replace more than one dropped locator of the
+/// same file at its site, or a dropped one two new locators could replace: which
+/// pairs with which would depend on the order they are written in. Such new
+/// locators are left unpaired and the record is refused.
+fn ambiguous_pairing(pins: &[PinSides], handled: &mut Vec<usize>) -> Option<String> {
+    let one_sided = |p: &PinSides| match (&p.ours, &p.theirs, &p.base) {
+        (Some(_), None, None) => Some(true),
+        (None, Some(_), None) => Some(false),
+        _ => None,
+    };
+    let candidates = |i: usize| -> Vec<usize> {
+        let Some(by_ours) = one_sided(&pins[i]) else {
+            return Vec::new();
+        };
+        (0..pins.len())
+            .filter(|&j| {
+                let o = &pins[j];
+                j != i
+                    && o.key == pins[i].key
+                    && o.path == pins[i].path
+                    && o.base.is_some()
+                    && if by_ours { &o.ours } else { &o.theirs }.is_none()
+            })
+            .collect()
+    };
+    let mut conflict = None;
+    for i in 0..pins.len() {
+        let mine = candidates(i);
+        let shared = mine.iter().any(|&j| {
+            (0..pins.len())
+                .filter(|&k| {
+                    one_sided(&pins[k]) == one_sided(&pins[i]) && candidates(k).contains(&j)
+                })
+                .count()
+                > 1
+        });
+        if mine.len() > 1 || shared {
+            handled.push(i);
+            conflict.get_or_insert(format!(
+                "'{}' in {} could replace more than one dropped locator of the same file, or share one with another new locator, so which pin it replaces depends on the order they are written in; resolve it by hand",
+                pins[i].spelling, pins[i].site
+            ));
+        }
+    }
+    conflict
+}
+
+/// Marks each pin one side wrote in place of a locator the other side only
+/// re-pinned (`moved_from`), and names a locator both sides dropped and
+/// replaced with different ones, which neither side wins. A locator of the
+/// same file is paired first, so a pin is never matched with an unrelated
+/// file's; one left over is paired with any dropped locator of its site, which
+/// is a move to another file and is refused later.
+fn pair_moved_locators(pins: &mut [PinSides]) -> Option<String> {
+    let mut taken: Vec<usize> = Vec::new();
+    let mut handled: Vec<usize> = Vec::new();
+    let mut conflict = ambiguous_pairing(pins, &mut handled);
+    for same_path in [true, false] {
+        for i in 0..pins.len() {
+            let by_ours = match (&pins[i].ours, &pins[i].theirs, &pins[i].base) {
+                (Some(_), None, None) => true,
+                (None, Some(_), None) => false,
+                _ => continue,
+            };
+            let new = &pins[i];
+            let old = (0..pins.len()).find(|&j| {
+                let o = &pins[j];
+                j != i
+                    && !handled.contains(&i)
+                    && !taken.contains(&j)
+                    && o.key == new.key
+                    && (o.path == new.path) == same_path
+                    && o.base.is_some()
+                    && if by_ours { &o.ours } else { &o.theirs }.is_none()
+            });
+            let Some(j) = old else { continue };
+            taken.push(j);
+            handled.push(i);
+            let other = if by_ours {
+                &pins[j].theirs
+            } else {
+                &pins[j].ours
+            };
+            match other {
+                Some(h) if Some(h) != pins[j].base.as_ref() => {
+                    pins[i].moved_from = Some(MovedFrom {
+                        spelling: pins[j].spelling.clone(),
+                        path: pins[j].path.clone(),
+                        other_hash: h.clone(),
+                        changed_by_ours: by_ours,
+                    });
+                }
+                Some(_) => {}
+                None => {
+                    let rival = pins.iter().find(|r| {
+                        r.key == pins[i].key
+                            && r.base.is_none()
+                            && if by_ours { &r.theirs } else { &r.ours }.is_some()
+                            && if by_ours { &r.ours } else { &r.theirs }.is_none()
+                    });
+                    if let Some(r) = rival {
+                        let (ours, theirs) = if by_ours {
+                            (&pins[i], r)
+                        } else {
+                            (r, &pins[i])
+                        };
+                        conflict.get_or_insert(format!(
+                            "both sides dropped the locator '{}' in {} and each added a different one (ours: '{}'; theirs: '{}'); resolve it by hand",
+                            pins[j].spelling, pins[i].site, ours.spelling, theirs.spelling
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    conflict
 }
 
 /// The incoming side's rows, then each row only this branch has, placed after
@@ -345,6 +489,65 @@ fn item_clauses(
         .collect()
 }
 
+/// Masks the pins of each Done-means item's evidence clause, adding them to
+/// `pins`, and returns every item's masked identity.
+fn mask_items(
+    doc: &mut LineDoc,
+    content: &str,
+    header: usize,
+    shape: &Shape<'_>,
+    pins: &mut Vec<FoundPin>,
+) -> Vec<ItemLines> {
+    let mut items = Vec::new();
+    for (position, key, item) in item_clauses(content, header, shape) {
+        let mut marks: Vec<String> = Vec::new();
+        if let Some(clause) = &item.evidence {
+            let line = doc.line(clause.line).unwrap_or_default().to_string();
+            if let Some(at) = line.rfind(clause.text.as_str()) {
+                let (masked, found) = mask_pins(&line[at..], &line[at..], &mut Vec::new());
+                marks = found
+                    .iter()
+                    .map(|(spelling, _, _, occurrence)| pin_mark(spelling, *occurrence))
+                    .collect();
+                pins.extend(
+                    found
+                        .into_iter()
+                        .map(|(spelling, path, hash, occurrence)| FoundPin {
+                            site: site_name(&format!("Done means item {position}"), occurrence),
+                            occurrence,
+                            key: key.clone(),
+                            item: Some(position),
+                            spelling,
+                            path,
+                            hash,
+                        }),
+                );
+                doc.replace_line(clause.line, format!("{}{masked}", &line[..at]));
+            }
+        }
+        let mut lines: Vec<usize> = [
+            Some(item.line),
+            item.evidence.as_ref().map(|c| c.line),
+            item.waiver.as_ref().map(|w| w.line),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        lines.dedup();
+        items.push(ItemLines {
+            text: item.text.clone(),
+            lines: lines
+                .iter()
+                .map(|n| {
+                    let line = doc.line(*n).unwrap_or_default().to_string();
+                    marks.iter().fold(line, |l, m| l.replace(m, LOCATOR_MARK))
+                })
+                .collect(),
+        });
+    }
+    items
+}
+
 fn normalise(content: &str, shape: &Shape<'_>) -> Result<Normalised, String> {
     let mut doc = LineDoc::parse(content);
     let header = header_lines(&doc);
@@ -384,45 +587,7 @@ fn normalise(content: &str, shape: &Shape<'_>) -> Result<Normalised, String> {
             doc.replace_line(n, format!("{}{VERSION_MARK}", &line[..kept]));
         }
     }
-    let mut items = Vec::new();
-    for (position, key, item) in item_clauses(content, header, shape) {
-        if let Some(clause) = &item.evidence {
-            let line = doc.line(clause.line).unwrap_or_default().to_string();
-            if let Some(at) = line.rfind(clause.text.as_str()) {
-                let (masked, found) = mask_pins(&line[at..], &line[at..], &mut Vec::new());
-                pins.extend(
-                    found
-                        .into_iter()
-                        .map(|(spelling, path, hash, occurrence)| FoundPin {
-                            site: site_name(&format!("Done means item {position}"), occurrence),
-                            occurrence,
-                            key: key.clone(),
-                            item: Some(position),
-                            spelling,
-                            path,
-                            hash,
-                        }),
-                );
-                doc.replace_line(clause.line, format!("{}{masked}", &line[..at]));
-            }
-        }
-        let mut lines: Vec<usize> = [
-            Some(item.line),
-            item.evidence.as_ref().map(|c| c.line),
-            item.waiver.as_ref().map(|w| w.line),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        lines.dedup();
-        items.push(ItemLines {
-            text: item.text.clone(),
-            lines: lines
-                .iter()
-                .map(|n| doc.line(*n).unwrap_or_default().to_string())
-                .collect(),
-        });
-    }
+    let items = mask_items(&mut doc, content, header, shape, &mut pins);
     let log = crate::rules::find_revision_log_entries(content, shape.log_id, shape.log_shape)
         .ok_or("the record has no revision log")?
         .map_err(|p| p.message)?;
@@ -534,6 +699,12 @@ pub struct PinOutcome {
     pub theirs: Option<String>,
     pub merged: String,
     pub recomputed: bool,
+    /// The locator this one replaced on the side that changed it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moved_from: Option<String>,
+    /// What the other side re-pinned that old locator to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moved_from_pin: Option<String>,
 }
 
 /// The resolved record and what it holds.
@@ -676,6 +847,8 @@ fn restore_pins(
             theirs: p.theirs.clone(),
             merged: merged_hash,
             recomputed: p.needs_recompute(),
+            moved_from: p.moved_from.as_ref().map(|m| m.spelling.clone()),
+            moved_from_pin: p.moved_from.as_ref().map(|m| m.other_hash.clone()),
         });
     }
     let text = doc.to_string();
@@ -851,8 +1024,17 @@ fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation, note: Optio
     let list = moved
         .iter()
         .map(|p| {
-            let mut sides = [short(&p.ours), short(&p.theirs)];
-            sides.sort();
+            let mut sides = match &p.moved_from_pin {
+                Some(old) => [
+                    short(&p.ours.clone().or(p.theirs.clone())),
+                    short(&Some(old.clone())),
+                ],
+                None => [short(&p.ours), short(&p.theirs)],
+            };
+            // A moved pin lists the changed locator's hash first, then the old one's.
+            if p.moved_from_pin.is_none() {
+                sides.sort();
+            }
             format!(
                 "`{}` ({}) {} and {} -> {}",
                 p.locator,
@@ -864,9 +1046,34 @@ fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation, note: Optio
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let note = note.map(|n| format!(" {n}")).unwrap_or_default();
+    let lead = if moved.iter().any(|p| p.moved_from.is_some()) {
+        "the merged sides narrowed or re-pinned"
+    } else {
+        "both merged sides re-pinned"
+    };
+    let commits = if lead.starts_with("both") {
+        "re-pinned commits"
+    } else {
+        "commits"
+    };
+    let moved = moved
+        .iter()
+        .filter_map(|p| {
+            let old = p.moved_from.as_ref()?;
+            Some(format!(
+                "`{}` ({}) replaced `{old}` on one side while the other side re-pinned `{old}` (its hash is the second one listed for `{}`).",
+                p.locator, p.site, p.locator
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let note = [moved.as_str(), note.unwrap_or_default()]
+        .iter()
+        .filter(|n| !n.is_empty())
+        .map(|n| format!(" {n}"))
+        .collect::<String>();
     format!(
-        "{MERGE_ROW_PREFIX}{}): both merged sides re-pinned, {list}; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state.{note} **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin.",
+        "{MERGE_ROW_PREFIX}{}): {lead}, {list}; the new hash is the merged file's, which is git's automatic merge of the two {commits}. No person wrote a reason for the merged state.{note} **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin.",
         attestation.label()
     )
 }
@@ -902,6 +1109,7 @@ mod tests {
             base: Some(base.into()),
             ours: Some(ours.into()),
             theirs: Some(theirs.into()),
+            moved_from: None,
         }
     }
 
