@@ -221,3 +221,28 @@ fn a_renamed_decided_record_is_compared_with_its_copy_under_the_old_name() {
     let v = run(&dir, &["--base", "base"]);
     assert!(found(&v).is_empty(), "{v}");
 }
+
+#[test]
+fn a_renamed_decided_record_is_reported_with_the_pin_rule_off() {
+    let dir = fixture("rename-pins-off", true, "Accepted");
+    let off = config(true).replacen(
+        "rules:\n",
+        "rules:\n  diff.pin-changed-unattested: off\n",
+        1,
+    );
+    // The base's level holds for the diff, so the rule is off at the base too.
+    std::fs::write(dir.join(".urzua/config.yaml"), off).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "pins off"]);
+    git(&dir, &["tag", "-f", "base"]);
+    git(&dir, &["mv", REC, "docs/adr/ADR-1-y.md"]);
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-y.md"),
+        adr("Accepted", "We use a list.", &[ROW1]),
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    let v = run(&dir, &["--base", "base"]);
+    assert_eq!(found(&v).len(), 1, "{v}");
+    assert_eq!(execution(&v)["population"]["examined"], 1, "{v}");
+}
