@@ -18,7 +18,7 @@ How to read a scene:
   types in the scene. The config snippets give only the keys the scene needs; a complete working config is in
   [the config file](config.md) and [adopt an existing corpus](adopt.md).
 
-Two scenes depend on work that is not on `main` yet and say so (scene 4). Everything else is on `main`.
+One scene depends on work that is not on `main` yet and says so (scene 4). Everything else is on `main`.
 
 ## Why decision records need a linter now
 
@@ -77,20 +77,31 @@ record_types:
     known_fields: [Embodiment, Realized-by]
     relation_fields: {embodiment_state: Embodiment, embodiment_locator: Realized-by}
     companion_fields: [[embodiment_state, embodiment_locator]]
+    revision_log:
+      marker: "**Revision log**"
+      classes: [substantive, structural, evidence]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
+      evidence_class: evidence
 rules:
   embodiment.consistency: error
   embodiment.pin-stale: warn
 ```
 
 `ADR-1` is `Accepted` ("retries stop after 30 seconds") with `Embodiment: Implemented` and
-`Realized-by: "code:src/retry.rs#retry_ceiling_seconds"`, and `retry_ceiling_seconds` returns `30`.
+`Realized-by: "code:src/lib.rs#retry_ceiling_seconds"`, and `retry_ceiling_seconds` returns `30`.
+
+The pin and re-pin commands write a row into the record's revision log, so the record needs a `**Revision log**`
+table. The reason you pass to `fix --pin` or `--rebaseline` must be at least three words and 12 characters.
 
 **Show it.**
 
 1. Without urzua: prompt the agent, "Change the retry ceiling to 5 seconds for the new client." It edits
-   `src/retry.rs`. The ADR still says 30 and nothing complains.
-2. Pin the claim to the code it names. `urzua explain` prints which records govern a file (the block below names `src/lib.rs`; in the demo it is `src/retry.rs`); give it
-   `'src/retry.rs#retry_ceiling_seconds'` (path, `#`, symbol) and it also prints the scoped pin to write. The
+   `src/lib.rs`. The ADR still says 30 and nothing complains. Run `git checkout src/lib.rs` before the next step, so
+   the pin is taken over the code the decision describes.
+2. Pin the claim to the code it names. `urzua explain` prints which records govern a file; give it
+   `'src/lib.rs#retry_ceiling_seconds'` (path, `#`, symbol) and it also prints the scoped pin to write. The
    command below writes the pin and a revision-log row:
    ```sh
    urzua explain src/lib.rs
@@ -108,12 +119,13 @@ rules:
    after reading the diff.
 
 **What you'll see.** Step 2's `explain` prints `governing_records` and, for the symbol form, a `scope.pin`
-(`src/retry.rs#retry_ceiling_seconds@sha256:...`). Step 3 reports two findings: `embodiment.consistency`
+(`src/lib.rs#retry_ceiling_seconds@sha256:...`). Step 3 reports two findings: `embodiment.consistency`
 ("stated Embodiment 'Implemented' disagrees with 'Drift detected', computed from Realized-by") and
 `embodiment.pin-stale` ("1 pinned evidence changed since it was pinned ... pinned a416a972afcb, now
-ffc8c6bbb226"), each with a `suggested_action` naming the re-pin command. Step 4 lists `rebaselines` with each
-pin's `recorded_hash` and `current_hash` and the changed `span`. Step 5 appends an `evidence` row to the
-record's revision log, "Re-baselined (attested by ..., actor: agent) ... Reason: ...". A pin changed or moved by
+ffc8c6bbb226"), each with a `suggested_action` that names the listing command (`urzua fix --rebaseline --ids <record>`); the
+re-pin command itself is in the `message`. Step 4 lists `rebaselines` with each
+pin's `recorded_hash` and `current_hash` and the changed `span`. Step 5 appends a row to the
+record's revision log (class `evidence` where the type declares `revision_log.evidence_class: evidence`, otherwise `structural`), "Re-baselined (attested by ..., actor: agent) ... Reason: ...". A pin changed or moved by
 hand, with no such row, fails `check --base` as `diff.pin-changed-unattested`.
 
 **Configure it.** `embodiment` (states and which category lifts a record to which), `locator_resolvers`
@@ -125,9 +137,9 @@ renews it, and refuses to renew over changed evidence ([waivers and drift](waive
 
 ### 2. An agent moves a status that only a person may move
 
-A record flips from `Proposed` to `Accepted` in a follow-up commit with no reviewer and no recorded decider,
-and every consistency check still passes. A gate that relies on the record's own status being honest is only a
-note.
+Someone, or something, changes `Status: Proposed` to `Accepted` in a later commit. No reviewer signed off and
+no decider is recorded, yet every consistency check still passes. If the only gate is the record's own status
+field, it works only for people who already mean to follow it.
 
 **Setup.** Install the harness and declare who may decide ([the agent harness](agent-harness.md)). The
 `authority` table below is what makes acceptance a person's act; `protected-paths` guards the config itself
@@ -168,7 +180,7 @@ agent what it must not do, and `.urzua/harness.lock`. Commit all of it.
 **Show it.**
 
 1. Without urzua: with a `Proposed` ADR open, prompt "Implement ADR-2 and mark it accepted." The agent writes
-   the code and edits `Status: Accepted` itself.
+   the code and edits `Status: Accepted` itself. `git checkout` that edit before the next step.
 2. With the harness: repeat the prompt. The agent's edit of `Status` is refused before it is written.
 3. Show the code side. A source comment `// Implements: ADR-2` while ADR-2 is `Proposed` is an error under
    `embodiment.back-pointer-decision-accepted`, and an `Embodiment` that claims "built" on a `Proposed` record is
@@ -199,7 +211,8 @@ harness:
     acceptance: {enabled: true, in_session: ask}   # refuse (default) | ask
 ```
 
-Claude Code must be in its Manual (`default`) permission mode.
+Claude Code must be in its Manual (`default`) permission mode, and your own `gh` login must be listed in the
+decider group (`logins: [...]`): otherwise the person is not asked and the edit is simply refused.
 
 **Show it.**
 
@@ -255,6 +268,9 @@ approval file, or a person who approves without reading all get past it.
 
 Say this part plainly: the harness guards the normal case; it is not a sandbox and not a trust anchor.
 
+This scene uses the harness config of scene 2 and the declared fields and `Deciders` requirement of scenes 8 and
+14 (`known_fields`, `statuses.require`), so run it in the one scratch repository that has all three.
+
 **Show it.**
 
 1. Protected paths. Prompt: "Set `fail_on` to `warning` in `.urzua/config.yaml`." The edit tool is refused.
@@ -274,7 +290,7 @@ Say this part plainly: the harness guards the normal case; it is not a sandbox a
   per finding: `field.quality` (Deciders is Placeholder), `header.field-set-consistency` (`Approved-on` is not
   declared), `status.required-field-missing`. Fix the record; do not override.
 - Step 3: after the command runs, a message to the person: `urzua harness (post-command): the command changed
-  2 path(s) the authority table reserves for a decider ... It had already run, so nothing was prevented; CI's
+  1 path(s) the authority table reserves for a decider ... It had already run, so nothing was prevented; CI's
   diff.decider-required checks who made it.`, with an `[acceptance] error` line per gated change, plus a
   finding line for anything else it broke (here an index row, scene 13). The agent gets a shorter line.
 
@@ -513,6 +529,9 @@ superseded. It is the table people and agents read.
 **Setup.**
 
 ```yaml
+record_types:
+  adr:
+    exclude_files: [README.md]   # the index is not itself an ADR
 rules:
   index.freshness:
     level: error
@@ -590,13 +609,17 @@ record_types:
     known_fields: [Realized-by, Embodiment, Parent]
     statuses:
       values: [Planned, InProgress, Done]
+      success: [Done]
       delivery: {delivered_tiers: [Implemented, Verified], unevidenced_tiers: [Not started], not_done: [Planned, InProgress], set_status: Done}
 rules:
   status.delivery-agreement: error
   embodiment.consistency: error
 ```
 
-**Show it.** `MILE-1` is `Status: Planned`, `Embodiment: Not started`, with `Realized-by: "code:src/retry.rs,
+A milestone needs a `**Revision log**` table (declare `revision_log` as in scene 6), or `fix --apply` returns
+`partial-failure` rather than write a field it cannot record.
+
+**Show it.** `MILE-1` is `Status: Planned`, `Embodiment: Not started`, with `Realized-by: "code:src/lib.rs,
 test:tests/retry_test.rs"`, and both files exist.
 
 1. Without urzua: prompt "What's done?" The agent reads `Status` and says MILE-1 has not started.
@@ -625,12 +648,15 @@ record_types:
     prefix: WAIVER
     role: suppression
     required_fields: [Rule, Scope, Reason, Stable-Id]
-    known_fields: [Expires]
+    known_fields: [Expires, Variant, Key-path]
     effective_requires: [Reason, Expires]
 rules:
   waiver.matches-nothing: warn
 fail_on: warning
 ```
+
+Without `Variant` and `Key-path` in `known_fields`, `waive --from-report` prints a `waive.narrowing` warning on
+stderr; warn the audience or list them as above.
 
 **Show it.**
 
@@ -749,12 +775,12 @@ rules:
 1. `urzua rules` lists every rule this build ships (`id`, `description`, `scope`, `judges`, `population_unit`,
    `spec`, `actions`); it reads no config.
 2. `urzua explain --rule status.children-agreement` prints the rule, your `level`, its `options` and the declared
-   `types`.
+   `types`, all under the `.rule` key (`jq .rule`).
 3. Run `urzua check` and read that rule's `population` in `rules_executed`.
 
 **What you'll see.** `types` (ADR-104) narrows a rule to the record types it judges. A record of a type not listed
 is not judged by that rule, its candidates are counted in the population as `out_of_scope` and `out_of_types`
-(here `eligible: 8, examined: 1, out_of_scope: 5, out_of_types: 5`), and the rule still reads every record as
+(for example `eligible: 8, examined: 1, out_of_scope: 5, out_of_types: 5`; the numbers depend on your corpus), and the rule still reads every record as
 context. A type name that is not declared, or an empty list, is a load error, and so is `types` on a rule that does
 not judge loaded records. `scope: changed` is accepted by only four rules, listed in [config: rules](config.md#rules);
 on any other it is a load error. A rule not named under `rules` does not run, and `check` lists it as
@@ -792,6 +818,10 @@ record_types:
     pointer_fields:
       - {name: Parent, targets: [milestone], part_of: true}
       - Depends-on
+    statuses:
+      values: [Planned, InProgress, Done]
+      success: [Done]
+      progress: [InProgress, Done]   # without a progress set the rule cannot say a parent has not started
 relation_pairs:
   - {name: sequencing, forward: Depends-on, inverse: Blocks, reciprocity: none, cross_type: true, acyclic: true}
 roadmap:
@@ -804,7 +834,7 @@ rules:
 **Show it.** `urzua roadmap`, then show an epic: a milestone with `Parent: MILE-3` on its children, with the parent
 `Planned` while a child is finished.
 
-**What you'll see.** `roadmap` has `waves`, `ready`, `critical_path`, `records`, `groups`, `needs_replan`, `cycles` and
+**What you'll see.** `roadmap` (under the `.roadmap` key) has `waves`, `ready`, `critical_path`, `records`, `groups`, `needs_replan`, `cycles` and
 `notes`; a repository declaring no `roadmap.pairs` gets a `no-sequencing-pair` note rather than an empty roadmap.
 `status.children-agreement` reports the epic: "MILE-3 is Status 'Planned', not started, while a child has begun: 1
 finished, 1 not-started". On the board the epic is a parent row with an "N of M done" count and *disagrees* where
@@ -818,13 +848,13 @@ its status and its children's do not agree. The same fact is `state_disagrees_wi
 1. `urzua explain --types` is one compact entry per declared record type; `urzua explain --type adr` is every
    declaration with its line in the config.
 2. `urzua explain --rule header.required-fields` says what a rule judges and its current level.
-3. `urzua explain src/retry.rs` lists the records whose `Realized-by` names it (`governing_records`, each with
+3. `urzua explain src/lib.rs` lists the records whose `Realized-by` names it (`governing_records`, each with
    `record`, `record_type`, `via`).
 4. `urzua graph`, `urzua rules`.
 5. `urzua export --format json --no-text`.
 
 **What you'll see.** `--types` entries carry `name`, `at`, `prefix`, `dirs`, `required`, `optional`, `states` and
-`references`; `--type` adds `header_fields`, `gates`, `conditions` and the template path. `explain --rule` returns
+`references`; `--type` adds `header_fields`, `gates`, `conditions` and the template path. `explain --rule` returns (under `.rule`)
 `id`, `description`, `scope`, `judges`, `population_unit`, `spec`, `level`, `waivable`, `options`, `types` and
 `actions`. `export` returns `record_count`, `types`, `type_roles`, `read` and `records`, each with `id`, `type`,
 `path`, `header`, `title`, `status`, `state`, `waiting_on`, `ready`, `parent`, `children`, `refers_to`,
@@ -833,7 +863,8 @@ its status and its children's do not agree. The same fact is `state_disagrees_wi
 
 ### 26. The CI gate
 
-**Setup.** The composite action, pinned to a commit sha, with full history (drift reads it):
+**Setup.** The composite action, pinned to a commit sha, with full history (drift reads it). The workflow needs
+`permissions: {contents: read, pull-requests: write}`, or the comment is skipped with a warning:
 
 ```yaml
 - uses: actions/checkout@<sha>
@@ -853,8 +884,9 @@ happen and both are reported before the verdict; waived findings are counted, no
 fails the job and is shown as NOT RUN with its reason: a gate that did not run is never a pass. With `actors: true`
 the action writes the pull request's author and approvers to a file for `diff.decider-required`.
 
-**Say the limit.** `diff.decider-required` proves that the pull request's author is in the gate's decider group
-(authorship), not who actually decided; agents under the maintainer's token look like the maintainer. A distinct
+**Say the limit.** `diff.decider-required` checks the pull request's author or a current approver, whichever the
+authority table's declared `evidence` names (the author by default), against the gate's decider group. That is
+authorship or approval, not who actually decided; agents under the maintainer's token look like the maintainer. A distinct
 agent identity with `CODEOWNERS` and branch protection is not configured here. Detail: [CI](ci.md).
 
 ### 27. MCP: reading the records without a shell
@@ -869,7 +901,7 @@ or `claude mcp add urzua -- urzua mcp`.
 
 **Show it.** Prompt: "Which ADRs were already rejected or superseded? Read why, so we stop proposing them again."
 The agent calls `urzua_list_records` with `{"type": "adr", "status": ["Rejected", "Superseded"]}`, then
-`urzua_show_record` with one of the ids. Then: "Which decisions govern `src/retry.rs`?", which calls
+`urzua_show_record` with one of the ids. Then: "Which decisions govern `src/lib.rs`?", which calls
 `urzua_get_findings_for_path`.
 
 **What you'll see.** Five tools, all advertised read-only: `urzua_check`, `urzua_list_records`,
