@@ -16,7 +16,7 @@ The attestation checks proved each side's file hashed to its pin, and that the m
 
 ## References
 
-Fixed in `rust/crates/urzua-cli/src/commands/merge_pins.rs` (`side_span`, `check_merged_span`): for every side whose attestation is scoped, that side's file must equal the merge base outside the scope's span, and the scope resolved in the merged file must have the side's lines before it and, when every attestation is scoped, after it; otherwise the record is refused naming the side. A new locator that could pair with more than one dropped one is refused too (`ambiguous_pairing` in `conflicts.rs`). `SPEC-8` ("A scoped pin is confined") and the `ADR-67` amendment of 2026-11-20 state it, and the case `two-range-re-pins-the-merge-shifts-onto-an-unattested-edit-are-refused` in `corpus-ak` reproduces it over a real merge.
+Fixed in `rust/crates/urzua-cli/src/commands/merge_pins.rs` (`side_span`, `check_merged_span`): for every side whose attestation is scoped, that side's file must equal the merge base outside the scope's span, and, when every attestation is scoped, the scope resolved in the merged file must have the side's lines after it (and, for a range narrowed from a whole file, before it); otherwise the record is refused naming the side. A new locator that could pair with more than one dropped one is refused too (`ambiguous_pairing` in `conflicts.rs`). `SPEC-8` ("A scoped pin is confined") and the `ADR-67` amendment of 2026-11-20 state it, and the case `two-range-re-pins-the-merge-shifts-onto-an-unattested-edit-are-refused` in `corpus-ak` reproduces it over a real merge.
 
 > **Revision log**
 >

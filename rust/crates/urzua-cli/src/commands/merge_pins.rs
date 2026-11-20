@@ -261,7 +261,9 @@ fn check_merged_span(
         a.locator.scope,
         Some(urzua_core::locator::Scope::Range { .. })
     );
-    if (both || is_range) && m[..m_before] != s[..before] {
+    // With both sides scoped each is confined, so the lines above are the base's on both and the
+    // merged file keeps them: only a range narrowed from a whole file needs this.
+    if is_range && m[..m_before] != s[..before] {
         return Err(format!(
             "the lines above '{}' in {file} are not the lines {}'s file has above it: the other side edited or moved lines above it, and a range names lines by number, so the merged pin would cover other lines",
             a.locator.display(),

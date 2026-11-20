@@ -2107,14 +2107,14 @@ fn narrow_to_g_args() -> Vec<&'static str> {
     ]
 }
 
-fn symbol_narrowing(name: &str, other_side_edit_line: usize) -> common::TempDir {
+fn symbol_narrowing(name: &str) -> common::TempDir {
     let dir = mfixture_with(
         name,
         &symbol_config(),
         &[(MREC.to_string(), ONE_FILE_ITEM.to_string())],
         &|d| run_ok(d, &narrow_to_g_args()),
         &move |d| {
-            edit(d, "src/a.rs", other_side_edit_line, "9;");
+            edit(d, "src/a.rs", 0, "9;");
             rebaseline(d);
         },
     );
@@ -2125,7 +2125,7 @@ fn symbol_narrowing(name: &str, other_side_edit_line: usize) -> common::TempDir 
 #[test]
 fn a_whole_file_narrowed_to_a_symbol_resolves_when_the_other_side_edited_above_it_observed_failing()
 {
-    let dir = symbol_narrowing("symbol-above", 0);
+    let dir = symbol_narrowing("symbol-above");
     mapply(&dir);
     let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
     let merged = std::fs::read_to_string(dir.join("src/a.rs")).unwrap();
