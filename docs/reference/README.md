@@ -8,6 +8,7 @@ Read them in this order the first time:
 
 | Page | What it covers |
 |---|---|
+| [Use cases: a demo script](use-cases.md) | Numbered scenes, problem first, that show what urzua does and how it is secured and configured |
 | [Install](install.md) | Getting a binary, and which release matches these pages |
 | [Adopt an existing corpus](adopt.md) | `init`, the first `check`, and the first week of using urzua |
 | [The record model](record-model.md) | Record types, headers, statuses, relations and evidence |

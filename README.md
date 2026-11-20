@@ -17,7 +17,7 @@ That same contract is what lets other tooling compose on top of it: a harness th
 
 It's a record engine, not a record format: you declare what a record type looks like (its fields, its header shape, its required relationships), and Urzua validates, tracks, and repairs against that declaration. It doesn't assume you're writing ADRs, and it isn't limited to decisions. This repo proves it on itself: `milestone` and `bug` were added after the fact, as ordinary config, with zero changes to the engine. The same tool that validates this project's decisions also tracks its own backlog and defects.
 
-**Using urzua:** the user documentation starts at [`docs/reference/`](docs/reference/README.md): [install](docs/reference/install.md), [adopt an existing corpus](docs/reference/adopt.md), the [config file](docs/reference/config.md), the [command reference](docs/reference/commands.md) and [CI](docs/reference/ci.md).
+**Using urzua:** the user documentation starts at [`docs/reference/`](docs/reference/README.md): [use cases, as a demo script](docs/reference/use-cases.md), [install](docs/reference/install.md), [adopt an existing corpus](docs/reference/adopt.md), the [config file](docs/reference/config.md), the [command reference](docs/reference/commands.md) and [CI](docs/reference/ci.md).
 
 ## Who uses urzua
 
