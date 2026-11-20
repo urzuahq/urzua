@@ -189,7 +189,7 @@ fn load_base_text(
         // rename: the pin rule then judges it against the copy under its old
         // name, so renaming a record is not a way past it.
         let base_path = if changes.added.contains(&record.path) {
-            let renamed = pins.then(|| {
+            let renamed = (pins || wanted_by_decided).then(|| {
                 let renames = renames.get_or_insert_with(|| {
                     urzua_io::renamed_paths_since(&session.repo_root, &changes.merge_base)
                         .unwrap_or_default()

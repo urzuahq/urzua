@@ -182,6 +182,7 @@ struct Doc {
     /// The line the first section starts at, or the line after the body.
     preamble_line: usize,
     sections: Vec<Part>,
+    last_line: usize,
 }
 
 struct Part {
@@ -209,6 +210,7 @@ impl Doc {
             .map(|l| format!("{l}\n"))
             .collect();
         Doc {
+            last_line: text.lines().count().max(1),
             preamble: words(&preamble, header_end + 1, &skip),
             preamble_line: sections.first().map_or(header_end + 1, |s| s.line),
             sections: sections
@@ -279,15 +281,6 @@ fn first_change(
     }
     let mut next = 0;
     for old in &base.sections {
-        if exempt(ctx, &old.heading) {
-            if let Some(at) = now.sections[next..]
-                .iter()
-                .position(|s| key(&s.heading) == key(&old.heading))
-            {
-                next += at + 1;
-            }
-            continue;
-        }
         let Some(at) = now.sections[next..]
             .iter()
             .position(|s| key(&s.heading) == key(&old.heading))
@@ -310,7 +303,7 @@ fn first_change(
     for added in &now.sections[next..] {
         found.extend(unlisted(ctx, added));
     }
-    found.extend(log_change(then_log, now_log));
+    found.extend(log_change(then_log, now_log, now.last_line));
     found.into_iter().min_by_key(|c| c.line)
 }
 
@@ -318,17 +311,9 @@ fn key(heading: &str) -> String {
     heading.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn exempt(ctx: &Judging<'_>, heading: &str) -> bool {
-    ctx.opts
-        .exempt_sections
-        .iter()
-        .any(|e| key(e).eq_ignore_ascii_case(&key(heading)))
-}
-
-/// An added section that is neither exempt nor one the repository lets be
-/// added.
+/// An added section that is not one the repository lets be added.
 fn unlisted(ctx: &Judging<'_>, added: &Part) -> Option<Change> {
-    (!exempt(ctx, &added.heading) && !ctx.patterns.iter().any(|p| p.is_match(&added.heading)))
+    (!ctx.patterns.iter().any(|p| p.is_match(&added.heading)))
         .then(|| Change {
             line: added.line,
             what: format!(
@@ -372,7 +357,7 @@ fn words_differ(old: &[Word], new: &[Word], section_line: usize, label: &str) ->
 
 /// An existing revision-log row that changed or went, or a row added before
 /// the end of the log.
-fn log_change(then: &LogRows, now: &LogRows) -> Option<Change> {
+fn log_change(then: &LogRows, now: &LogRows, last_line: usize) -> Option<Change> {
     then.rows
         .iter()
         .enumerate()
@@ -386,7 +371,7 @@ fn log_change(then: &LogRows, now: &LogRows) -> Option<Change> {
                 ),
             }),
             None => Some(Change {
-                line: now.rows.last().map_or(1, |(line, _)| *line),
+                line: now.rows.last().map_or(last_line, |(line, _)| *line),
                 what: format!("revision-log row {} was removed", i + 1),
             }),
         })
@@ -516,18 +501,50 @@ mod tests {
     }
 
     #[test]
-    fn an_exempt_section_may_change_and_no_diff_is_not_applicable() {
-        let mut config = config();
-        config
-            .rules
-            .get_mut(RULE_SECTION_DECIDED_BODY_CHANGED)
-            .unwrap()
-            .exempt_sections = Some(vec!["References".into()]);
-        let now = BASE.replace("None.", "Some.");
-        assert!(judged(&config, &now, BASE).1.is_empty());
+    fn no_diff_is_not_applicable() {
+        let config = config();
         let r = record("docs/adr/0001-x.md", "adr", BASE);
         let (exec, _) =
             section_decided_body_changed(&[r], &config, &HashMap::new(), None, &HashMap::new());
         assert_eq!(exec.status, RuleStatus::NotApplicable);
+    }
+
+    #[test]
+    fn a_removed_or_renamed_section_is_reported() {
+        let cut = BASE.find("## Decision").unwrap();
+        let end = BASE.find("## References").unwrap();
+        let removed = format!("{}{}", &BASE[..cut], &BASE[end..]);
+        assert_eq!(hits(&removed, BASE).len(), 1, "removed");
+        let renamed = BASE.replace("## References", "## Sources");
+        assert!(!hits(&renamed, BASE).is_empty(), "renamed");
+    }
+
+    #[test]
+    fn a_changed_preamble_is_reported() {
+        let now = BASE.replace("# 1 - X\n", "# 1 - X\n\nA new lead paragraph.\n");
+        let found = hits(&now, BASE);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].message.contains("before the first section"));
+    }
+
+    #[test]
+    fn a_bullet_marker_and_a_blockquote_mark_are_formatting_and_a_word_is_not() {
+        let base = BASE.replace("We use a table.", "- one\n- two\n\n> quoted words");
+        let marks = base
+            .replace("- one\n- two", "* one\n+ two")
+            .replace("> quoted", "quoted");
+        assert!(hits(&marks, &base).is_empty(), "{:?}", hits(&marks, &base));
+        let word = base.replace("- two", "* three");
+        assert_eq!(hits(&word, &base).len(), 1);
+    }
+
+    #[test]
+    fn a_removed_whole_revision_log_points_at_the_end_of_the_file() {
+        let cut = BASE.find("> **Revision log**").unwrap();
+        let now = &BASE[..cut];
+        let found = hits(now, BASE);
+        assert!(!found.is_empty());
+        let line = found.iter().map(|f| f.line.unwrap()).max().unwrap();
+        assert!(line > 1, "{found:?}");
     }
 }

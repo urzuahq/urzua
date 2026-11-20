@@ -196,3 +196,28 @@ fn a_record_not_decided_at_the_base_is_edited_freely_and_a_whole_run_says_it_did
     let v = run(&dir, &[]);
     assert_eq!(execution(&v)["status"], "not-applicable", "{v}");
 }
+
+#[test]
+fn a_renamed_decided_record_is_compared_with_its_copy_under_the_old_name() {
+    let dir = fixture("rename", true, "Accepted");
+    git(&dir, &["mv", REC, "docs/adr/ADR-1-y.md"]);
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-y.md"),
+        adr("Accepted", "We use a list.", &[ROW1]),
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    let v = run(&dir, &["--base", "base"]);
+    assert_eq!(found(&v).len(), 1, "{v}");
+    assert_eq!(execution(&v)["population"]["examined"], 1, "{v}");
+
+    // A rename that only moves the file reports nothing.
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-y.md"),
+        adr("Accepted", DECISION, &[ROW1]),
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    let v = run(&dir, &["--base", "base"]);
+    assert!(found(&v).is_empty(), "{v}");
+}

@@ -944,10 +944,6 @@ pub struct RuleSetting {
     /// (`MILE-350`). Only meaningful to `section.decided-body-changed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appendable_sections: Option<Vec<String>>,
-    /// Heading texts of sections `section.decided-body-changed` neither
-    /// compares nor reports when added or removed (`MILE-350`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exempt_sections: Option<Vec<String>>,
     /// Path prefixes, each inside a `back_pointer_paths` entry, whose files are
     /// the test class: a `Verifies:` comment there is test-tier evidence for
     /// the record it cites (`MILE-146`). Only meaningful to
@@ -2894,12 +2890,6 @@ const RULE_OPTIONS: &[RuleOption] = &[
         name: "appendable_sections",
         consequence_if_missing: "lets no section be added to a decided record, so an amendment section is reported",
         optional: false,
-        fallback_for_undeclared_statuses: false,
-    },
-    RuleOption {
-        name: "exempt_sections",
-        consequence_if_missing: "compares every section of a decided record",
-        optional: true,
         fallback_for_undeclared_statuses: false,
     },
     RuleOption {
@@ -6094,12 +6084,12 @@ rules:
                 .contains("Final"),
         );
         let elsewhere = parse(&format!(
-            "{base}  field.quality:\n    level: warn\n    exempt_sections: [X]\n"
+            "{base}  field.quality:\n    level: warn\n    appendable_sections: [X]\n"
         ))
         .unwrap_err()
         .to_string();
         assert!(
-            elsewhere.contains("does not take the option 'exempt_sections'"),
+            elsewhere.contains("does not take the option 'appendable_sections'"),
             "{elsewhere}"
         );
     }

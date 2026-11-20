@@ -256,13 +256,11 @@ impl RuleOpts for SourceRequiresRecordOpts {
 }
 
 /// `section.decided-body-changed`: the types and statuses that count as decided,
-/// the sections that may be added whole after a decision, and the sections it
-/// leaves alone.
+/// and the sections that may be added whole after a decision.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DecidedBodyOpts {
     pub decision_types: std::collections::BTreeMap<String, Vec<String>>,
     pub appendable_sections: Vec<String>,
-    pub exempt_sections: Vec<String>,
 }
 
 impl RuleOpts for DecidedBodyOpts {
@@ -270,7 +268,6 @@ impl RuleOpts for DecidedBodyOpts {
         DecidedBodyOpts {
             decision_types: s.decision_types.clone().unwrap_or_default(),
             appendable_sections: s.appendable_sections.clone().unwrap_or_default(),
-            exempt_sections: s.exempt_sections.clone().unwrap_or_default(),
         }
     }
 }
