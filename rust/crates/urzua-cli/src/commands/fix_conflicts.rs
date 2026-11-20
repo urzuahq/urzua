@@ -242,6 +242,9 @@ impl Ctx<'_> {
         if let Some(why) = &prepared.item_mismatch {
             return Ok(refused(why.clone()));
         }
+        if let Some(why) = &prepared.locator_conflict {
+            return Ok(refused(why.clone()));
+        }
         let merged = match merge_file(&prepared)? {
             Ok(m) => m,
             Err(near) => return Ok(refused(format!(

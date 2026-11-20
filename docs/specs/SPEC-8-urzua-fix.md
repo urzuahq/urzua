@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.69'
+Version: '0.70'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -436,9 +436,11 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   that line belongs to one, the Done-means item. An edit only one side made elsewhere is kept as git
   merged it. A pin in an item clause is handled exactly like one in the evidence field, under the same
   conditions below; but when any item-clause pin moved, the items of the two sides must be identical
-  once hashes are masked (each item's text, its evidence clause's locators, paths, scopes and order,
-  its waiver clause, and the order of the items), or the record is refused naming the first item that
-  differs *(decided by the builder on 2026-11-16, pending maintainer review)*. A pin is matched across
+  once hashes and pinned locators are masked (each item's text, its evidence clause's other entries and
+  order, its waiver clause, and the order of the items), or the record is refused naming the first item
+  that differs *(decided by the builder on 2026-11-16, pending maintainer review; the pinned locators
+  left out of the comparison by the maintainer's decision of 2026-11-20, see "A locator one side
+  changed")*. A pin is matched across
   the stages by its site (the evidence field, or the item's text), its locator and its position among
   that locator's occurrences in the site, so the same locator in `Realized-by` and in an item, in two
   items, or twice in one clause, are separate pins, each restored at its own position. Multi-line
@@ -472,6 +474,21 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   says the pin needs an ordinary re-pin with a person's reason (`fix --rebaseline --apply ... --reason`).
   When the working-tree file differs from the index only in line endings, the refusal says git's
   line-ending conversion (`core.autocrlf` or an `eol` attribute) wrote it, not a hand edit.
+- **A locator one side changed** (maintainer decision of 2026-11-20, option "Auto-resolve": "pointer
+  change wins, hash recomputed from the merged file and recorded in a merge revision row"). Where one
+  side replaced a pinned locator of a site (the evidence field or an item's evidence clause) with
+  another (a narrower scope, another file) and the other side only re-pinned the old one, the changed
+  locator wins and the old one is dropped; this holds in the evidence field and in an item alike. The pin
+  of the winning locator is recomputed from the merged file under its scope, not taken from either
+  side, when all the conditions above hold with the sides' attestations read per locator: the file at
+  the commit that changed the locator hashes, under the new locator's scope, to the pin it wrote, and
+  the file at the other commit hashes, under the old locator, to the pin that side re-pinned it to. If
+  the pinned file is itself unmerged the record waits on it as above. When both sides replaced the same
+  locator with different ones the record is refused, naming the old locator and both new ones. The
+  merge row lists the pin with the changed side's hash and the old locator's re-pin as the two hashes
+  and names the locator it replaced; `pins` in the report carry `moved_from` and `moved_from_pin`.
+  A side that changed the locator while the other did not re-pin keeps its pin as written, as any
+  one-sided change does.
 - **A pinned file still unmerged.** When the pinned file is itself unmerged (for example a source file
   both sides edited), its merged content does not exist yet. The refusal says so, the conflict carries
   `waits_on` (the files), no re-pin is suggested, and when the run has such a record its `next_action`
@@ -843,3 +860,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-19 | Bumped to `0.68`. `reverify --ids` takes the same path forms as `fix --ids`, and an unmatched `--conflicts` entry names `urzua fix --conflicts` as `next_action`. **Why:** review of the pull request found `reverify` and `--conflicts` left out (`BUG-207`, `BUG-208`). | **substantive** |
 > | 2026-11-19 | Bumped to `0.69`. A `--conflicts --ids` entry that matches no unmerged record is `partial-failure` (exit 1, `next_action` `urzua fix --conflicts`) when git lists no unmerged file too; `nothing-conflicted` is only a run with no entry that failed. **Why:** it reported `nothing-conflicted` and exited 0, a silent no-op (`BUG-209`). | **substantive** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` ef63c51c34e0 -> c8c3ad750b4f. Reason: fix.rs skips the Embodiment and Status repairs and the unevidenced-success notice for a record whose type the rule's types: does not list **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-20 | Bumped to `0.70`. `--conflicts` resolves a locator one side changed while the other only re-pinned the old one: the changed locator wins, in the evidence field and in a Done-means item's clause, its pin is recomputed from the merged file under its scope with each side attested by its own locator, and a locator both sides replaced differently is refused naming both; the items comparison no longer counts a pinned locator's spelling. Maintainer decision of 2026-11-20, option "Auto-resolve (Recommended)": "Amend SPEC-8/ADR-67: pointer change wins, hash recomputed from the merged file and recorded in a merge revision row." **Why:** `BUG-210`: 19 of 24 conflicted records on the merge of main into a pull request were refused for a narrowed locator, which `MILE-284` meant the command to resolve. | **substantive** |

@@ -1,0 +1,70 @@
+id: a-locator-one-side-narrowed-and-the-other-re-pinned-resolves-on-merge
+corpus: corpus-aj
+bugs: [BUG-210]
+# Branch x narrows the milestone's whole-file locator (in Realized-by and in its Done means
+# item) to the file's first three lines; branch y changes those lines and re-pins the old
+# locator. The merge of x into y leaves the milestone unmerged. A locator one side changed is
+# taken, and its pin is recomputed from the merged file, not refused as a content conflict.
+mutation_exempt: "fix is a command, not a rule, so there is no rule to switch off"
+commits:
+  - branch: x
+    write:
+      docs/milestones/MILE-1-narrowed-locator.md: |
+        ---
+        Status: Done
+        Version: '2'
+        Embodiment: Implemented
+        Realized-by: 'code:src/a.rs#L1-L3@sha256:3d084169aa2311dde2789d407e602c7fe3032a828f7b97b1eca1236a4ac2678b, test:t.rs'
+        ---
+        # MILE-1: Queue
+
+        ## Done means
+
+        - The function works. — evidence: code:src/a.rs#L1-L3@sha256:3d084169aa2311dde2789d407e602c7fe3032a828f7b97b1eca1236a4ac2678b
+
+        > **Revision log**
+        >
+        > | Date | Change | Class |
+        > |---|---|---|
+        > | 2026-01-01 | Initial. | **structural** |
+        > | 2026-03-02 | Pin moved to another locator (attested by x, identity: asserted, actor: agent): `src/a.rs`@sha256:a9c6072d356b -> `src/a.rs#L1-L3`@sha256:3d084169aa23. Reason: the claim rests on the first function only **Why:** the evidence a claim rests on changed and an agent attested why. | **structural** |
+  - branch: y
+    write:
+      src/a.rs: |
+        fn f() {
+            9;
+        }
+
+        fn spacer() {}
+        fn spacer2() {}
+        fn spacer3() {}
+
+        fn g() {
+            1;
+        }
+      docs/milestones/MILE-1-narrowed-locator.md: |
+        ---
+        Status: Done
+        Version: '2'
+        Embodiment: Implemented
+        Realized-by: 'code:src/a.rs@sha256:064484f70f8e70000a487627af03f32ae7ccd077716204de367eb4f68de1b819, test:t.rs'
+        ---
+        # MILE-1: Queue
+
+        ## Done means
+
+        - The function works. — evidence: code:src/a.rs@sha256:064484f70f8e70000a487627af03f32ae7ccd077716204de367eb4f68de1b819
+
+        > **Revision log**
+        >
+        > | Date | Change | Class |
+        > |---|---|---|
+        > | 2026-01-01 | Initial. | **structural** |
+        > | 2026-03-01 | Re-baselined (attested by y, identity: asserted, actor: agent): re-pinned `src/a.rs` a9c6072d356b -> 064484f70f8e. Reason: the first function changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds. | **structural** |
+merge: x
+invocation: [fix, --conflicts, --apply, --force, --by, acceptance, --actor, agent]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: resolved}
+  - {at: /conflicts/0/outcome, equals: resolved}
+  - {at: /failed, equals: []}

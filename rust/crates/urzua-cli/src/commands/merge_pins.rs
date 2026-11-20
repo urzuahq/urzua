@@ -130,16 +130,15 @@ pub(crate) fn verified_hash(
         .into());
     }
     let at = |commit: &str| show(repo_root, &format!("{commit}:{path}"));
-    for (side, commit, want) in [
-        ("our commit (HEAD)", &heads.ours, &pin.ours),
-        ("their commit", &heads.theirs, &pin.theirs),
-    ] {
-        let bytes = at(commit).map_err(|_| format!("{path} does not exist at {side}"))?;
-        let got = hash_under_scope(config, &locator, &bytes)
-            .map_err(|e| format!("{path} at {side} cannot be hashed: {e}"))?;
-        if Some(&got) != want.as_ref() {
+    for a in attested_sides(heads, pin, &locator)? {
+        let (side, file) = (a.side, a.locator.path.clone());
+        let bytes = show(repo_root, &format!("{}:{file}", a.commit))
+            .map_err(|_| format!("{file} does not exist at {side}"))?;
+        let got = hash_under_scope(config, &a.locator, &bytes)
+            .map_err(|e| format!("{file} at {side} cannot be hashed: {e}"))?;
+        if Some(&got) != a.want.as_ref() {
             return Err(format!(
-                "{path} at {side} does not hash to that side's pin: the file changed there without a re-pin"
+                "{file} at {side} does not hash to that side's pin: the file changed there without a re-pin"
             )
             .into());
         }
@@ -174,6 +173,58 @@ pub(crate) fn verified_hash(
     }
     Ok(hash_under_scope(config, &locator, &index)
         .map_err(|e| format!("{path} cannot be hashed: {e}"))?)
+}
+
+/// One side of a merge and the pin it attests: its commit, the locator the pin
+/// is over and the hash the file must have under it.
+struct Attested {
+    side: &'static str,
+    commit: String,
+    locator: Locator,
+    want: Option<String>,
+}
+
+/// Each side's commit, the locator that side's pin is over and the hash it
+/// must have. A pin one side wrote in place of another locator is attested at
+/// that side by its own pin and at the other side by that old locator's.
+fn attested_sides(
+    heads: &Heads,
+    pin: &PinSides,
+    locator: &Locator,
+) -> Result<Vec<Attested>, String> {
+    let ours = ("our commit (HEAD)", heads.ours.clone());
+    let theirs = ("their commit", heads.theirs.clone());
+    let Some(moved) = &pin.moved_from else {
+        return Ok(vec![
+            attested(ours, locator.clone(), pin.ours.clone()),
+            attested(theirs, locator.clone(), pin.theirs.clone()),
+        ]);
+    };
+    let old = urzua_core::locator::parse_locator(&moved.spelling)
+        .map_err(|e| format!("its old locator '{}' does not parse: {e}", moved.spelling))?;
+    let (changer, other) = if moved.changed_by_ours {
+        (ours, theirs)
+    } else {
+        (theirs, ours)
+    };
+    let changer_pin = if moved.changed_by_ours {
+        &pin.ours
+    } else {
+        &pin.theirs
+    };
+    Ok(vec![
+        attested(changer, locator.clone(), changer_pin.clone()),
+        attested(other, old, Some(moved.other_hash.clone())),
+    ])
+}
+
+fn attested(side: (&'static str, String), locator: Locator, want: Option<String>) -> Attested {
+    Attested {
+        side: side.0,
+        commit: side.1,
+        locator,
+        want,
+    }
 }
 
 /// A regular file of one mode at both commits and in the index, and not a

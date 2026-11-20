@@ -1317,3 +1317,176 @@ fn an_unmatched_conflicts_entry_names_the_dry_run_that_lists_the_conflicts() {
     );
     assert_eq!(v["next_action"], "urzua fix --conflicts", "{v}");
 }
+
+/// main pins the whole of `src/a.rs`. Branch x narrows that locator to its
+/// first three lines and pins them; branch y edits `f`, inside those lines, and
+/// re-pins the whole file's old locator. y is checked out.
+fn narrowed_locator_fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-conflicts-{name}"));
+    for d in ["docs/adr", "src", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    ok(&dir, &["init", "-q", "-b", "main"]);
+    ok(&dir, &["config", "user.email", "test@example.com"]);
+    ok(&dir, &["config", "user.name", "test"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
+    std::fs::write(dir.join("docs/s.md"), "s\n").unwrap();
+    std::fs::write(dir.join("t.rs"), "t\n").unwrap();
+    std::fs::write(dir.join("src/a.rs"), A_RS).unwrap();
+    std::fs::write(dir.join(REC), record(&sha256(A_RS), "1", "Body.")).unwrap();
+    commit_all(&dir, "base");
+    ok(&dir, &["checkout", "-q", "-b", "x"]);
+    let (code, v) = urzua(
+        &dir,
+        &[
+            "fix",
+            "--pin",
+            "--apply",
+            "--ids",
+            REC,
+            "--replace",
+            "src/a.rs=src/a.rs#L1-L3",
+            "--by",
+            "tester",
+            "--actor",
+            "agent",
+            "--reason",
+            "the claim rests on the first function only",
+        ],
+    );
+    assert_eq!(code, Some(0), "{v}");
+    commit_all(&dir, "x");
+    ok(&dir, &["checkout", "-q", "main"]);
+    ok(&dir, &["checkout", "-q", "-b", "y"]);
+    std::fs::write(dir.join("src/a.rs"), A_RS.replacen("    1;", "    9;", 1)).unwrap();
+    repin_as(&dir, "2026-03-01", "3", "y", None, "structural");
+    commit_all(&dir, "y");
+    dir
+}
+
+#[test]
+fn a_locator_one_side_narrowed_and_the_other_re_pinned_resolves_to_the_narrowed_locator_observed_failing(
+) {
+    let dir = narrowed_locator_fixture("narrowed");
+    assert!(!git(&dir, &["merge", "-q", "x"]), "the merge conflicts");
+    let (code, v) = apply(&dir);
+    assert_eq!(
+        (code, v["status"].as_str()),
+        (Some(0), Some("resolved")),
+        "{v}"
+    );
+    let text = std::fs::read_to_string(dir.join(REC)).unwrap();
+    let want = format!(
+        "code:src/a.rs#L1-L3@sha256:{}",
+        sha256("fn f() {\n    9;\n}")
+    );
+    assert!(text.contains(&want), "{text}");
+    assert!(!text.contains("<<<<<<<"), "{text}");
+    assert!(!text.contains("code:src/a.rs@sha256:"), "{text}");
+    assert_clean_after_commit(&dir, &["commit", "-q", "--no-edit"]);
+}
+
+const NARROW_FIRST: &[&str] = &[
+    "fix",
+    "--pin",
+    "--apply",
+    "--ids",
+    MREC,
+    "--replace",
+    "src/a.rs=src/a.rs#L1-L3",
+    "--by",
+    "tester",
+    "--actor",
+    "agent",
+    "--reason",
+    "first function only",
+];
+
+#[test]
+fn a_done_means_item_locator_one_side_narrowed_and_the_other_re_pinned_resolves_observed_failing() {
+    let dir = mfixture(
+        "item-narrowed",
+        &[(MREC.to_string(), TWO_PINS.to_string())],
+        &|d| {
+            let (code, v) = urzua(d, NARROW_FIRST);
+            assert_eq!(code, Some(0), "{v}");
+        },
+        &|d| {
+            edit(d, "src/a.rs", 0, "9;");
+            edit(d, "src/b.rs", 1, "3;");
+            let (code, v) = urzua(
+                d,
+                &[
+                    "fix",
+                    "--rebaseline",
+                    "--apply",
+                    "--ids",
+                    MREC,
+                    "--by",
+                    "tester",
+                    "--actor",
+                    "agent",
+                    "--reason",
+                    "both functions changed",
+                ],
+            );
+            assert_eq!(code, Some(0), "{v}");
+        },
+    );
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    let v = mapply(&dir);
+    let moved = v["conflicts"][0]["pins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["moved_from"] == "src/a.rs" && p["recomputed"] == true)
+        .count();
+    assert_eq!(moved, 2, "{v}");
+    let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    let first_three: Vec<String> = std::fs::read_to_string(dir.join("src/a.rs"))
+        .unwrap()
+        .lines()
+        .take(3)
+        .map(str::to_string)
+        .collect();
+    assert!(first_three[1].contains('9'), "{first_three:?}");
+    let lines_1_3 = sha256(&first_three.join("\n"));
+    let narrowed = format!("code:src/a.rs#L1-L3@sha256:{lines_1_3}");
+    assert_eq!(text.matches(&narrowed).count(), 2, "{text}");
+    assert!(!text.contains("code:src/a.rs@sha256:"), "{text}");
+    assert!(text.contains("replaced `src/a.rs`"), "{text}");
+    let b = pin_of(&dir, "src/b.rs");
+    assert!(
+        text.contains(&format!("test:src/b.rs@sha256:{b}")),
+        "{text}"
+    );
+    assert_mclean(&dir, MREC, &["commit", "-q", "--no-edit"]);
+}
+
+#[test]
+fn a_locator_both_sides_replaced_differently_is_refused_naming_both() {
+    let dir = mfixture(
+        "item-both",
+        &[(MREC.to_string(), TWO_PINS.to_string())],
+        &|d| {
+            let (code, v) = urzua(d, NARROW_FIRST);
+            assert_eq!(code, Some(0), "{v}");
+        },
+        &|d| {
+            let mut args = NARROW_FIRST.to_vec();
+            args[6] = "src/a.rs=src/a.rs#L9-L11";
+            let (code, v) = urzua(d, &args);
+            assert_eq!(code, Some(0), "{v}");
+        },
+    );
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    let before = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    let (code, v) = apply(&dir);
+    assert_eq!(code, Some(1), "{v}");
+    let reason = v["conflicts"][0]["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("src/a.rs#L1-L3") && reason.contains("src/a.rs#L9-L11"),
+        "{v}"
+    );
+    assert_eq!(std::fs::read_to_string(dir.join(MREC)).unwrap(), before);
+}

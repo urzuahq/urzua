@@ -84,6 +84,10 @@ struct Case {
     /// Not allowed with `corpus: "@repo"`.
     #[serde(default)]
     commits: Vec<Commit>,
+    /// A branch to merge into the checked-out one after `commits`, so a case
+    /// can run over a repository left unmerged (`fix --conflicts`). The merge
+    /// must stop on a conflict, or the case is a harness error.
+    merge: Option<String>,
     /// Run in a `--depth 1` clone of the corpus repository once `commits` are
     /// made, so a case can assert how a truncated history is reported.
     #[serde(default)]
@@ -140,6 +144,9 @@ struct NoticeMatcher {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Commit {
+    /// Cut this commit on a new branch of that name from the `base` tag
+    /// instead of on top of the previous commit.
+    branch: Option<String>,
     #[serde(default)]
     write: std::collections::BTreeMap<String, String>,
     #[serde(default)]
@@ -473,6 +480,9 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
         git(&t, &["commit", "-q", "-m", "fixture"])?;
         git(&t, &["tag", "base"])?;
         for (n, c) in case.commits.iter().enumerate() {
+            if let Some(branch) = &c.branch {
+                git(&t, &["checkout", "-q", "-b", branch, "base"])?;
+            }
             for r in &c.rename {
                 if let Some(parent) = t.join(&r.to).parent() {
                     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -494,6 +504,11 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
             }
             git(&t, &["add", "-A"])?;
             git(&t, &["commit", "-q", "-m", &format!("change {}", n + 1)])?;
+        }
+        if let Some(other) = &case.merge {
+            if git(&t, &["merge", "-q", "--no-edit", other]).is_ok() {
+                return Err(format!("merge of '{other}' did not stop on a conflict"));
+            }
         }
         if case.shallow {
             let clone = PathBuf::from(format!("{}-shallow", t.display()));
