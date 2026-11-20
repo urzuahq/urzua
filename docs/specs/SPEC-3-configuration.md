@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.171'
+Version: '0.172'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:1a59ba01092442d7b93adc634f8d12eb706db407cb7838f8283f88f693580f57, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:26eec9c1f475ab595cf705f1b446d3d53f6051dff06702a63e116262036b3056, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -1673,9 +1673,7 @@ rules:
   is counted eligible and unexamined; a run with no `--base` is `not-applicable`.
 - Enabled with no `decision_types`, the rule is a load error: it would examine nothing.
 
-Choices decided by the builder on 2026-11-20, pending maintainer review: the option names, reading the status at
-the merge base, and reading "appended" as a whole section added at a section boundary (an amendment sits after
-the decision it amends, not only at the end of the file).
+Choices approved by the maintainer on 2026-11-20 on pull request #616 ("happy with builer choice"): the status is read at the merge base, a section matching `appendable_sections` may be added whole at any section boundary (an amendment sits after the decision it amends, not only at the end of the file), and the options are named `decision_types` and `appendable_sections`.
 
 ## Relation pairs
 
@@ -3096,3 +3094,4 @@ proves this configuration produces the three findings.
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` b3c446ff6ddd -> 445d214b3aa2. Reason: config.rs adds the types rule option, its load errors (unknown type, empty list, refused rule), Config::rule_judges_type and their unit tests **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-20 | Bumped to `0.171`. Documents `section.decided-body-changed` and its options `decision_types`, `appendable_sections` and `exempt_sections`: the status is read at the merge base, text is compared as words, and enabling it without `decision_types` or with an `appendable_sections` entry that does not compile is a load error. **Why:** `MILE-350`, `MILE-88`. | **substantive** |
 > | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 445d214b3aa2 -> 1a59ba010924, `rust/crates/urzua-cli/tests/own_config_integration.rs` 69a7014fd422 -> 26eec9c1f475. Reason: section.decided-body-changed was added: a RULE_ constant in catalog.rs, a RuleDef entry in table.rs, a module line in rules.rs, DecidedBodyOpts in options.rs, two RuleSetting options and a load check in config.rs, the merge base's copy read for the new rule in check.rs, one id in NOT_YET_RELEASED and a header-none test arm in the integration tests, and SPEC-3 and SPEC-2 prose and rows. Existing rules and every claim each record cites are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-20 | Bumped to `0.172`. The three choices of `section.decided-body-changed` (status read at the merge base, a section added at any section boundary, the option names `decision_types` and `appendable_sections`) are recorded as approved, replacing "decided by the builder, pending maintainer review". **Why:** the maintainer on pull request #616, 2026-11-20: "happy with builer choice". | **substantive** |
