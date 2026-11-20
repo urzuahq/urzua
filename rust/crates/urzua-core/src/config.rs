@@ -939,6 +939,15 @@ pub struct RuleSetting {
     /// `override.unreviewed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejected_values: Option<Vec<String>>,
+    /// Regular expressions matched against a `##` heading's text: a section
+    /// whose heading matches may be added whole to a decided record
+    /// (`MILE-350`). Only meaningful to `section.decided-body-changed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub appendable_sections: Option<Vec<String>>,
+    /// Heading texts of sections `section.decided-body-changed` neither
+    /// compares nor reports when added or removed (`MILE-350`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exempt_sections: Option<Vec<String>>,
     /// Path prefixes, each inside a `back_pointer_paths` entry, whose files are
     /// the test class: a `Verifies:` comment there is test-tier evidence for
     /// the record it cites (`MILE-146`). Only meaningful to
@@ -2190,6 +2199,8 @@ pub enum ConfigError {
         kind: String,
         declared: String,
     },
+    #[error("rule '{rule}' option 'appendable_sections' {reason}")]
+    InvalidAppendableSections { rule: String, reason: String },
     #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("rule '{rule}' option 'drift_baseline' {reason}")]
@@ -2876,6 +2887,18 @@ const RULE_OPTIONS: &[RuleOption] = &[
     RuleOption {
         name: "external_ids",
         consequence_if_missing: "resolves every prefixed id as a record, including external standard numbers",
+        optional: true,
+        fallback_for_undeclared_statuses: false,
+    },
+    RuleOption {
+        name: "appendable_sections",
+        consequence_if_missing: "lets no section be added to a decided record, so an amendment section is reported",
+        optional: false,
+        fallback_for_undeclared_statuses: false,
+    },
+    RuleOption {
+        name: "exempt_sections",
+        consequence_if_missing: "compares every section of a decided record",
         optional: true,
         fallback_for_undeclared_statuses: false,
     },
@@ -3868,6 +3891,7 @@ fn validate_rule_settings(config: &Config) -> Result<(), ConfigError> {
         check_rule_field_levels(name, setting, config)?;
         check_rule_decision_gate(name, setting, config)?;
         check_rule_pinnable_kinds(name, setting)?;
+        check_rule_appendable_sections(name, setting)?;
         check_rule_sticky_states(name, setting, config)?;
         check_rule_drift_audit_field(name, setting, config)?;
         check_rule_drift_baseline(name, setting)?;
@@ -4141,6 +4165,19 @@ fn check_rule_decision_gate(
             return Err(ConfigError::InvalidDecisionGate {
                 rule: name.to_string(),
                 reason,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// An `appendable_sections` entry is a regular expression that compiles.
+fn check_rule_appendable_sections(name: &str, setting: &RuleSetting) -> Result<(), ConfigError> {
+    for pattern in setting.appendable_sections.iter().flatten() {
+        if let Err(e) = regex::Regex::new(pattern) {
+            return Err(ConfigError::InvalidAppendableSections {
+                rule: name.to_string(),
+                reason: format!("entry '{pattern}' is not a regular expression: {e}"),
             });
         }
     }
@@ -5463,6 +5500,17 @@ fn check_rules_need_declarations(config: &Config) -> Result<(), ConfigError> {
             crate::rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED
         ));
     }
+    // A decided-body rule with no `decision_types` judges no record (`MILE-350`).
+    if config
+        .rules
+        .get(crate::rules::RULE_SECTION_DECIDED_BODY_CHANGED)
+        .is_some_and(|s| s.level != RuleLevel::Off && s.decision_types.is_none())
+    {
+        return bad(format!(
+            "rule '{}' is enabled but declares no `decision_types`, so no record is decided and it would examine nothing",
+            crate::rules::RULE_SECTION_DECIDED_BODY_CHANGED
+        ));
+    }
     Ok(())
 }
 
@@ -6015,6 +6063,45 @@ rules:
         assert_eq!(c.revision_log_id("adr"), RevisionLogId::default());
         // An empty declaration still names nothing.
         assert!(parse(&format!("{base}    revision_log: {{}}\n")).is_err());
+    }
+
+    #[test]
+    fn the_decided_body_rule_needs_decision_types_and_a_compiling_appendable_pattern() {
+        let rule = "section.decided-body-changed";
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    statuses: {values: [Proposed, Accepted], success: [Accepted], initial: [Proposed], transitions: {Proposed: [Accepted]}}\nrules:\n";
+        let decided =
+            "    decision_types: {adr: [Accepted]}\n    appendable_sections: ['^Amendment']\n";
+        assert!(parse(&format!("{base}  {rule}:\n    level: error\n{decided}")).is_ok());
+        let err = |extra: &str| {
+            parse(&format!("{base}  {rule}:\n    level: error\n{extra}"))
+                .unwrap_err()
+                .to_string()
+        };
+        assert!(
+            err("    appendable_sections: ['^A']\n").contains("declares no `decision_types`"),
+            "no decision types"
+        );
+        assert!(
+            err("    decision_types: {adr: [Accepted]}\n").contains("appendable_sections"),
+            "no appendable sections"
+        );
+        assert!(
+            err("    decision_types: {adr: [Accepted]}\n    appendable_sections: ['(']\n")
+                .contains("not a regular expression"),
+        );
+        assert!(
+            err("    decision_types: {adr: [Final]}\n    appendable_sections: ['^A']\n")
+                .contains("Final"),
+        );
+        let elsewhere = parse(&format!(
+            "{base}  field.quality:\n    level: warn\n    exempt_sections: [X]\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(
+            elsewhere.contains("does not take the option 'exempt_sections'"),
+            "{elsewhere}"
+        );
     }
 
     #[test]

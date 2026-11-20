@@ -1,0 +1,15 @@
+id: a-reworded-decision-is-reported-and-an-added-amendment-is-not
+corpus: corpus-am
+# Two Accepted ADRs change after the base commit. ADR-1 rewords its Decision;
+# ADR-2 adds a dated amendment section and a revision row. The rule judges the
+# change against the base copy, so it names only the reworded one.
+commits:
+  - write:
+      docs/adr/ADR-1-queue.md: "---\nStatus: Accepted\n---\n# 1 - Queue\n\n## Decision\n\nWe use a list.\n\n## References\n\nNone.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-11-01 | Initial. | **substantive** |\n"
+      docs/adr/ADR-2-stream.md: "---\nStatus: Accepted\n---\n# 2 - Stream\n\n## Decision\n\nWe use a stream.\n\n## Amendment (2026-11-20): wider\n\nMore.\n\n## References\n\nNone.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-11-01 | Initial. | **substantive** |\n> | 2026-11-20 | Amended. | **substantive** |\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - {rule: section.decided-body-changed, severity: error, file: docs/adr/ADR-1-queue.md, message_contains: 'line 8'}
+expect_no_findings:
+  - {rule: section.decided-body-changed, file: docs/adr/ADR-2-stream.md}

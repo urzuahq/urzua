@@ -109,6 +109,22 @@ optionally `fields` and `workers`). `workers` is how many pages of the issue lis
 requests at once when GitHub names the last page: an integer from 1 to 16, default 4, anything else a
 load error. A configuration without it behaves as it did before the key existed.
 
+### Keeping decided records as decided
+
+The opt-in rule `section.decided-body-changed` reports, on a `--base` run, a record whose status at the merge
+base was decided and whose body changed other than by an added section matching `appendable_sections` or rows
+added to the end of its revision log. It compares words, so a formatter's re-wrapping or re-padded tables are
+not changes. `decision_types` (type to decided statuses) and `appendable_sections` (regular expressions for `##` headings) are required;
+`exempt_sections` is optional. See `SPEC-3`, "Decided records keep their body".
+
+```yaml
+rules:
+  section.decided-body-changed:
+    level: error
+    decision_types: {adr: [Accepted, Rejected, Superseded, Retired]}
+    appendable_sections: ['^Amendment \(\d{4}-\d{2}-\d{2}\)']
+```
+
 ### Rule vocabulary
 
 The words rules compare against are options, each defaulting to the list built in before it

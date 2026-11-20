@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.170'
+Version: '0.171'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:445d214b3aa2345780b3bb254a2d83aeaac07794b1e919fc8f6b04e5e0eb8484, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:69a7014fd422ced1639a609df541c9fea430313b43b1e86d95dc94ec0d175c31, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:1a59ba01092442d7b93adc634f8d12eb706db407cb7838f8283f88f693580f57, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:26eec9c1f475ab595cf705f1b446d3d53f6051dff06702a63e116262036b3056, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1637,6 +1637,46 @@ a type's `statuses.values` does not list; an empty list; a type named in both `d
 `fix_types`; a `link_fields` entry that is not a pointer or narrative field of any type; and any of
 the three on a rule that does not take them.
 
+### Decided records keep their body (`MILE-350`, `MILE-88`)
+
+The opt-in rule `section.decided-body-changed` reports a change to the body of a record that was decided at
+the merge base, so a decision is amended and never rewritten. It is declared under `rules:` and judged only
+on a `--base` run:
+
+```yaml
+rules:
+  section.decided-body-changed:
+    level: error
+    decision_types:                # type -> the statuses at which one is decided
+      adr: [Accepted, Rejected, Superseded, Retired]
+    appendable_sections:           # `##` headings that may be added whole to a decided record
+      - '^Amendment \(\d{4}-\d{2}-\d{2}\)'
+    exempt_sections: []            # optional: headings neither compared nor reported when added or removed
+```
+
+- `decision_types` is the option `diff.source-requires-record` reads, with the same checks: each key a declared
+  type, each status one the type's `statuses.values` lists, no empty list. The rule is judged on the status
+  the merge base's copy holds, so the pull request that accepts a record is not judged against the record it
+  accepts.
+- `appendable_sections` is required: a non-empty list of regular expressions matched against the text of a
+  `##` heading. A section whose heading matches may be added whole, between or after the existing sections.
+  A repository that lets nothing be added lists a pattern that matches nothing. An entry that does not compile is
+  a load error.
+- `exempt_sections` lists heading texts, compared without case, that the rule neither compares nor reports
+  when added or removed.
+- The type's declared `revision_log` is the one place rows may be added: rows appended to the end of the log
+  are not a change; a changed or removed row, and a row added before the end, are.
+- Text is compared as words, so re-wrapping, re-padding a table cell and re-drawing a table separator are not
+  changes, and neither is a `*` or `+` bullet written `-`. Emphasis marks, numbered-list numbers and heading levels are
+  compared as written. Header fields are left to the rules that judge them.
+- One finding per record, on the first changed line of the current copy. A record new in the diff, or not decided at the merge base,
+  is counted eligible and unexamined; a run with no `--base` is `not-applicable`.
+- Enabled with no `decision_types`, the rule is a load error: it would examine nothing.
+
+Choices decided by the builder on 2026-11-20, pending maintainer review: the option names, reading the status at
+the merge base, and reading "appended" as a whole section added at a section boundary (an amendment sits after
+the decision it amends, not only at the end of the file).
+
 ## Relation pairs
 
 A top-level `relation_pairs` list declares pairs of inverse relation fields (`RFC-47`, `MILE-122`).
@@ -3054,3 +3094,5 @@ proves this configuration produces the three findings.
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 63cc3a95e1a4 -> b3c446ff6ddd. Reason: config.rs: export.link_prefix is validated as https:// or http:// and a host, or a path with a single leading /, in URL-safe characters, and link_for percent-encodes the path; nothing else changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 09c2431a2693 -> 69a7014fd422. Reason: the test exempts rules in NOT_YET_RELEASED (status.children-agreement) from needing a declared level in this repository's config until a release carries the rule, and fails when an exempt rule is declared. The claim this record makes about that code still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` b3c446ff6ddd -> 445d214b3aa2. Reason: config.rs adds the types rule option, its load errors (unknown type, empty list, refused rule), Config::rule_judges_type and their unit tests **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-20 | Bumped to `0.171`. Documents `section.decided-body-changed` and its options `decision_types`, `appendable_sections` and `exempt_sections`: the status is read at the merge base, text is compared as words, and enabling it without `decision_types` or with an `appendable_sections` entry that does not compile is a load error. **Why:** `MILE-350`, `MILE-88`. | **substantive** |
+> | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 445d214b3aa2 -> 1a59ba010924, `rust/crates/urzua-cli/tests/own_config_integration.rs` 69a7014fd422 -> 26eec9c1f475. Reason: section.decided-body-changed was added: a RULE_ constant in catalog.rs, a RuleDef entry in table.rs, a module line in rules.rs, DecidedBodyOpts in options.rs, two RuleSetting options and a load check in config.rs, the merge base's copy read for the new rule in check.rs, one id in NOT_YET_RELEASED and a header-none test arm in the integration tests, and SPEC-3 and SPEC-2 prose and rows. Existing rules and every claim each record cites are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

@@ -32,3 +32,4 @@ No decision record exists for the rule yet, so `Implements` is not set.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-20 | Partly delivered by `section.decided-body-changed` (`decision_types`, `appendable_sections`, `exempt_sections`; `SPEC-3`, "Decided records keep their body"): a changed decided body, an edited amendment and a changed or removed revision row are reported on a `--base` run, and a reflow, a re-padded table and a record not decided at the merge base are not, shown by tests through the built binary. A section added whole after the decision counts as appended, since an amendment sits after the decision it amends. **Remains:** the rule is not declared in `.urzua/config.yaml`, a protected path the maintainer edits, so "exercised in urzua's own configuration and corpus" is open; no `Realized-by` is set and `Status` stays `Planned`. **Why:** the build of the direction chosen on 2026-11-19 ("Opt-in content rule"). | **structural** |

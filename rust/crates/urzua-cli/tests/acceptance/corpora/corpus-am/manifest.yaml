@@ -1,0 +1,7 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under, declaring which statuses are decided and which headings may be added to a decided record; not a record.
+  - path: docs/adr/ADR-1-queue.md
+    irregularity: none at the base commit; the case's change rewords its Decision.
+  - path: docs/adr/ADR-2-stream.md
+    irregularity: none at the base commit; the case's change appends a dated amendment section and a revision row, which the rule allows.
