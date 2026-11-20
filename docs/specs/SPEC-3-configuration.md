@@ -3,7 +3,7 @@ Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
 Version: '0.177'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d6cf0c6d8e5582206100d3a1f08601359c442e64202a8ff2035952987516ea2b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:26eec9c1f475ab595cf705f1b446d3d53f6051dff06702a63e116262036b3056, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d6cf0c6d8e5582206100d3a1f08601359c442e64202a8ff2035952987516ea2b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:69a7014fd422ced1639a609df541c9fea430313b43b1e86d95dc94ec0d175c31, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -3104,3 +3104,4 @@ proves this configuration produces the three findings.
 > | 2026-11-20 | Bumped to `0.175`. The approval of the `section.decided-body-changed` choices is cited as said in the orchestrating agent session on 2026-11-20, not on pull request #616. **Why:** the rows of `0.173` and the paragraph under "Decided records keep their body" named the wrong place; review of pull request #616. | **substantive** |
 > | 2026-11-20 | Bumped to `0.176`. `section.decided-body-changed` reads the merge base's copy with the type's declared header, including `fields: {from: prefix-lines}`. **Why:** review of pull request #616: a record of a prefix-lines type had an unreadable base header, so its rewrite was not examined. | **substantive** |
 > | 2026-11-20 | Bumped to `0.177`. `section.decided-body-changed` compares the lines above a header, such as the title before prefix-lines fields, and states where an amendment goes when the revision log has no heading of its own. **Why:** review of pull request #616: a changed title above a prefix-lines header was not compared. | **substantive** |
+> | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 26eec9c1f475 -> 69a7014fd422. Reason: own_config_integration.rs: section.decided-body-changed is removed from NOT_YET_RELEASED now that release 0.4.13 carries it and the configuration declares it; the test logic is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

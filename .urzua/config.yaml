@@ -711,6 +711,10 @@ rules:
   # that delivers a milestone sets Realized-by and Done itself, and this fails
   # when they disagree.
   status.delivery-agreement: error
+  section.decided-body-changed:
+    level: error
+    decision_types: {adr: [Accepted, Rejected, Superseded, Retired], rfc: [Accepted, Rejected, Superseded]}
+    appendable_sections: ['^Amendment \(\d{4}-\d{2}-\d{2}[,)]']
   header.required-fields: error
   # A condition's own extension prefix (MILE-141): `ext-` keys pass the closed
   # key set on that type; every other type stays on the closed set.

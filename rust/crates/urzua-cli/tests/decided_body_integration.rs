@@ -116,6 +116,26 @@ fn a_reworded_decision_is_reported_and_the_rule_off_reports_nothing() {
 }
 
 #[test]
+fn a_repository_that_does_not_enable_the_rule_sees_no_finding_and_no_notice() {
+    let off = fixture("off-quiet", false, "Accepted");
+    write(&off, adr("Accepted", "We use a list.", &[ROW1]));
+    for args in [&["--base", "base"][..], &[][..]] {
+        let v = run(&off, args);
+        assert!(found(&v).is_empty(), "{v}");
+        let notices = v["notices"].to_string();
+        assert!(!notices.contains(RULE), "{args:?}: {v}");
+        assert!(
+            !v["rules_executed"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|e| e["rule"] == RULE && e["status"] != "not-enabled"),
+            "{args:?}: {v}"
+        );
+    }
+}
+
+#[test]
 fn an_appended_amendment_and_an_appended_row_are_clean() {
     let dir = fixture("amend", true, "Accepted");
     let amended = adr("Accepted", DECISION, &[ROW1, ROW2]).replace(
