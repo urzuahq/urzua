@@ -105,22 +105,10 @@ fn finding(record: &Record, change: &Change) -> Finding {
 }
 
 fn judge(record: &Record, ctx: &Judging<'_>, now: &str, then: &str) -> Verdict {
-    let Some(type_config) = ctx.config.record_types.get(&record.record_type) else {
+    if !ctx.config.record_types.contains_key(&record.record_type) {
         return Verdict::Absent;
-    };
-    let model = crate::document_model::declared_model(&record.record_type, type_config)
-        .ok()
-        .flatten()
-        .and_then(|m| m.resolve().ok())
-        .unwrap_or_default();
-    let before = Record::parse_with_model(
-        record.path.clone(),
-        record.record_type.clone(),
-        then,
-        type_config.header_shape,
-        record.type_prefix.clone(),
-        &model,
-    );
+    }
+    let before = record_in_text(ctx.config, &record.record_type, then);
     if before.header.is_unreadable() || record.header.is_unreadable() {
         return Verdict::Unreadable;
     }
@@ -201,7 +189,7 @@ type Word = (String, usize);
 
 impl Doc {
     fn read(text: &str, header: Option<(usize, usize)>, log: &LogRows) -> Doc {
-        let header_end = header.map_or(0, |(_, end)| end);
+        let (header_start, header_end) = header.unwrap_or((1, 0));
         let skip: HashSet<usize> = log.rows.iter().map(|(line, _)| *line).collect();
         let body: String = text
             .lines()
@@ -215,9 +203,16 @@ impl Doc {
             .take(first.saturating_sub(header_end + 1))
             .map(|l| format!("{l}\n"))
             .collect();
+        let lead: String = text
+            .lines()
+            .take(header_start.saturating_sub(1))
+            .map(|l| format!("{l}\n"))
+            .collect();
+        let mut lead_words = words(&lead, 1, &skip);
+        lead_words.extend(words(&preamble, header_end + 1, &skip));
         Doc {
             last_line: text.lines().count().max(1),
-            preamble: words(&preamble, header_end + 1, &skip),
+            preamble: lead_words,
             preamble_line: sections.first().map_or(header_end + 1, |s| s.line),
             sections: sections
                 .iter()

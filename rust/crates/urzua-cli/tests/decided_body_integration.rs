@@ -282,4 +282,13 @@ fn a_prefix_lines_record_is_judged_on_its_base_status_and_its_body_alone() {
     let v = run(&dir, &["--base", "base"]);
     assert_eq!(found(&v).len(), 1, "{v}");
     assert_eq!(found(&v)[0]["line"], 8, "{v}");
+
+    // The title above the header is body text too.
+    write(
+        &dir,
+        doc("Accepted", "2026-11-01", DECISION).replace("# 1 - X", "# 1 - No queue at all"),
+    );
+    let v = run(&dir, &["--base", "base"]);
+    assert_eq!(found(&v).len(), 1, "{v}");
+    assert_eq!(found(&v)[0]["line"], 1, "{v}");
 }
