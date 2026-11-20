@@ -1,11 +1,12 @@
 ---
 Stable-Id: 01M7VN7TF0WB5843KAZ8WXY7TG
-Status: Proposed
+Status: Accepted
 Date: 2026-11-20
 Author: beauwilliams
 Deciders: beauwilliams
 Embodiment: null
 Supersedes / Superseded-by: null
+Accepted-on: 2026-11-20
 ---
 # 105 — Where the host shows no prompt, the person approves a gated move by answering urzua's question
 
@@ -129,3 +130,4 @@ model), `SPEC-24` (the adapter contract), `SPEC-3` (configuration), `MILE-353` (
 > |---|---|---|
 > | 2026-11-20 | Drafted as Proposed. **Why:** the maintainer said on 2026-11-20 "we should support both ... the current way is not working for any of the repos I work on", and chose "Trust them (Recommended)" for the trust question. | **substantive** |
 > | 2026-11-20 | Revised while Proposed: the question says how many other lines the edit changes and which date fields it fills, and the difference from the prompt route is stated; the answer rule is stated as one rule. **Why:** an independent review of #612 found that the person never sees the content in the question route and that the answer rule read as two rules. | **substantive** |
+> | 2026-11-20 | Recorded as approved in an agent session, not verified: ADR-105 Status moved from 'Proposed' to 'Accepted' (gate: type adr to Accepted, Rejected, Superseded, Retired, by 'maintainers'); by beauwilliams, answering urzua's question 3c4f55f5a39c in an agent session under the host 't3-code', as the host session reported them (name read from gh); the pull request check does not rely on it. | **structural** |
