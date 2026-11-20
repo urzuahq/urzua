@@ -2361,6 +2361,28 @@ pub const RULE_TABLE: &[RuleDef] = &[
         },
     },
     RuleDef {
+        id: RULE_SECTION_DECIDED_BODY_CHANGED,
+        description: "A record whose status at the merge base is one its type declares decided changes its body only by adding a section whole that matches a declared `appendable_sections` pattern, or rows at the end of its declared revision log (`MILE-350`, `MILE-88`); anything else is an error on the first changed line of the current copy, one finding per record, so a decision is amended rather than rewritten. Text is compared as words: re-wrapping, re-padding a table cell and re-drawing a table separator are not changes, and neither is a `*` or `+` bullet written `-`. Leading `>` blockquote marks are ignored; emphasis marks, numbered-list numbers and a heading's level are compared as written. A section added inside another section's text splits that section and so is a change; an amendment edited after it was added, a changed or removed revision-log row and a row added before the end of the log are changes too. The header is left to the rules that judge it, and the status read is the merge base's, so the change that decides a record is not judged against the record it decides. Declared as `decision_types` (a record type mapped to the statuses at which one is decided, each a status the type declares), `appendable_sections` (regular expressions matched against a `##` heading's text, so a matching section may be added whole at any section boundary; a repository that lets nothing be added lists a pattern that matches nothing); a pattern is case-sensitive and unanchored unless it starts with `^`; the revision log is the type's declared `revision_log`. Enabling it with no `decision_types` is a config load error. Judged against the merge base's copy, so it reports `not-applicable` on a run with no `--base`, never clean; a record renamed in the diff is compared with its copy under the old name, and one new in the diff has no copy to compare and stays unexamined, and so does one not decided at the merge base. A record whose header or declared revision-log columns cannot be read, now or at the merge base, is reported unreadable in the population.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::ChangedSet,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("reads a status from the header and judges only the changed set, on a --base run"),
+        options: &["decision_types", "appendable_sections"],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("decided-body-changed", ActionDecl::Exempt("restoring a decided record's text and adding an amendment section or a revision-log row is an author's edit; the tool cannot say what the amendment should state")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| section_decided_body_changed(c.records, c.config, c.full_text, c.changed_paths, c.base_text),
+    },
+    RuleDef {
         id: RULE_INDEX_FRESHNESS,
         description: "A committed index of one record type (a file, or a marked list inside a README, in a declared `format` with `{id}`, `{file}`, `{title}` and declared-field placeholders such as `{Status}`) lists exactly the records: a record with no entry, an entry naming no record, a duplicated entry, an entry whose file or title differs from the record's, and a line the format does not match are each an error (`MILE-139`). A `format` may span several lines (written with `\\n`), reading one entry over that many non-blank lines; it needs `{id}` or `{file}` (a link list that names no id is identified by its file); `{title}` is the H1 without its leading number or the record's own id (`MILE-152`). A missing artifact, or one whose declared `begin`/`end` markers are absent, is an error too. Needs `indexes` (`path`, `type`, `format`, optional `begin`/`end`); `check` only compares, and `urzua index` regenerates the artifacts from the records. The population counts the artifacts compared, so a run over none is distinguishable from a clean one.",
         scope: Scope::Files,
@@ -2873,6 +2895,7 @@ mod tests {
                 RULE_HEADER_SCAFFOLD_MISMATCH,
                 RULE_IDENTITY_OPEN_PR_COLLISION,
                 RULE_STATUS_TRANSITION_ALLOWED,
+                RULE_SECTION_DECIDED_BODY_CHANGED,
                 RULE_DIFF_PIN_CHANGED_UNATTESTED
             ]
         );

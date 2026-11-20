@@ -1,0 +1,21 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  section.decided-body-changed:
+    level: error
+    decision_types: {adr: [Accepted]}
+    appendable_sections: ['^Amendment \(\d{4}-\d{2}-\d{2}\)']
+record_types:
+  adr:
+    dir: docs/adr
+    prefix: ADR
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Proposed, Accepted]
+      success: [Accepted]
+      initial: [Proposed]
+      transitions:
+        Proposed: [Accepted]
+    revision_log:
+      marker: "**Revision log**"

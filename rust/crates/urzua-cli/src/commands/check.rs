@@ -133,7 +133,8 @@ struct Context<'a> {
 
 /// `revision-log.version-bump-required` judges a changed record against the
 /// merge base's copy, so that copy is read here (`BUG-51`) and handed over as
-/// data; so does `embodiment.claim-renewal-unattested` (`ADR-97`), for the
+/// data; so does `section.decided-body-changed` (`MILE-350`), for the records
+/// of the types it lists, and `embodiment.claim-renewal-unattested` (`ADR-97`), for the
 /// records of the types `embodiment.claim-expired` lists. Only the changed
 /// records one of them reads are read; a record new in the diff has no
 /// merge-base copy and gets no entry.
@@ -151,8 +152,14 @@ fn load_base_text(
     let bump = enabled_setting(config, rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED).is_some();
     let renewal =
         enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_some();
+    let decided: Option<rules::DecidedBodyOpts> =
+        config.enabled_rule_opts(rules::RULE_SECTION_DECIDED_BODY_CHANGED);
+    let decided_types: Vec<&String> = decided
+        .as_ref()
+        .map(|o| o.decision_types.keys().collect())
+        .unwrap_or_default();
     let pins = pin_level != RuleLevel::Off;
-    if !bump && !renewal && !pins {
+    if !bump && !renewal && !pins && decided_types.is_empty() {
         return Ok(out);
     }
     let expiry: rules::ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
@@ -168,7 +175,9 @@ fn load_base_text(
                 .periods
                 .iter()
                 .any(|p| p.record_type == record.record_type);
-        if !(wanted_by_bump || wanted_by_renewal || pins) || !changes.changed.contains(&record.path)
+        let wanted_by_decided = decided_types.contains(&&record.record_type);
+        if !(wanted_by_bump || wanted_by_renewal || wanted_by_decided || pins)
+            || !changes.changed.contains(&record.path)
         {
             continue;
         }
@@ -180,7 +189,7 @@ fn load_base_text(
         // rename: the pin rule then judges it against the copy under its old
         // name, so renaming a record is not a way past it.
         let base_path = if changes.added.contains(&record.path) {
-            let renamed = pins.then(|| {
+            let renamed = (pins || wanted_by_decided).then(|| {
                 let renames = renames.get_or_insert_with(|| {
                     urzua_io::renamed_paths_since(&session.repo_root, &changes.merge_base)
                         .unwrap_or_default()
@@ -211,6 +220,8 @@ fn load_base_text(
                     rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED
                 } else if wanted_by_renewal {
                     rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED
+                } else if wanted_by_decided {
+                    rules::RULE_SECTION_DECIDED_BODY_CHANGED
                 } else {
                     rules::RULE_DIFF_PIN_CHANGED_UNATTESTED
                 }

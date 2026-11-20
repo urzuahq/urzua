@@ -255,6 +255,23 @@ impl RuleOpts for SourceRequiresRecordOpts {
     }
 }
 
+/// `section.decided-body-changed`: the types and statuses that count as decided,
+/// and the sections that may be added whole after a decision.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DecidedBodyOpts {
+    pub decision_types: std::collections::BTreeMap<String, Vec<String>>,
+    pub appendable_sections: Vec<String>,
+}
+
+impl RuleOpts for DecidedBodyOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        DecidedBodyOpts {
+            decision_types: s.decision_types.clone().unwrap_or_default(),
+            appendable_sections: s.appendable_sections.clone().unwrap_or_default(),
+        }
+    }
+}
+
 /// `diff.source-and-records-mixed`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SourceAndRecordsMixedOpts {
