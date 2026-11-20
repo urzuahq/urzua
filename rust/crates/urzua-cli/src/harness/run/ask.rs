@@ -279,7 +279,7 @@ fn with_row(
     content: &str,
     (id, to): (&str, &str),
     how: &str,
-) -> Result<String, String> {
+) -> Result<(String, Vec<String>), String> {
     let left = mv.from.as_deref().unwrap_or_default();
     let narrative = format!(
         "{} ({}); {how}; {}",
@@ -295,7 +295,6 @@ fn with_row(
         to,
         &urzua_io::today(),
     )
-    .map(|(with, _)| with)
     .map_err(|e| {
         format!(
             "The receipt could not be written into the record ({e}); fix the record, then retry."
@@ -343,7 +342,7 @@ fn by_answer(
         )
     };
     if let Some(c) = question::consume(&dir, (&rel, left, &to), &body, session) {
-        let with = with_row(
+        let (with, _) = with_row(
             j,
             mv,
             &content,
@@ -365,7 +364,7 @@ fn by_answer(
         .chars()
         .take(12)
         .collect();
-    let with = with_row(j, mv, &content, (&id, &to), &how(&nonce, None))?;
+    let (with, filled) = with_row(j, mv, &content, (&id, &to), &how(&nonce, None))?;
     if let Some(v) = judge_receipt(j, path, &with) {
         return Ok(v);
     }
@@ -381,6 +380,7 @@ fn by_answer(
             to: &to,
             gate: &gate_text,
             group: &group,
+            extent: &extent(j, mv, &content, &filled),
         },
         &body,
         session,
@@ -391,4 +391,46 @@ fn by_answer(
         c.approve,
         question::APPROVED_TTL / 60
     ))
+}
+
+/// What the question tells the person the approval covers beyond the status,
+/// since unlike the host's prompt it does not show the file: how many other
+/// lines of the record the edit changes, and the date fields it fills.
+fn extent(
+    j: &Judging<'_>,
+    mv: &super::gate::GatedMove,
+    content: &str,
+    filled: &[String],
+) -> String {
+    let current = std::fs::read_to_string(j.repo_root.join(&mv.rel)).unwrap_or_default();
+    let mut old: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for l in current.lines() {
+        *old.entry(l).or_default() += 1;
+    }
+    let mut added = 0usize;
+    for l in content.lines() {
+        match old.get_mut(l) {
+            Some(n) if *n > 0 => *n -= 1,
+            _ => added += 1,
+        }
+    }
+    let removed: usize = old.values().sum();
+    // The status line itself is one changed line each way.
+    let other = added.max(removed).saturating_sub(1);
+    let lines = match other {
+        0 => "The edit changes nothing else in the record.".to_string(),
+        1 => "The edit also changes 1 other line of the record, approved with it.".to_string(),
+        n => format!("The edit also changes {n} other lines of the record, approved with it."),
+    };
+    match filled {
+        [] => lines,
+        names => format!(
+            "{lines} Approving also fills {} with today's date.",
+            names
+                .iter()
+                .map(|n| shown(n))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
 }

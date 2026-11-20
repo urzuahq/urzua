@@ -138,6 +138,8 @@ pub(crate) struct Move<'a> {
     pub from: &'a str,
     pub to: &'a str,
     pub gate: &'a str,
+    /// What else the edit writes, as urzua counted it, shown to the person.
+    pub extent: &'a str,
     pub group: &'a str,
 }
 
@@ -166,11 +168,12 @@ pub(crate) fn issue(
         to,
         gate,
         group,
+        extent,
     } = *mv;
     let shown_rel = super::super::receipt::sanitize(rel, 120);
     let shown_from = super::super::receipt::sanitize(from, 40);
     let question = format!(
-        "{PREFIX}{nonce}: approve {id} moving {field} from '{shown_from}' to '{to}'? {gate}: only the decider group '{group}' may decide. Approving lets the agent's next edit of {shown_rel} write the content it proposed, with a revision-log row recording this approval by you. Decline unless you are in '{group}' and mean to make this move."
+        "{PREFIX}{nonce}: approve {id} moving {field} from '{shown_from}' to '{to}'? {gate}: only the decider group '{group}' may decide. Approving lets the agent's next edit of {shown_rel} write the content it proposed, with a revision-log row recording this approval by you. {extent} Decline unless you are in '{group}' and mean to make this move."
     );
     let approve = format!("Approve {nonce}");
     let challenge = Challenge {
@@ -291,8 +294,14 @@ pub(crate) fn before(dir: &Path, r: &QuestionRequest) -> Result<Option<Challenge
     let found = load(dir, nonce);
     if r.prefilled {
         // An answer supplied with the question is not the person's: the
-        // challenge is spent so the same nonce cannot be asked again.
-        remove(dir, nonce);
+        // challenge is spent so the same nonce cannot be asked again, but only
+        // by the session that owns it.
+        if found
+            .as_ref()
+            .is_some_and(|c| r.session.as_deref() == Some(c.session.as_str()))
+        {
+            remove(dir, nonce);
+        }
         return Err("the call carries answers of its own, which only the person may give, so the challenge is withdrawn. Retry the edit for a new question and ask it without an answers field.".into());
     }
     let c = found.ok_or("it names no open urzua challenge (it expired, was answered, or was never issued). Retry the edit for a new question.")?;
@@ -438,6 +447,7 @@ mod tests {
             to: MOVE.2,
             gate: "adr-acceptance",
             group: "maintainers",
+            extent: "",
         };
         issue(d, NONCE, &mv, "bodyhash", "s1").unwrap().0
     }
@@ -545,6 +555,30 @@ mod tests {
             );
         }
         assert!(consume(&d.0, MOVE, "bodyhash", "s1").is_some());
+    }
+
+    #[test]
+    fn an_approval_does_not_cover_the_same_content_moved_from_another_status() {
+        let d = Dir::new();
+        approved(&d.0);
+        assert!(consume(
+            &d.0,
+            ("docs/adr/ADR-1-x.md", "Draft", "Accepted"),
+            "bodyhash",
+            "s1"
+        )
+        .is_none());
+        assert!(consume(&d.0, MOVE, "bodyhash", "s1").is_some());
+    }
+
+    #[test]
+    fn a_prefilled_question_from_another_session_does_not_withdraw_the_challenge() {
+        let d = Dir::new();
+        let c = issued(&d.0);
+        let mut r = pre(&c, true);
+        r.session = Some("s2".into());
+        assert!(before(&d.0, &r).is_err());
+        assert!(load(&d.0, NONCE).is_some());
     }
 
     #[test]

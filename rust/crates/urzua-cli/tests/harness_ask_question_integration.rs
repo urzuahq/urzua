@@ -204,6 +204,7 @@ fn in_bypass_mode_an_approving_answer_lets_the_same_edit_through_once_with_its_r
         text(&input).contains("ADR-1 moving Status from 'Proposed' to 'Accepted'"),
         "{input}"
     );
+    assert!(text(&input).contains("The edit changes nothing else in the record. Approving also fills Accepted-on with today's date."), "{input}");
     assert_eq!(ask(&dir, &input, "toolu_q"), serde_json::Value::Null);
     let said = answer(
         &dir,
@@ -341,4 +342,24 @@ fn the_answer_is_read_from_the_tools_result_never_its_input() {
     });
     hook(&dir, "answer", &p, "Alice");
     assert_eq!(decision(&edit(&dir)).0.to_string(), "deny");
+}
+
+#[test]
+fn the_question_says_how_many_other_lines_the_approved_edit_changes() {
+    let dir = repo("q-extent", &config(ASK));
+    let mut p = payload(
+        &dir,
+        "Write",
+        BYPASS,
+        serde_json::json!({"tool_use_id": "toolu_extent"}),
+    );
+    p["tool_input"]["content"] =
+        serde_json::json!(accepted(PROPOSED).replace("prose", "prose rewritten"));
+    let v = hook(&dir, "edit", &p, "Alice");
+    let input = question_of(decision(&v).1);
+    assert!(
+        text(&input)
+            .contains("The edit also changes 1 other line of the record, approved with it."),
+        "{input}"
+    );
 }

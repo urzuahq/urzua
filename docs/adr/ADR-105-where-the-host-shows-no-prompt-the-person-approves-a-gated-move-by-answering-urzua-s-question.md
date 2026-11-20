@@ -73,7 +73,11 @@ records which route answered, and the host's name where the hook can see it. Wor
 2. **The question.** Where no prompt is shown, the refusal of the gated move gives the agent the exact input of one
    AskUserQuestion call. Its question begins `urzua approval <nonce>:` and names the record, the field, the status
    left and entered, the gate and the decider group, all read from the record and the configuration. The choices are
-   exactly `Approve <nonce>` and `Decline`. The challenge is stored with the record's path, the two statuses, a hash of
+   exactly `Approve <nonce>` and `Decline`. Unlike the host's prompt, which shows the person the whole file, the question
+   does not show the content, so it says what else the approval covers: how many other lines of the record the edit
+   changes besides the status line (each approved with it), the date fields it fills, and the receipt row it adds. A
+   person who wants to see the change reads the agent's proposed edit, or uses the Manual mode, where the prompt shows it.
+   The challenge is stored with the record's path, the two statuses, a hash of
    the content the agent proposed, the session and the time.
 3. **Before the call.** urzua's hook on the tool refuses an urzua question whose input already carries `answers` and
    withdraws its challenge; refuses one whose wording or choices differ from what was issued, that shares its call with
@@ -92,9 +96,10 @@ records which route answered, and the host's name where the hook can see it. Wor
 
 This narrows the limit of the amendment of 2026-11-16 to `ADR-102` that a session where another hook or a host program
 can answer is refused: such parties are trusted as for the permission prompt, and the receipt records the route. The
-other limits of that amendment are kept: urzua writes the wording, the question carries a value the agent did not
-choose, and only an offered choice counts. Free text that exactly repeats the approve label, nonce included, is
-indistinguishable from choosing it and is taken as the person's choice.
+other limits of that amendment are kept: urzua writes the wording and the question carries a value the agent did not
+choose. The rule for the answer is one rule: the answer the host reports must equal the offered label `Approve <nonce>`
+exactly. Choosing that option meets it; free text the person types that repeats the label exactly, nonce included,
+cannot be told apart from choosing it and meets it too; any other text, an empty answer or a timeout does not.
 
 ## Reversibility
 
@@ -123,3 +128,4 @@ model), `SPEC-24` (the adapter contract), `SPEC-3` (configuration), `MILE-353` (
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-20 | Drafted as Proposed. **Why:** the maintainer said on 2026-11-20 "we should support both ... the current way is not working for any of the repos I work on", and chose "Trust them (Recommended)" for the trust question. | **substantive** |
+> | 2026-11-20 | Revised while Proposed: the question says how many other lines the edit changes and which date fields it fills, and the difference from the prompt route is stated; the answer rule is stated as one rule. **Why:** an independent review of #612 found that the person never sees the content in the question route and that the answer rule read as two rules. | **substantive** |
