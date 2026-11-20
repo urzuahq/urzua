@@ -254,8 +254,9 @@ fn every_mode_that_does_not_show_the_prompt_and_an_unknown_or_missing_mode_refus
         if let Some(m) = mode {
             assert!(r.contains(m), "{r}");
         }
+        // ADR-105: the refusal also hands the main session urzua's question.
+        assert!(r.contains("AskUserQuestion"), "{mode:?}: {r}");
     }
-    assert!(!dir.join(".git/urzua/approvals").exists());
 }
 
 #[test]

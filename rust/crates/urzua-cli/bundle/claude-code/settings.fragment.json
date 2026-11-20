@@ -10,6 +10,15 @@
             "timeout": "{{limit:hook_timeout_seconds}}"
           }
         ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{hook:question}}"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -19,6 +28,15 @@
           {
             "type": "command",
             "command": "{{hook:post-command}}"
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{hook:answer}}"
           }
         ]
       }

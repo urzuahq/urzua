@@ -43,7 +43,7 @@ use lock::{BlockHash, EntryHash, Lock, LOCK_PATH};
 pub use hook::run_hook;
 pub use post_command::run_post_command;
 pub use record::run_record;
-pub use run::{run_edit, run_session_start};
+pub use run::{run_answer, run_edit, run_question, run_session_start};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 

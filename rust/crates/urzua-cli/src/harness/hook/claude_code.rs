@@ -30,7 +30,18 @@ use super::hook_json::{dumps, dumps_indent1, obj, s};
 use super::{engine, text as vtext, truthy};
 
 pub const NAME: &str = "claude-code";
-pub const EVENTS: &[&str] = &["edit", "post-command", "session-start"];
+pub const EVENTS: &[&str] = &[
+    "edit",
+    "post-command",
+    "session-start",
+    "question",
+    "answer",
+];
+/// The tool through which the agent asks the person a question (`ADR-105`).
+const QUESTION_TOOL: &str = "AskUserQuestion";
+/// The variable Claude Code sets to the program it runs under (`cli`, or an
+/// Agent SDK host's name), recorded with an approval.
+const HOST_ENV: &str = "CLAUDE_CODE_ENTRYPOINT";
 /// The variable Claude Code sets to the session's project for hook commands.
 pub const PROJECT_ENV: &str = "CLAUDE_PROJECT_DIR";
 
@@ -96,7 +107,7 @@ impl Run {
     /// The engine could not give a verdict: say so, loudly, and let the call proceed.
     fn stated(&mut self, message: &str, event: &str) {
         eprintln!("{message}");
-        if event == "post-command" {
+        if event == "post-command" || event == "answer" {
             return self.relay_post_command(message, POST_NOT_JUDGED);
         }
         let hook = if event == "session-start" {
@@ -160,6 +171,23 @@ impl Run {
                 ("updatedInput", updated),
             ]),
         )]));
+    }
+
+    /// The approved edit: allowed without a prompt, with the tool input
+    /// rewritten to write `content` (the edit with its receipt).
+    fn allow_with(&mut self, message: &str, updated: J) {
+        self.print(&obj(vec![
+            ("systemMessage", s(message)),
+            (
+                "hookSpecificOutput",
+                obj(vec![
+                    ("hookEventName", s("PreToolUse")),
+                    ("permissionDecision", s("allow")),
+                    ("permissionDecisionReason", s(message)),
+                    ("updatedInput", updated),
+                ]),
+            ),
+        ]));
     }
 
     fn note(&mut self, message: &str) {
@@ -537,7 +565,95 @@ fn main(run: &mut Run, payload: &[u8]) {
             let request = run.request("post-command", Some("Bash"), cwd);
             judge_simple(run, request, cwd)
         }
+        "question" | "answer" => question(run, &payload, cwd),
         _ => edit(run, &payload, cwd),
+    }
+}
+
+/// Before and after the question tool (`ADR-105`): the questions as asked,
+/// whether the input already carried answers, and afterwards the answers the
+/// host reports in the tool's result, never its input.
+fn question(run: &mut Run, payload: &J, cwd: Option<&str>) {
+    if payload.get("tool_name").and_then(J::as_str) != Some(QUESTION_TOOL) {
+        return;
+    }
+    let answered = run.event == "answer";
+    let null = serde_json::Value::Null;
+    let inp = payload.get("tool_input").map_or(null.clone(), to_value);
+    let resp = payload.get("tool_response").map_or(null, to_value);
+    let source = if answered { &resp } else { &inp };
+    let questions: Vec<serde_json::Value> = source["questions"]
+        .as_array()
+        .map(|qs| {
+            qs.iter()
+                .map(|q| {
+                    let labels: Vec<&str> = q["options"]
+                        .as_array()
+                        .map(|o| {
+                            o.iter()
+                                .map(|x| x["label"].as_str().unwrap_or(""))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    serde_json::json!({
+                        "question": q["question"].as_str().unwrap_or(""),
+                        "labels": labels,
+                        "multi": q["multiSelect"].as_bool().unwrap_or(false),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let event = run.event.clone();
+    let mut request = run.request(&event, Some(QUESTION_TOOL), cwd);
+    request["questions"] = serde_json::Value::Array(questions);
+    request["session"] = payload
+        .get("session_id")
+        .map_or(serde_json::Value::Null, to_value);
+    request["call"] = payload
+        .get("tool_use_id")
+        .map_or(serde_json::Value::Null, to_value);
+    request["subagent"] = serde_json::Value::Bool(j_truthy(payload.get("agent_id")));
+    request["host"] =
+        std::env::var(HOST_ENV).map_or(serde_json::Value::Null, serde_json::Value::String);
+    if answered {
+        let answers: serde_json::Map<String, serde_json::Value> = resp["answers"]
+            .as_object()
+            .map(|m| {
+                m.iter()
+                    .filter(|(_, v)| v.is_string())
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        request["answers"] = serde_json::Value::Object(answers);
+        request["timed_out"] = serde_json::Value::Bool(resp.get("afkTimeoutMs").is_some());
+    } else {
+        request["prefilled"] =
+            serde_json::Value::Bool(inp.get("answers").is_some_and(|a| !a.is_null()));
+    }
+    let Ok(verdict) = engine(&event, &request, cwd) else {
+        // Unjudged before the call: the question is never marked asked, so
+        // its answer records nothing. After it: say so.
+        if answered {
+            run.relay_post_command("urzua harness: the answer to this question could NOT be read by urzua, so no approval was recorded.", "");
+        }
+        return;
+    };
+    let (kind, message) = (vtext(&verdict, "verdict"), vtext(&verdict, "message"));
+    if !answered && kind == "block" {
+        run.deny(message);
+    } else if answered && !message.is_empty() {
+        run.print(&obj(vec![
+            ("systemMessage", s(message)),
+            (
+                "hookSpecificOutput",
+                obj(vec![
+                    ("hookEventName", s("PostToolUse")),
+                    ("additionalContext", s(message)),
+                ]),
+            ),
+        ]));
     }
 }
 
@@ -603,6 +719,9 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
     request["paths"] = serde_json::json!([path]);
     request["content"] = to_value(&content);
     request["ask"] = ask_of(payload, tool);
+    request["session"] = payload
+        .get("session_id")
+        .map_or(serde_json::Value::Null, to_value);
     let verdict = match engine(&run.event, &request, cwd) {
         Ok(v) => v,
         Err(_) => {
@@ -611,7 +730,12 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
         }
     };
     let (kind, message) = (vtext(&verdict, "verdict"), vtext(&verdict, "message"));
-    if kind == "ask" {
+    if kind == "approved" {
+        match ask_input(tool, inp, &path, verdict.get("content").and_then(|c| c.as_str())) {
+            Ok(updated) => run.allow_with(message, updated),
+            Err(e) => run.deny(&format!("urzua harness (acceptance): refused. The approved edit could not be written with its receipt ({e}); retry the edit for a new question.")),
+        }
+    } else if kind == "ask" {
         match ask_input(tool, inp, &path, verdict.get("content").and_then(|c| c.as_str())) {
             Ok(updated) => run.ask(message, updated),
             Err(e) => run.deny(&format!("urzua harness (acceptance): refused. The edit could not be put to the person ({e}); retry the edit, or a person in the gate's group makes the move outside the agent harness.")),
@@ -710,6 +834,7 @@ fn ask_of(payload: &J, tool: &str) -> serde_json::Value {
     serde_json::json!({
         "available": why_not.is_none(),
         "why_not": why_not.unwrap_or_default(),
+        "question": !subagent && ASKABLE_TOOLS.contains(&tool),
     })
 }
 
