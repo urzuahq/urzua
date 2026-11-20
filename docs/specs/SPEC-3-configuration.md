@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.170'
+Version: '0.171'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:445d214b3aa2345780b3bb254a2d83aeaac07794b1e919fc8f6b04e5e0eb8484, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:69a7014fd422ced1639a609df541c9fea430313b43b1e86d95dc94ec0d175c31, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -1035,8 +1035,11 @@ harness:
   agent's edit that moves one existing record into a status exactly one gate reserves, at the path as written, to the
   person through the agent host's permission prompt, with a reason built from values checked against the configuration
   and the record's cleaned title, and with a receipt row and the entered status's blank date fields added to the edit;
-  nothing is stored and no hook is added. Where the person cannot be asked, the edit is answered as without the mode or
-  refused with what to do. With `ask`, under `require_evidence` and with no `--actors` file, `urzua check` reports a gated
+  nothing is stored for that route. Where the host shows no prompt (`ADR-105`), the main session's edit is instead refused
+  with one question urzua wrote for the agent's question tool; an approving answer, read by the hooks `urzua harness
+  install` adds on that tool, is kept for five minutes in `<git common dir>/urzua/approvals` and lets the next edit making
+  the same move with the same proposed content in the same session through once, with its receipt row. Where the person
+  cannot be asked at all, the edit is answered as without the mode or refused with what to do. With `ask`, under `require_evidence` and with no `--actors` file, `urzua check` reports a gated
   move whose record carries a receipt row for that move at `info`, as unverified; nothing else in the check changes, and
   CI never reads the row. A receipt row for a gated move is a row of the record's declared revision log, read as that log with its date and class columns, that is in the head copy and not in the base copy the check compares against (the record at the merge base), whose narrative begins "Recorded as approved in an agent session, not verified" followed by this record's id, the status the move leaves and the status it enters (`<id> <field> moved from '<from>' to '<to>'`), and whose date is the date the check reads for that row's change: the day of the commit that added it (the later of its author and committer days), or the evaluation date while it is uncommitted. The row is text and unverified: the name in it is not checked. Approving writes the file with the row; declining writes nothing; the person's own edits
   and the commit check behave as without the mode except for that row under a local `require_evidence`: accepted by the
@@ -3054,3 +3057,4 @@ proves this configuration produces the three findings.
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 63cc3a95e1a4 -> b3c446ff6ddd. Reason: config.rs: export.link_prefix is validated as https:// or http:// and a host, or a path with a single leading /, in URL-safe characters, and link_for percent-encodes the path; nothing else changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 09c2431a2693 -> 69a7014fd422. Reason: the test exempts rules in NOT_YET_RELEASED (status.children-agreement) from needing a declared level in this repository's config until a release carries the rule, and fails when an exempt rule is declared. The claim this record makes about that code still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` b3c446ff6ddd -> 445d214b3aa2. Reason: config.rs adds the types rule option, its load errors (unknown type, empty list, refused rule), Config::rule_judges_type and their unit tests **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-20 | Bumped to `0.171`. `acceptance.in_session: ask` also approves a gated move by the person's answer to urzua's question where the host shows no prompt; no new key or value. **Why:** `ADR-105` (Proposed): the maintainer said on 2026-11-20 "we should support both ... the current way is not working for any of the repos I work on" and chose "Trust them (Recommended)" for whom the route trusts. | **substantive** |

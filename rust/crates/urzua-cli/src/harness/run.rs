@@ -36,6 +36,7 @@ use crate::session::Workspace;
 
 mod ask;
 mod outside;
+pub(super) mod question;
 pub(super) mod unjudged;
 
 /// Who is acting. An absent actor is treated as an agent: the safer reading.
@@ -88,6 +89,10 @@ struct Request {
     /// this call (`ADR-102`); absent from an adapter that cannot ask.
     #[serde(default)]
     ask: Option<ask::AskRequest>,
+    /// The host's id for the session, which a question-route approval is
+    /// bound to (`ADR-105`).
+    #[serde(default)]
+    session: Option<String>,
     /// Set while the session's own repository judges a file it holds: there an
     /// editor hook its configuration turned off says nothing. Anywhere else (a
     /// linked worktree, an outer repository) the unjudged edit stays loud.
@@ -1662,6 +1667,14 @@ pub(super) fn enter_governed_cwd(project_dir: Option<&str>) {
     if let Some(root) = root {
         let _ = std::env::set_current_dir(root);
     }
+}
+
+pub fn run_question(config: Option<PathBuf>) -> ExitCode {
+    question::run_event(config, false)
+}
+
+pub fn run_answer(config: Option<PathBuf>) -> ExitCode {
+    question::run_event(config, true)
 }
 
 pub fn run_session_start(config: Option<PathBuf>) -> ExitCode {

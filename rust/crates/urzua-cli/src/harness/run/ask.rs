@@ -10,6 +10,7 @@ use serde::Deserialize;
 use urzua_core::harness::InSession;
 
 use super::super::receipt;
+use super::question;
 use super::{judge_record, resolved_rel, Judging, Request, Verdict};
 
 /// What the adapter knows about the call: whether the host will show the
@@ -20,6 +21,10 @@ pub(super) struct AskRequest {
     available: bool,
     #[serde(default)]
     why_not: String,
+    /// Whether the host's question tool can be used instead where no prompt is
+    /// shown (`ADR-105`): a main-session call of a tool that carries a receipt.
+    #[serde(default)]
+    question: bool,
 }
 
 fn refuse(mut refused: Verdict, why: &str) -> Verdict {
@@ -58,11 +63,16 @@ pub(super) fn ask_or_refuse(j: &Judging<'_>, request: &Request, refused: Verdict
     let [path] = request.paths.as_slice() else {
         return refuse(refused, "The person is asked about one file per edit, and this call names several: make the gated move in an edit of that record alone.");
     };
-    match request.ask.as_ref() {
+    let mut why_not = String::new();
+    let by_question = match request.ask.as_ref() {
         None => return refuse(refused, "This agent's adapter cannot ask the person at the keyboard about an edit, so the move stays refused; a person in the gate's group makes it outside the agent harness."),
-        Some(a) if !a.available => return refuse(refused, &a.why_not),
-        Some(_) => {}
-    }
+        Some(a) if a.available => false,
+        Some(a) if a.question => {
+            why_not = a.why_not.clone();
+            true
+        }
+        Some(a) => return refuse(refused, &a.why_not),
+    };
     let as_written = crate::discovery::relative_to_root(j.repo_root, Path::new(path)).ok();
     if as_written.as_deref() != Some(mv.rel.as_path()) {
         return refused;
@@ -76,6 +86,12 @@ pub(super) fn ask_or_refuse(j: &Judging<'_>, request: &Request, refused: Verdict
         return refuse(refused, "More than one decider group must decide this move, so one person's answer here cannot make it; it goes through a pull request the groups' members approve.");
     }
     let content = request.content_at(0).unwrap_or("").to_string();
+    if by_question {
+        return match by_answer(j, path, &mv, content, request) {
+            Ok(v) => v,
+            Err(why) => refuse(refused, &format!("{why_not} {why}")),
+        };
+    }
     match prepare(j, path, &mv, content) {
         Ok(v) => v,
         Err(why) => refuse(refused, &why),
@@ -253,4 +269,126 @@ fn judge_receipt(j: &Judging<'_>, path: &str, receipt: &str) -> Option<Verdict> 
         &request,
     );
     (v.verdict == "block").then_some(v)
+}
+
+/// The receipt row's narrative and the record with it, for a move approved by
+/// `how`.
+fn with_row(
+    j: &Judging<'_>,
+    mv: &super::gate::GatedMove,
+    content: &str,
+    (id, to): (&str, &str),
+    how: &str,
+) -> Result<String, String> {
+    let left = mv.from.as_deref().unwrap_or_default();
+    let narrative = format!(
+        "{} ({}); {how}; {}",
+        receipt::move_phrase(id, &mv.field, left, to),
+        shown(&mv.gate),
+        receipt::END
+    );
+    receipt::with_receipt(
+        j.config,
+        &mv.record_type,
+        content,
+        &narrative,
+        to,
+        &urzua_io::today(),
+    )
+    .map(|(with, _)| with)
+    .map_err(|e| {
+        format!(
+            "The receipt could not be written into the record ({e}); fix the record, then retry."
+        )
+    })
+}
+
+/// The question route (`ADR-105`): the edit consumes the person's approval of
+/// this very move when one is on file, else the refusal hands the agent the
+/// question to ask.
+fn by_answer(
+    j: &Judging<'_>,
+    path: &str,
+    mv: &super::gate::GatedMove,
+    content: String,
+    request: &Request,
+) -> Result<Verdict, String> {
+    let session = request
+        .session
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .ok_or("The host reported no session id, so the person's answer cannot be bound to this session; a person in the gate's group makes the move outside the agent harness.")?;
+    let gate = j
+        .config
+        .authority
+        .as_ref()
+        .ok_or("no authority table")?
+        .status_gates(&mv.record_type, &mv.to)
+        .next()
+        .ok_or("the gate could not be found again")?;
+    let (who, login) = decider(j, gate, mv)?;
+    let (id, to, _, _) = shown_move(j, gate, mv, &content)?;
+    let left = mv.from.as_deref().unwrap_or_default();
+    let dir = question::store(j.repo_root)
+        .ok_or("The repository's git directory could not be found, so no approval can be kept.")?;
+    let body = urzua_io::sha256_hex_of_str(&content);
+    let rel = mv.rel.to_string_lossy().to_string();
+    let how = |nonce: &str, host: Option<&str>| {
+        let host = host.map_or(String::new(), |h| {
+            format!(" under the host '{}'", receipt::sanitize(h, 40))
+        });
+        format!(
+            "by {login}, answering urzua's question {nonce} in an agent session{host}, as the host session reported them (name read from {})",
+            who.source
+        )
+    };
+    if let Some(c) = question::consume(&dir, (&rel, left, &to), &body, session) {
+        let with = with_row(
+            j,
+            mv,
+            &content,
+            (&id, &to),
+            &how(&c.nonce, c.host.as_deref()),
+        )?;
+        if let Some(v) = judge_receipt(j, path, &with) {
+            return Ok(v);
+        }
+        let mut v = Verdict::new(
+            "approved",
+            Some(path),
+            format!("urzua harness (acceptance): the person approved {id} moving to '{to}' by answering urzua's question {}; the edit is written with its receipt row.", c.nonce),
+        );
+        v.extra = Some(Box::new(super::Extra::Ask { content: with }));
+        return Ok(v);
+    }
+    let nonce: String = crate::commands::hooks::random_hex()
+        .chars()
+        .take(12)
+        .collect();
+    let with = with_row(j, mv, &content, (&id, &to), &how(&nonce, None))?;
+    if let Some(v) = judge_receipt(j, path, &with) {
+        return Ok(v);
+    }
+    let (field, gate_text, group) = (shown(&mv.field), shown(&mv.gate), shown(&mv.group));
+    let (c, input) = question::issue(
+        &dir,
+        &nonce,
+        &question::Move {
+            rel: &rel,
+            id: &id,
+            field: &field,
+            from: left,
+            to: &to,
+            gate: &gate_text,
+            group: &group,
+        },
+        &body,
+        session,
+    )
+    .map_err(|e| format!("The question could not be stored ({e})."))?;
+    Err(format!(
+        "Or ask the person here: call the AskUserQuestion tool on its own with exactly this input and no answers field: {input} If the person picks '{}', retry this same edit unchanged within {} minutes; it is then written with its receipt row. If they decline, do not retry. An answer is recorded only by urzua's hooks on AskUserQuestion; if the retry is refused again, the person runs `urzua harness install`.",
+        c.approve,
+        question::APPROVED_TTL / 60
+    ))
 }
