@@ -235,13 +235,15 @@ fn scope_span(
         .map_err(|e| format!("{file} {where_} cannot be resolved: {e}"))
 }
 
-/// When every pin of the merge is scoped (`both`), the scope resolved in the
-/// merged file must have the lines around it that the side has: the merged span
-/// then lies inside each side's span, so a merge that combined both sides'
-/// changes across the span's edge pins no line a side did not pin. With a side
-/// that pinned the whole file, that side attests every line, so only a range
-/// (which names lines by number) must keep the lines before it; a symbol
-/// resolves by name and needs nothing.
+/// The scope resolved in the merged file must start where the side's does:
+/// the lines above the merged span must be the side's lines above its own.
+/// That holds for a range, which names lines by number, and when every pin of
+/// the merge is scoped (`both`), because each side is confined only relative to
+/// its own span start and a symbol's span can start earlier in one side's file
+/// (a doc comment a side pulled in) than in the other's. When every pin is
+/// scoped the lines after must match as well, so the merged span lies inside
+/// each side's span. With a side that pinned the whole file, that side attests
+/// every line, so a symbol needs nothing.
 fn check_merged_span(
     config: &Config,
     a: &Attested,
@@ -261,11 +263,16 @@ fn check_merged_span(
         a.locator.scope,
         Some(urzua_core::locator::Scope::Range { .. })
     );
-    // With both sides scoped each is confined, so the lines above are the base's on both and the
-    // merged file keeps them: only a range narrowed from a whole file needs this.
-    if is_range && m[..m_before] != s[..before] {
+    // Each side is confined relative to its own span start only, so with both sides scoped the
+    // starts can differ (a doc comment one side pulled in); a range is checked in every case.
+    if (both || is_range) && m[..m_before] != s[..before] {
+        let why = if is_range {
+            "a range names lines by number, so the merged pin would cover other lines"
+        } else {
+            "the merged span would start where that side's does not, so the merged pin would cover lines that side did not pin"
+        };
         return Err(format!(
-            "the lines above '{}' in {file} are not the lines {}'s file has above it: the other side edited or moved lines above it, and a range names lines by number, so the merged pin would cover other lines",
+            "the lines above '{}' in {file} are not the lines {}'s file has above it: the other side edited or moved lines above it, and {why}",
             a.locator.display(),
             a.side
         ));

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.76'
+Version: '0.77'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -509,8 +509,9 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   is confined. The symbol is resolved by name in the merged file, so it can land on a different function
   of that name than the one narrowed (the other side renamed `g` to `h` and added a new `g`, say); every
   pinned line is still attested by the whole-file side. When every attestation is scoped (both sides
-  re-pinned one range or symbol), the lines after the merged span must equal the side's own (the lines
-  before are the base's on both sides, since each is confined), so every line of the merged span
+  re-pinned one range or symbol), the lines before and the lines after the merged span must equal the
+  side's own (each side is confined only relative to its own span start, and a symbol's span can start
+  earlier in one side's file, by a doc comment it pulled in, than in the other's), so every line of the merged span
   lies inside both sides' spans: a range where a side inserted or deleted lines, or two sides' changes
   that together move the span's end (two deletions inside one range, two edits that extend a
   brace-balanced symbol past both), are refused. This is a guard for honest merges, not a defence
@@ -898,3 +899,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-20 | Bumped to `0.74`. The confinement also resolves the scope in the merged file: the lines before the merged span must equal the side's, and, when every attestation is scoped, the lines after it too; a new locator that competes for more than one dropped locator of its file is refused. Replaces the sentences that said the confinement keeps other code out of the span and that a symbol follows its symbol. **Why:** `BUG-211`: a fourth review reproduced a merged range or symbol span that took in a line neither side pinned (two deletions inside one range; two edits that grow a brace-balanced symbol) and a pairing that depended on the order locators were written in. | **substantive** |
 > | 2026-11-20 | Bumped to `0.75`. When the other side pinned the whole file, the lines above a symbol are no longer held (an edit above it no longer refuses the narrowing); they are still held for a range and when both sides re-pinned a scope, and the refusals say the other side edited above the scope, or that the merged span does not end where the side's does, instead of saying the merge moved it. States that splitting one whole-file pin into two scopes at one site is refused. **Why:** `BUG-212`: the most common narrowing merge (a whole file narrowed to a symbol while the other side edited the file) was refused for an edit above the symbol, which the whole-file re-pin and the symbol's resolution by name make harmless. | **substantive** |
 > | 2026-11-20 | Bumped to `0.76`. States that a narrowed symbol resolves by name in the merged file and can land on another function of that name; the lines before the merged span are no longer compared when both sides re-pinned a scope (each side is confined, so they are the base's on both), which changes no outcome. **Why:** review of the pull request for `BUG-212`. | **structural** |
+> | 2026-11-20 | Bumped to `0.77`. Corrects `0.76`: the lines before the merged span are still compared when both sides re-pinned a scope, so removing that comparison would have changed an outcome (a symbol one side pulled a doc comment into is refused); each side is confined only relative to its own span start. The refusal for lines above a range or a both-sides symbol names what happened per scope kind. **Why:** review of the pull request for `BUG-212`. | **structural** |
