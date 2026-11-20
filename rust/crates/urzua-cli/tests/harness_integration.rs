@@ -1265,7 +1265,13 @@ fn session_start_is_quiet_when_ready_and_names_each_thing_that_would_fail_open()
     let v = session_start(&dir, &ok, true);
     assert_eq!(
         checks_of(&v),
-        ["hook-entry", "hook-entry", "hook-entry"],
+        [
+            "hook-entry",
+            "hook-entry",
+            "hook-entry",
+            "hook-entry",
+            "hook-entry"
+        ],
         "{v}"
     );
     std::fs::write(dir.join(SETTINGS), settings).unwrap();

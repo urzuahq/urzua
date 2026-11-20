@@ -14,7 +14,6 @@
 //! a shell command can write the git directory (the documented accepted risk).
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -55,9 +54,7 @@ pub(crate) struct Challenge {
 }
 
 pub(crate) fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+    u64::try_from(urzua_io::now_unix()).unwrap_or(0)
 }
 
 /// `<git common dir>/urzua/approvals` of the repository at `root`.
