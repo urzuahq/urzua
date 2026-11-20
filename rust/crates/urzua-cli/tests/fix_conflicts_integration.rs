@@ -482,7 +482,17 @@ fn milestone(n: usize, dir: &Path, items: &str) -> String {
             .collect::<Vec<_>>()
             .join("\n"),
     );
+    let l57 = sha256(
+        &std::fs::read_to_string(dir.join("src/a.rs"))
+            .unwrap()
+            .lines()
+            .skip(4)
+            .take(3)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
     let items = items
+        .replace("{l57}", &l57)
         .replace("{l110}", &l110)
         .replace("{a}", &a)
         .replace("{b}", &b)
@@ -1783,7 +1793,6 @@ fn two_narrowings_of_one_file_on_one_side_are_each_recomputed() {
             });
         },
         &|d| {
-            edit(d, "src/a.rs", 0, "9;");
             edit(d, "src/a.rs", 1, "8;");
             rebaseline(d);
         },
@@ -1796,4 +1805,102 @@ fn two_narrowings_of_one_file_on_one_side_are_each_recomputed() {
         let want = format!("code:src/a.rs#{scope}@sha256:{}", sha256(&span.join("\n")));
         assert_eq!(text.matches(&want).count(), 1, "{want}: {text}");
     }
+}
+
+const SPACERS_ITEM: &str = "- A works. — evidence: code:src/a.rs#L5-L7@sha256:{l57}\nRB: code:src/a.rs#L5-L7@sha256:{l57}, test:t.rs\n";
+
+fn edit_text(d: &Path, from: &str, to: &str) {
+    rewrite(d, "src/a.rs", &|t| t.replacen(from, to, 1));
+}
+
+fn mark_g_edited(d: &Path) {
+    edit_text(d, "fn g() {", "fn g() { // EVIL");
+}
+
+fn drop_first_three_lines(d: &Path) {
+    rewrite(d, "src/a.rs", &|t| {
+        format!("{}\n", t.lines().skip(3).collect::<Vec<_>>().join("\n"))
+    });
+}
+
+const OUTSIDE: &str = "changed code outside what that side pinned";
+
+#[test]
+fn a_narrowing_the_merge_shifts_onto_the_changers_unattested_edit_is_refused_observed_failing() {
+    let dir = moved(
+        "moved-evil",
+        ONE_FILE_ITEM,
+        &|d| {
+            mark_g_edited(d);
+            run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L5-L7"));
+        },
+        &|d| {
+            drop_first_three_lines(d);
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, OUTSIDE);
+}
+
+#[test]
+fn a_narrowing_whose_changer_edited_outside_its_scope_is_refused_observed_failing() {
+    let dir = moved(
+        "moved-outside",
+        ONE_FILE_ITEM,
+        &|d| {
+            mark_g_edited(d);
+            run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L5-L7"));
+        },
+        &y_edits_the_first_function_and_re_pins,
+    );
+    refused_untouched(&dir, OUTSIDE);
+}
+
+#[test]
+fn a_range_the_merge_shifts_is_refused_observed_failing() {
+    let dir = moved(
+        "moved-shifted",
+        ONE_FILE_ITEM,
+        &|d| run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L5-L7")),
+        &|d| {
+            drop_first_three_lines(d);
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, "moved the lines the range");
+}
+
+fn x_edits_the_first_spacer_and_g_and_re_pins(d: &Path) {
+    edit_text(d, "fn spacer() {}", "fn spacer() { 1 }");
+    mark_g_edited(d);
+    rebaseline(d);
+}
+
+#[test]
+fn two_range_re_pins_where_a_side_edited_outside_its_range_are_refused_observed_failing() {
+    let dir = moved(
+        "ordinary-outside",
+        SPACERS_ITEM,
+        &x_edits_the_first_spacer_and_g_and_re_pins,
+        &|d| {
+            edit_text(d, "fn spacer3() {}", "fn spacer3() { 3 }");
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, OUTSIDE);
+}
+
+#[test]
+fn two_range_re_pins_the_merge_shifts_onto_an_unattested_edit_are_refused_observed_failing() {
+    let dir = moved(
+        "ordinary-evil",
+        SPACERS_ITEM,
+        &x_edits_the_first_spacer_and_g_and_re_pins,
+        &|d| {
+            drop_first_three_lines(d);
+            edit_text(d, "fn spacer3() {}", "fn spacer3() { 3 }");
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, OUTSIDE);
 }

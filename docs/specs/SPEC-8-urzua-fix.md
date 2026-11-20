@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.72'
+Version: '0.73'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -484,8 +484,9 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   merged file under its scope when all the conditions above hold with the sides' attestations read per
   locator: the file at the commit that changed the locator hashes, under the new scope, to the pin it
   wrote, and the file at the other commit hashes, as a whole, to the pin that side re-pinned it to.
-  The other side's whole-file pin covers every line of its file, so the recomputed pin covers only
-  code that side read. If the pinned file is itself unmerged the record waits on it as above.
+  The other side's whole-file pin covers every line of its file; the confinement below keeps the merged
+  file from carrying other code into the pinned span. If the pinned file is itself unmerged the record
+  waits on it as above.
   **Refused, naming why:** an old locator that is itself a range or symbol (the other side's re-pin
   covers what that scope held in its own file, whose lines can sit elsewhere than in the changer's, so
   no containment of the new scope is judged), a locator moved to another file, and a locator both
@@ -493,9 +494,19 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   locator is paired with a dropped one of the same file first; a side that changed a locator while the
   other did not re-pin it keeps its pin as written, as any one-sided change does. The merge row lists
   the pin with the changed side's hash and the old locator's re-pin as the two hashes and names the
-  locator it replaced; `pins` in the report carry `moved_from` and `moved_from_pin`. A pin over a line
-  range (`#Lx-Ly`) is recomputed over the same lines of the merged file, which are other code when a
-  merge inserted lines above them; that holds for every recomputed range pin, not only these.
+  locator it replaced; `pins` in the report carry `moved_from` and `moved_from_pin`. A new locator
+  paired only with a dropped locator of another file is refused as a move, so an unrelated swap (drop
+  `a.rs`, add `b.rs` at one site) is refused too: conservative, kept.
+- **A scoped pin is confined.** For every pin recomputed with a scoped attestation (the changed side's
+  new scope in the case above, and either side's range or symbol when both sides re-pinned one), that
+  side's file must equal the merge base outside the scope's span (the same lines before it and after it;
+  a symbol's span is resolved in that side's file), or the record is refused naming the side and that it
+  changed code outside what it pinned: the merged file carries that side's other edits, which nobody
+  attested for the merged span. A range (`#Lx-Ly`) also names lines by number, so the merged file must
+  keep the lines before it that the side has (otherwise the refusal says the merge moved the lines the
+  range pins); a symbol follows its symbol, so this does not apply to it. Because the lines before the
+  range must be those of the side, an edit above a range by the other side refuses the record even when
+  it moves no line (*stricter than the shift alone*; the pin then needs an ordinary re-pin). `BUG-211`.
 - **A pinned file still unmerged.** When the pinned file is itself unmerged (for example a source file
   both sides edited), its merged content does not exist yet. The refusal says so, the conflict carries
   `waits_on` (the files), no re-pin is suggested, and when the run has such a record its `next_action`
@@ -870,3 +881,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-20 | Bumped to `0.70`. `--conflicts` resolves a locator one side changed while the other only re-pinned the old one: the changed locator wins, in the evidence field and in a Done-means item's clause, its pin is recomputed from the merged file under its scope with each side attested by its own locator, and a locator both sides replaced differently is refused naming both; the items comparison no longer counts a pinned locator's spelling. Maintainer decision of 2026-11-20, option "Auto-resolve (Recommended)": "Amend SPEC-8/ADR-67: pointer change wins, hash recomputed from the merged file and recorded in a merge revision row." **Why:** `BUG-210`: 19 of 24 conflicted records on the merge of main into a pull request were refused for a narrowed locator, which `MILE-284` meant the command to resolve. | **substantive** |
 > | 2026-11-20 | Bumped to `0.71`. The locator-change resolution is limited to a narrowing within one file (the old scope contains the new); a widening, a move to another file and a locator both sides dropped and replaced differently are refused with the reason, a new locator is paired with a dropped one of the same file, and each side is attested by its own locator (review of the pull request found a pairing across files and a recomputed pin over code the other side never re-pinned). States that a range pin is recomputed over the same lines of the merged file. **Why:** `BUG-210`. | **substantive** |
 > | 2026-11-20 | Bumped to `0.72`. The locator-change resolution is limited to a whole file narrowed to a scope of itself; an old locator that is a range or symbol is refused, and the containment computation is dropped. **Why:** `BUG-210`: a second review showed the other side's re-pin of a range or symbol attests that scope in its own file, whose lines can differ from the changer's, so a contained new scope could be pinned over code that side never re-pinned. | **substantive** |
+> | 2026-11-20 | Bumped to `0.73`. A recomputed pin with a scoped attestation is confined: the side's file must equal the base outside the scope's span and, for a range, the merged file must keep the side's lines before it, else the record is refused; this covers the locator-change path and the ordinary path where both sides re-pinned one range or symbol. States that the fallback pairing refuses an unrelated swap, and removes the claims that the recomputed pin covers only code a side read and that a range is recomputed over other code after a merge inserts lines above it (it is refused now). **Why:** `BUG-210`, `BUG-211`: a third review reproduced a pin over lines no side attested, via a side's edit outside its scope and a merge that shifted the range; tightening only, under the maintainer's auto-resolve choice of this date. | **substantive** |

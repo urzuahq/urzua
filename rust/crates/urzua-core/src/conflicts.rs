@@ -1004,6 +1004,11 @@ fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation, note: Optio
     } else {
         "both merged sides re-pinned"
     };
+    let commits = if lead.starts_with("both") {
+        "re-pinned commits"
+    } else {
+        "commits"
+    };
     let moved = moved
         .iter()
         .filter_map(|p| {
@@ -1021,7 +1026,7 @@ fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation, note: Optio
         .map(|n| format!(" {n}"))
         .collect::<String>();
     format!(
-        "{MERGE_ROW_PREFIX}{}): {lead}, {list}; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state.{note} **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin.",
+        "{MERGE_ROW_PREFIX}{}): {lead}, {list}; the new hash is the merged file's, which is git's automatic merge of the two {commits}. No person wrote a reason for the merged state.{note} **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin.",
         attestation.label()
     )
 }
