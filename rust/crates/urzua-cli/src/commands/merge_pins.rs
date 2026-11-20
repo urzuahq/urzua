@@ -174,10 +174,16 @@ pub(crate) fn verified_hash(
     }
     let base_text = String::from_utf8_lossy(&base).into_owned();
     let merged_text = String::from_utf8_lossy(&index).into_owned();
-    for a in attested_sides(heads, pin, &locator)? {
-        if a.locator.scope.is_some() {
-            check_confined(repo_root, config, &a, &base_text, &merged_text)?;
-        }
+    let scoped: Vec<Attested> = attested_sides(heads, pin, &locator)?
+        .into_iter()
+        .filter(|a| a.locator.scope.is_some())
+        .collect();
+    let mut spans = Vec::new();
+    for a in &scoped {
+        spans.push(side_span(repo_root, config, a, &base_text)?);
+    }
+    for (a, span) in scoped.iter().zip(&spans) {
+        check_merged_span(config, a, span, &merged_text, scoped.len() > 1)?;
     }
     Ok(hash_under_scope(config, &locator, &index)
         .map_err(|e| format!("{path} cannot be hashed: {e}"))?)
@@ -190,30 +196,20 @@ fn lines_of(text: &str) -> Vec<&str> {
 
 /// A side that pinned a scope attests that scope and nothing else, so its file
 /// must equal the base outside the scope's span (the same lines before it and
-/// after it). A range also names lines by number, so the merged file must
-/// keep that side's lines before it: otherwise the merge moved the lines the
-/// range pins onto code nobody attested. A symbol follows its symbol.
-fn check_confined(
+/// after it). Returns the side's own text and the scope's span in it.
+fn side_span(
     repo_root: &Path,
     config: &Config,
     a: &Attested,
     base: &str,
-    merged: &str,
-) -> Result<(), String> {
+) -> Result<(String, urzua_core::locator::Span), String> {
     let (side, file) = (a.side, a.locator.path.clone());
-    let Some(scope) = &a.locator.scope else {
-        return Ok(());
-    };
     let bytes = show(repo_root, &format!("{}:{file}", a.commit))
         .map_err(|_| format!("{file} does not exist at {side}"))?;
     let text = String::from_utf8_lossy(&bytes).into_owned();
-    let resolver = urzua_core::locator::select_resolver(&config.locator_resolvers, &file);
-    let span = resolver
-        .and_then(|r| urzua_core::locator::resolve_scope(&text, r, scope))
-        .map_err(|e| format!("{file} at {side} cannot be resolved: {e}"))?;
+    let span = scope_span(config, a, &text, &format!("at {side}"))?;
     let (b, s) = (lines_of(base), lines_of(&text));
-    let before = span.start - 1;
-    let after = s.len().saturating_sub(span.end);
+    let (before, after) = (span.start - 1, s.len().saturating_sub(span.end));
     let confined = b.len() >= before + after
         && b[..before] == s[..before]
         && b[b.len() - after..] == s[s.len() - after..];
@@ -223,14 +219,50 @@ fn check_confined(
             a.locator.display()
         ));
     }
-    if matches!(scope, urzua_core::locator::Scope::Range { .. }) {
-        let m = lines_of(merged);
-        if m.len() < before || m[..before] != s[..before] {
-            return Err(format!(
-                "the merge moved the lines the range '{}' pins in {file}: the lines before it differ from {side}'s, so the range would cover other code",
-                a.locator.display()
-            ));
-        }
+    Ok((text, span))
+}
+
+fn scope_span(
+    config: &Config,
+    a: &Attested,
+    text: &str,
+    where_: &str,
+) -> Result<urzua_core::locator::Span, String> {
+    let file = &a.locator.path;
+    let scope = a.locator.scope.as_ref().ok_or("the locator has no scope")?;
+    urzua_core::locator::select_resolver(&config.locator_resolvers, file)
+        .and_then(|r| urzua_core::locator::resolve_scope(text, r, scope))
+        .map_err(|e| format!("{file} {where_} cannot be resolved: {e}"))
+}
+
+/// The scope resolved in the merged file must keep the lines before it that the
+/// side has (a merge that moved it is refused) and, when every pin of the
+/// merge is scoped (`both`), the lines after it as well: the merged span then
+/// lies inside each side's span, so a merge that combined both sides' changes
+/// across the span's edge pins no line a side did not pin. With a side that
+/// pinned the whole file, that side attests every line, so only the lines
+/// before the scope are held.
+fn check_merged_span(
+    config: &Config,
+    a: &Attested,
+    (side_text, side_span): &(String, urzua_core::locator::Span),
+    merged: &str,
+    both: bool,
+) -> Result<(), String> {
+    let file = &a.locator.path;
+    let (s, m) = (lines_of(side_text), lines_of(merged));
+    let merged_span = scope_span(config, a, merged, "in the merged file")?;
+    let (before, after) = (side_span.start - 1, s.len().saturating_sub(side_span.end));
+    let (m_before, m_after) = (
+        merged_span.start - 1,
+        m.len().saturating_sub(merged_span.end),
+    );
+    if m[..m_before] != s[..before] || (both && m[m.len() - m_after..] != s[s.len() - after..]) {
+        return Err(format!(
+            "the merged span of '{}' in {file} does not start and end where {}'s does: the merge moved it or combined both sides' changes across its edge, so the merged pin would cover lines that side did not pin",
+            a.locator.display(),
+            a.side
+        ));
     }
     Ok(())
 }
@@ -238,7 +270,7 @@ fn check_confined(
 /// A locator one side replaced is recomputed only when the old one is the whole
 /// file and the new one a scope of that same file. That is a precondition, not
 /// the whole argument: the merged file also carries the changer's edits outside
-/// its scope and the other side's edits anywhere, so `check_confined` still has
+/// its scope and the other side's edits anywhere, so `side_span` and `check_merged_span` still has
 /// to hold. An old range or symbol is refused outright: its re-pin covers what
 /// that scope held in the other side's file, whose lines can sit elsewhere than
 /// in the changer's.

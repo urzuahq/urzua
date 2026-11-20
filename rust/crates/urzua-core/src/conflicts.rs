@@ -248,6 +248,53 @@ fn pin_table(stages: [&[FoundPin]; 3]) -> Vec<PinSides> {
     pins
 }
 
+/// Names a new locator that could replace more than one dropped locator of the
+/// same file at its site, or a dropped one two new locators could replace: which
+/// pairs with which would depend on the order they are written in. Such new
+/// locators are left unpaired and the record is refused.
+fn ambiguous_pairing(pins: &[PinSides], handled: &mut Vec<usize>) -> Option<String> {
+    let one_sided = |p: &PinSides| match (&p.ours, &p.theirs, &p.base) {
+        (Some(_), None, None) => Some(true),
+        (None, Some(_), None) => Some(false),
+        _ => None,
+    };
+    let candidates = |i: usize| -> Vec<usize> {
+        let Some(by_ours) = one_sided(&pins[i]) else {
+            return Vec::new();
+        };
+        (0..pins.len())
+            .filter(|&j| {
+                let o = &pins[j];
+                j != i
+                    && o.key == pins[i].key
+                    && o.path == pins[i].path
+                    && o.base.is_some()
+                    && if by_ours { &o.ours } else { &o.theirs }.is_none()
+            })
+            .collect()
+    };
+    let mut conflict = None;
+    for i in 0..pins.len() {
+        let mine = candidates(i);
+        let shared = mine.iter().any(|&j| {
+            (0..pins.len())
+                .filter(|&k| {
+                    one_sided(&pins[k]) == one_sided(&pins[i]) && candidates(k).contains(&j)
+                })
+                .count()
+                > 1
+        });
+        if mine.len() > 1 || shared {
+            handled.push(i);
+            conflict.get_or_insert(format!(
+                "'{}' in {} could replace more than one dropped locator of the same file, or share one with another new locator, so which pin it replaces depends on the order they are written in; resolve it by hand",
+                pins[i].spelling, pins[i].site
+            ));
+        }
+    }
+    conflict
+}
+
 /// Marks each pin one side wrote in place of a locator the other side only
 /// re-pinned (`moved_from`), and names a locator both sides dropped and
 /// replaced with different ones, which neither side wins. A locator of the
@@ -257,7 +304,7 @@ fn pin_table(stages: [&[FoundPin]; 3]) -> Vec<PinSides> {
 fn pair_moved_locators(pins: &mut [PinSides]) -> Option<String> {
     let mut taken: Vec<usize> = Vec::new();
     let mut handled: Vec<usize> = Vec::new();
-    let mut conflict = None;
+    let mut conflict = ambiguous_pairing(pins, &mut handled);
     for same_path in [true, false] {
         for i in 0..pins.len() {
             let by_ours = match (&pins[i].ours, &pins[i].theirs, &pins[i].base) {

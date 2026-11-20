@@ -180,8 +180,8 @@ states it.
 
 A recomputed pin over a scope (a range or a symbol) is also confined, for the locator-change path and
 for two sides that re-pinned one scope: each side that pinned a scope must have left the file as in the
-base outside it, and a range must keep the lines before it that the side has; otherwise the record is
-refused. `SPEC-8` ("A scoped pin is confined") states it.
+base outside it, and the scope resolved in the merged file must keep the lines before it that the side
+has (and, when both sides pinned a scope, the lines after it); otherwise the record is refused. `SPEC-8` ("A scoped pin is confined") states it.
 
 ## References
 
@@ -203,3 +203,4 @@ refused. `SPEC-8` ("A scoped pin is confined") states it.
 > | 2026-11-20 | The amendment of 2026-11-20 is limited to a narrowing within one file; a widening and a move to another file are refused. The Decision text is unchanged. **Why:** review of the pull request showed the other side's re-pin of the old locator does not cover a wider span or another file. | **substantive** |
 > | 2026-11-20 | The amendment of 2026-11-20 is limited further to a whole file narrowed to a scope of itself; an old range or symbol is refused. The Decision text is unchanged. **Why:** a second review showed the other side's re-pin of a range or symbol covers that scope in its own file, not the changer's. | **substantive** |
 > | 2026-11-20 | The amendment of 2026-11-20 gains the confinement of a recomputed scoped pin (a side's file equal to the base outside its scope, a range keeping the lines before it); the Decision text is unchanged. **Why:** `BUG-210`, `BUG-211`: a merge could pin a span over another side's unattested edit or over shifted lines. | **substantive** |
+> | 2026-11-20 | The confinement paragraph of the amendment now also requires the scope resolved in the merged file to keep the side's lines around it. The Decision text is unchanged. **Why:** `BUG-211`: a merged span could take in a line neither side pinned. | **substantive** |

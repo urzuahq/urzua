@@ -1867,7 +1867,7 @@ fn a_range_the_merge_shifts_is_refused_observed_failing() {
             rebaseline(d);
         },
     );
-    refused_untouched(&dir, "moved the lines the range");
+    refused_untouched(&dir, "does not start and end where");
 }
 
 fn x_edits_the_first_spacer_and_g_and_re_pins(d: &Path) {
@@ -1903,4 +1903,174 @@ fn two_range_re_pins_the_merge_shifts_onto_an_unattested_edit_are_refused_observ
         },
     );
     refused_untouched(&dir, OUTSIDE);
+}
+
+fn lines_between(t: &str, from: usize, to: usize) -> String {
+    t.lines()
+        .skip(from - 1)
+        .take(to - from + 1)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn delete_line(d: &Path, n: usize) {
+    rewrite(d, "src/a.rs", &|t| {
+        t.lines()
+            .enumerate()
+            .filter(|(i, _)| *i != n - 1)
+            .map(|(_, l)| format!("{l}\n"))
+            .collect()
+    });
+}
+
+#[test]
+fn both_sides_deleting_a_line_inside_a_range_are_refused_observed_failing() {
+    let dir = moved(
+        "both-delete",
+        RANGE_ITEM,
+        &|d| {
+            delete_line(d, 1);
+            rebaseline(d);
+        },
+        &|d| {
+            delete_line(d, 3);
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, "does not start and end where");
+}
+
+const NESTED: &str = "mod outer {\nimpl X {\nfn f() {\n    1;\n    2;\n    3;\n}\nfn g() { 4; }\n}\nfn h() { 5; }\n}\n";
+const BRACE_RESOLVER: &str = "locator_resolvers:\n  - name: rust\n    glob: \"**/*.rs\"\n    start: '^\\s*fn\\s+{symbol}\\b'\n    end: brace_balanced\n";
+
+/// A symbol `f` whose two sides each change a different body line to a lone
+/// opening brace, which the brace-blind resolver counts, so `f` ends later in
+/// the merged file than in either side's.
+fn symbol_that_grows_fixture() -> common::TempDir {
+    let dir = common::TempDir::new("urzua-conflicts-symbol-grows");
+    for d in ["docs/milestones", "src", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    ok(&dir, &["init", "-q", "-b", "main"]);
+    ok(&dir, &["config", "user.email", "test@example.com"]);
+    ok(&dir, &["config", "user.name", "test"]);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{MILE_CONFIG}{BRACE_RESOLVER}"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("t.rs"), "t\n").unwrap();
+    std::fs::write(dir.join("src/a.rs"), NESTED).unwrap();
+    std::fs::write(dir.join("src/b.rs"), B_RS).unwrap();
+    let h = sha256(&lines_between(NESTED, 3, 9));
+    let items = format!("- A works. — evidence: code:src/a.rs#f@sha256:{h}\nRB: code:src/a.rs#f@sha256:{h}, test:t.rs\n");
+    std::fs::write(dir.join(MREC), milestone(1, &dir, &items)).unwrap();
+    commit_all(&dir, "base");
+    for (branch, from) in [("x", "    1;"), ("y", "    3;")] {
+        ok(&dir, &["checkout", "-q", "main"]);
+        ok(&dir, &["checkout", "-q", "-b", branch]);
+        edit_text(&dir, from, "    \"{\";");
+        rebaseline(&dir);
+        commit_all(&dir, branch);
+    }
+    ok(&dir, &["checkout", "-q", "main"]);
+    ok(&dir, &["merge", "-q", "--ff-only", "x"]);
+    ok(&dir, &["checkout", "-q", "y"]);
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    dir
+}
+
+#[test]
+fn a_symbol_whose_span_grows_past_both_sides_is_refused_observed_failing() {
+    let dir = symbol_that_grows_fixture();
+    refused_untouched(&dir, "does not start and end where");
+}
+
+const TWO_A_ITEM: &str =
+    "- A works. — evidence: code:src/a.rs@sha256:{a}, code:src/a.rs#L5-L7@sha256:{l57}\n";
+
+fn narrow_two_ways(name: &str, far_first: bool) -> common::TempDir {
+    moved(
+        name,
+        TWO_A_ITEM,
+        &move |d| {
+            let a = std::fs::read_to_string(d.join("src/a.rs")).unwrap();
+            let n13 = format!(
+                "code:src/a.rs#L1-L3@sha256:{}",
+                sha256(&lines_between(&a, 1, 3))
+            );
+            let n911 = format!(
+                "code:src/a.rs#L9-L11@sha256:{}",
+                sha256(&lines_between(&a, 9, 11))
+            );
+            let new = if far_first {
+                format!("{n13}, {n911}")
+            } else {
+                format!("{n911}, {n13}")
+            };
+            let old = format!(
+                "code:src/a.rs@sha256:{}, code:src/a.rs#L5-L7@sha256:{}",
+                sha256(&a),
+                sha256(&lines_between(&a, 5, 7))
+            );
+            rewrite(d, MREC, &|t| t.replacen(&old, &new, 1));
+        },
+        &|d| {
+            edit(d, "src/a.rs", 1, "3;");
+            rebaseline(d);
+        },
+    )
+}
+
+#[test]
+fn several_dropped_locators_of_one_file_are_refused_whatever_the_order_written_observed_failing() {
+    for (name, far_first) in [("order-far", true), ("order-near", false)] {
+        let dir = narrow_two_ways(name, far_first);
+        refused_untouched(&dir, "could replace more than one dropped locator");
+    }
+}
+
+const B_FIRST_ITEM: &str = "- A works. — evidence: code:src/a.rs@sha256:{a}\nRB: code:src/b.rs@sha256:{b}, code:src/a.rs@sha256:{a}, test:t.rs\n";
+
+#[test]
+fn two_files_narrowed_in_one_site_in_another_order_are_each_recomputed() {
+    let dir = moved(
+        "two-files",
+        B_FIRST_ITEM,
+        &|d| {
+            let a = std::fs::read_to_string(d.join("src/a.rs")).unwrap();
+            let b = std::fs::read_to_string(d.join("src/b.rs")).unwrap();
+            let na = format!(
+                "code:src/a.rs#L1-L3@sha256:{}",
+                sha256(&lines_between(&a, 1, 3))
+            );
+            let nb = format!(
+                "code:src/b.rs#L9-L11@sha256:{}",
+                sha256(&lines_between(&b, 9, 11))
+            );
+            let old = format!(
+                "code:src/b.rs@sha256:{}, code:src/a.rs@sha256:{}",
+                sha256(&b),
+                sha256(&a)
+            );
+            rewrite(d, MREC, &|t| t.replacen(&old, &format!("{na}, {nb}"), 1));
+        },
+        &|d| {
+            edit(d, "src/a.rs", 0, "9;");
+            edit(d, "src/b.rs", 1, "8;");
+            rebaseline(d);
+        },
+    );
+    mapply(&dir);
+    let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    for (file, span) in [("a", (1, 3)), ("b", (9, 11))] {
+        let merged = std::fs::read_to_string(dir.join(format!("src/{file}.rs"))).unwrap();
+        let want = format!(
+            "src/{file}.rs#L{}-L{}@sha256:{}",
+            span.0,
+            span.1,
+            sha256(&lines_between(&merged, span.0, span.1))
+        );
+        assert!(text.contains(&want), "{want}: {text}");
+    }
 }
