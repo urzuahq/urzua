@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M7T32TYW7X5Y5J60EAWKW8FH
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-20
 Date: 2026-11-19
 Author: beauwilliams
 Deciders: beauwilliams
@@ -60,3 +61,4 @@ Easy to walk back while no configuration uses the key: it is opt-in, absent by d
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-19 | Filed as Proposed. **Why:** the maintainer's direction of 2026-11-19 quoted in Context. | **substantive** |
+> | 2026-11-20 | Status changed from Proposed to Accepted. **Why:** the maintainer, 2026-11-20: "I accept the ADR 104". | **substantive** |
