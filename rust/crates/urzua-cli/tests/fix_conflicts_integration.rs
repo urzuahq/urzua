@@ -2107,14 +2107,14 @@ fn narrow_to_g_args() -> Vec<&'static str> {
     ]
 }
 
-fn symbol_narrowing(name: &str, other_side_edit_line: usize) -> common::TempDir {
+fn symbol_narrowing(name: &str) -> common::TempDir {
     let dir = mfixture_with(
         name,
         &symbol_config(),
         &[(MREC.to_string(), ONE_FILE_ITEM.to_string())],
         &|d| run_ok(d, &narrow_to_g_args()),
         &move |d| {
-            edit(d, "src/a.rs", other_side_edit_line, "9;");
+            edit(d, "src/a.rs", 0, "9;");
             rebaseline(d);
         },
     );
@@ -2125,7 +2125,7 @@ fn symbol_narrowing(name: &str, other_side_edit_line: usize) -> common::TempDir 
 #[test]
 fn a_whole_file_narrowed_to_a_symbol_resolves_when_the_other_side_edited_above_it_observed_failing()
 {
-    let dir = symbol_narrowing("symbol-above", 0);
+    let dir = symbol_narrowing("symbol-above");
     mapply(&dir);
     let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
     let merged = std::fs::read_to_string(dir.join("src/a.rs")).unwrap();
@@ -2173,4 +2173,51 @@ fn one_dropped_locator_two_new_ones_replace_is_refused_observed_failing() {
         },
     );
     refused_untouched(&dir, "share one with another new locator");
+}
+
+const DOC_SOURCE: &str = "fn f() {\n    1;\n}\n\n/// doc\n\nfn g() {\n    1;\n    2;\n    3;\n}\n";
+const LEADING_RESOLVER: &str = "locator_resolvers:\n  - name: rust\n    glob: \"**/*.rs\"\n    start: '^\\s*fn\\s+{symbol}\\b'\n    end: brace_balanced\n    leading: '^\\s*///'\n";
+
+/// A symbol whose doc comment one side pulled into its span (deleting the blank
+/// line between them) while the other side edited the body: the symbol starts
+/// two lines earlier in one side's file than in the other's.
+fn symbol_with_leading_doc_fixture() -> common::TempDir {
+    let dir = common::TempDir::new("urzua-conflicts-leading-doc");
+    for d in ["docs/milestones", "src", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    ok(&dir, &["init", "-q", "-b", "main"]);
+    ok(&dir, &["config", "user.email", "test@example.com"]);
+    ok(&dir, &["config", "user.name", "test"]);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{MILE_CONFIG}{LEADING_RESOLVER}"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("t.rs"), "t\n").unwrap();
+    std::fs::write(dir.join("src/a.rs"), DOC_SOURCE).unwrap();
+    std::fs::write(dir.join("src/b.rs"), B_RS).unwrap();
+    let h = sha256(&lines_between(DOC_SOURCE, 7, 11));
+    let items = format!("- A works. — evidence: code:src/a.rs#g@sha256:{h}\nRB: code:src/a.rs#g@sha256:{h}, test:t.rs\n");
+    std::fs::write(dir.join(MREC), milestone(1, &dir, &items)).unwrap();
+    commit_all(&dir, "base");
+    ok(&dir, &["checkout", "-q", "-b", "x"]);
+    rewrite(&dir, "src/a.rs", &|t| {
+        t.replacen("/// doc\n\n", "/// doc\n", 1)
+    });
+    rebaseline(&dir);
+    commit_all(&dir, "x");
+    ok(&dir, &["checkout", "-q", "main"]);
+    ok(&dir, &["checkout", "-q", "-b", "y"]);
+    edit_text(&dir, "    3;", "    4;");
+    rebaseline(&dir);
+    commit_all(&dir, "y");
+    assert!(!git(&dir, &["merge", "-q", "x"]), "the merge conflicts");
+    dir
+}
+
+#[test]
+fn a_symbol_one_side_pulled_a_doc_comment_into_is_refused_observed_failing() {
+    let dir = symbol_with_leading_doc_fixture();
+    refused_untouched(&dir, "the lines above");
 }
