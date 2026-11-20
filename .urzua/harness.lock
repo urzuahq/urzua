@@ -21,9 +21,23 @@
     {
       "file": ".claude/settings.json",
       "event": "PostToolUse",
+      "matcher": "AskUserQuestion",
+      "handler": "answer",
+      "hash": "sha256:e8be5e6a2f6decdc80b19de0bd661f7fa66d984c1bbc63dbc24399da2acd5be6"
+    },
+    {
+      "file": ".claude/settings.json",
+      "event": "PostToolUse",
       "matcher": "Bash",
       "handler": "post-command",
       "hash": "sha256:9b8d110499be7c8d5bc1a2cbe9067c1e48c4e933ca64683c8c644ef70532b036"
+    },
+    {
+      "file": ".claude/settings.json",
+      "event": "PreToolUse",
+      "matcher": "AskUserQuestion",
+      "handler": "question",
+      "hash": "sha256:9e157805c73a3eafe253dd04ab17b7d7a5bf3ea3294feeb573f1d3f2fd482fad"
     },
     {
       "file": ".claude/settings.json",
@@ -42,7 +56,7 @@
   "blocks": [
     {
       "file": "AGENTS.md",
-      "hash": "words-sha256:32ff4fe2deadf3f8b805f23c9a9218d8014cf55c1a9e9291c6e845c81848e445"
+      "hash": "words-sha256:eb79424b687bc4c6e16b93648c2cab762c538ed7c2e168cf79489418aba91c7a"
     }
   ]
 }
