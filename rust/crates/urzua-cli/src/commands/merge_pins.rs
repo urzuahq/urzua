@@ -235,13 +235,13 @@ fn scope_span(
         .map_err(|e| format!("{file} {where_} cannot be resolved: {e}"))
 }
 
-/// The scope resolved in the merged file must keep the lines before it that the
-/// side has (a merge that moved it is refused) and, when every pin of the
-/// merge is scoped (`both`), the lines after it as well: the merged span then
-/// lies inside each side's span, so a merge that combined both sides' changes
-/// across the span's edge pins no line a side did not pin. With a side that
-/// pinned the whole file, that side attests every line, so only the lines
-/// before the scope are held.
+/// When every pin of the merge is scoped (`both`), the scope resolved in the
+/// merged file must have the lines around it that the side has: the merged span
+/// then lies inside each side's span, so a merge that combined both sides'
+/// changes across the span's edge pins no line a side did not pin. With a side
+/// that pinned the whole file, that side attests every line, so only a range
+/// (which names lines by number) must keep the lines before it; a symbol
+/// resolves by name and needs nothing.
 fn check_merged_span(
     config: &Config,
     a: &Attested,
@@ -257,9 +257,20 @@ fn check_merged_span(
         merged_span.start - 1,
         m.len().saturating_sub(merged_span.end),
     );
-    if m[..m_before] != s[..before] || (both && m[m.len() - m_after..] != s[s.len() - after..]) {
+    let is_range = matches!(
+        a.locator.scope,
+        Some(urzua_core::locator::Scope::Range { .. })
+    );
+    if (both || is_range) && m[..m_before] != s[..before] {
         return Err(format!(
-            "the merged span of '{}' in {file} does not start and end where {}'s does: the merge moved it or combined both sides' changes across its edge, so the merged pin would cover lines that side did not pin",
+            "the lines above '{}' in {file} are not the lines {}'s file has above it: the other side edited or moved lines above it, and a range names lines by number, so the merged pin would cover other lines",
+            a.locator.display(),
+            a.side
+        ));
+    }
+    if both && m[m.len() - m_after..] != s[s.len() - after..] {
+        return Err(format!(
+            "the merged span of '{}' in {file} does not end where {}'s does: the merge combined both sides' changes across its edge, so the merged pin would cover lines that side did not pin",
             a.locator.display(),
             a.side
         ));

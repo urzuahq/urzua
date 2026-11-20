@@ -599,6 +599,16 @@ fn mfixture(
     on_x: &dyn Fn(&Path),
     on_y: &dyn Fn(&Path),
 ) -> common::TempDir {
+    mfixture_with(name, MILE_CONFIG, records, on_x, on_y)
+}
+
+fn mfixture_with(
+    name: &str,
+    config: &str,
+    records: &[(String, String)],
+    on_x: &dyn Fn(&Path),
+    on_y: &dyn Fn(&Path),
+) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-conflicts-m-{name}"));
     for d in ["docs/milestones", "src", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
@@ -606,7 +616,7 @@ fn mfixture(
     ok(&dir, &["init", "-q", "-b", "main"]);
     ok(&dir, &["config", "user.email", "test@example.com"]);
     ok(&dir, &["config", "user.name", "test"]);
-    std::fs::write(dir.join(".urzua/config.yaml"), MILE_CONFIG).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
     std::fs::write(dir.join("t.rs"), "t\n").unwrap();
     std::fs::write(dir.join("src/a.rs"), A_RS).unwrap();
     std::fs::write(dir.join("src/b.rs"), B_RS).unwrap();
@@ -1867,7 +1877,7 @@ fn a_range_the_merge_shifts_is_refused_observed_failing() {
             rebaseline(d);
         },
     );
-    refused_untouched(&dir, "does not start and end where");
+    refused_untouched(&dir, "edited or moved lines above it");
 }
 
 fn x_edits_the_first_spacer_and_g_and_re_pins(d: &Path) {
@@ -1937,7 +1947,7 @@ fn both_sides_deleting_a_line_inside_a_range_are_refused_observed_failing() {
             rebaseline(d);
         },
     );
-    refused_untouched(&dir, "does not start and end where");
+    refused_untouched(&dir, "does not end where");
 }
 
 const NESTED: &str = "mod outer {\nimpl X {\nfn f() {\n    1;\n    2;\n    3;\n}\nfn g() { 4; }\n}\nfn h() { 5; }\n}\n";
@@ -1983,7 +1993,7 @@ fn symbol_that_grows_fixture() -> common::TempDir {
 #[test]
 fn a_symbol_whose_span_grows_past_both_sides_is_refused_observed_failing() {
     let dir = symbol_that_grows_fixture();
-    refused_untouched(&dir, "does not start and end where");
+    refused_untouched(&dir, "does not end where");
 }
 
 const TWO_A_ITEM: &str =
@@ -2073,4 +2083,94 @@ fn two_files_narrowed_in_one_site_in_another_order_are_each_recomputed() {
         );
         assert!(text.contains(&want), "{want}: {text}");
     }
+}
+
+fn symbol_config() -> String {
+    format!("{MILE_CONFIG}{BRACE_RESOLVER}")
+}
+
+fn narrow_to_g_args() -> Vec<&'static str> {
+    vec![
+        "fix",
+        "--pin",
+        "--apply",
+        "--ids",
+        MREC,
+        "--replace",
+        "src/a.rs=src/a.rs#g",
+        "--by",
+        "tester",
+        "--actor",
+        "agent",
+        "--reason",
+        "the claim is about g only",
+    ]
+}
+
+fn symbol_narrowing(name: &str, other_side_edit_line: usize) -> common::TempDir {
+    let dir = mfixture_with(
+        name,
+        &symbol_config(),
+        &[(MREC.to_string(), ONE_FILE_ITEM.to_string())],
+        &|d| run_ok(d, &narrow_to_g_args()),
+        &move |d| {
+            edit(d, "src/a.rs", other_side_edit_line, "9;");
+            rebaseline(d);
+        },
+    );
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    dir
+}
+
+#[test]
+fn a_whole_file_narrowed_to_a_symbol_resolves_when_the_other_side_edited_above_it_observed_failing()
+{
+    let dir = symbol_narrowing("symbol-above", 0);
+    mapply(&dir);
+    let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    let merged = std::fs::read_to_string(dir.join("src/a.rs")).unwrap();
+    let want = format!(
+        "src/a.rs#g@sha256:{}",
+        sha256(&lines_between(&merged, 9, 11))
+    );
+    assert_eq!(text.matches(&want).count(), 2, "{text}");
+    assert!(!text.contains("code:src/a.rs@sha256:"), "{text}");
+}
+
+#[test]
+fn a_range_with_edited_lines_above_it_is_refused_saying_the_other_side_edited_above_observed_failing(
+) {
+    let dir = moved(
+        "range-above",
+        ONE_FILE_ITEM,
+        &|d| run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L9-L11")),
+        &y_edits_the_first_function_and_re_pins,
+    );
+    refused_untouched(&dir, "edited or moved lines above it");
+}
+
+#[test]
+fn one_dropped_locator_two_new_ones_replace_is_refused_observed_failing() {
+    let dir = moved(
+        "split-whole-file",
+        ONE_FILE_ITEM,
+        &|d| {
+            let a = std::fs::read_to_string(d.join("src/a.rs")).unwrap();
+            let n13 = format!(
+                "code:src/a.rs#L1-L3@sha256:{}",
+                sha256(&lines_between(&a, 1, 3))
+            );
+            let n911 = format!(
+                "code:src/a.rs#L9-L11@sha256:{}",
+                sha256(&lines_between(&a, 9, 11))
+            );
+            let old = format!("code:src/a.rs@sha256:{}", sha256(&a));
+            rewrite(d, MREC, &|t| t.replacen(&old, &format!("{n13}, {n911}"), 1));
+        },
+        &|d| {
+            edit(d, "src/a.rs", 1, "3;");
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, "share one with another new locator");
 }

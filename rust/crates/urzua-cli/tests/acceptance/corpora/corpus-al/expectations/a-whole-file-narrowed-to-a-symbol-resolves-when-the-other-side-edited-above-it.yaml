@@ -1,0 +1,71 @@
+id: a-whole-file-narrowed-to-a-symbol-resolves-when-the-other-side-edited-above-it
+corpus: corpus-al
+bugs: [BUG-212]
+# Branch x narrows the milestone's whole-file locator to the symbol `g`; branch y edits the first
+# function, above `g`, and re-pins the whole file. The symbol resolves by name and the whole-file
+# re-pin attests every line, so the edit above it does not stop the merge: `g` is pinned over the
+# merged file instead of the record being refused.
+mutation_exempt: "fix is a command, not a rule, so there is no rule to switch off"
+commits:
+  - branch: x
+    write:
+      docs/milestones/MILE-1-symbol-narrowing.md: |
+        ---
+        Status: Done
+        Version: '2'
+        Embodiment: Implemented
+        Realized-by: 'code:src/a.rs#g@sha256:5d865cb741964f5a48cf39668719f762948e0525c006dfbba428444b60d6585d, test:t.rs'
+        ---
+        # MILE-1: Queue
+
+        ## Done means
+
+        - The second function works. — evidence: code:src/a.rs#g@sha256:5d865cb741964f5a48cf39668719f762948e0525c006dfbba428444b60d6585d
+
+        > **Revision log**
+        >
+        > | Date | Change | Class |
+        > |---|---|---|
+        > | 2026-01-01 | Initial. | **structural** |
+        > | 2026-03-02 | Pin moved to another locator (attested by x, identity: asserted, actor: agent): `src/a.rs`@sha256:a9c6072d356b -> `src/a.rs#g`@sha256:5d865cb74196. Reason: the claim rests on g only **Why:** the evidence a claim rests on changed and an agent attested why. | **structural** |
+  - branch: y
+    write:
+      src/a.rs: |
+        fn f() {
+            9;
+        }
+
+        fn spacer() {}
+        fn spacer2() {}
+        fn spacer3() {}
+
+        fn g() {
+            1;
+        }
+      docs/milestones/MILE-1-symbol-narrowing.md: |
+        ---
+        Status: Done
+        Version: '2'
+        Embodiment: Implemented
+        Realized-by: 'code:src/a.rs@sha256:064484f70f8e70000a487627af03f32ae7ccd077716204de367eb4f68de1b819, test:t.rs'
+        ---
+        # MILE-1: Queue
+
+        ## Done means
+
+        - The second function works. — evidence: code:src/a.rs@sha256:064484f70f8e70000a487627af03f32ae7ccd077716204de367eb4f68de1b819
+
+        > **Revision log**
+        >
+        > | Date | Change | Class |
+        > |---|---|---|
+        > | 2026-01-01 | Initial. | **structural** |
+        > | 2026-03-01 | Re-baselined (attested by y, identity: asserted, actor: agent): re-pinned `src/a.rs` a9c6072d356b -> 064484f70f8e. Reason: the first function changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds. | **structural** |
+merge: x
+invocation: [fix, --conflicts, --apply, --force, --by, acceptance, --actor, agent]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: resolved}
+  - {at: /conflicts/0/pins/0/locator, equals: "src/a.rs#g"}
+  - {at: /conflicts/0/pins/0/moved_from, equals: "src/a.rs"}
+  - {at: /conflicts/0/pins/0/merged, equals: "5d865cb741964f5a48cf39668719f762948e0525c006dfbba428444b60d6585d"}
