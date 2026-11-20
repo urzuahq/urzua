@@ -466,7 +466,18 @@ fn pin_of(dir: &Path, file: &str) -> String {
 /// line `ROW: <row>` adds a base row after the first.
 fn milestone(n: usize, dir: &Path, items: &str) -> String {
     let (a, b) = (pin_of(dir, "src/a.rs"), pin_of(dir, "src/b.rs"));
-    let items = items.replace("{a}", &a).replace("{b}", &b);
+    let l13 = sha256(
+        &std::fs::read_to_string(dir.join("src/a.rs"))
+            .unwrap()
+            .lines()
+            .take(3)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    let items = items
+        .replace("{a}", &a)
+        .replace("{b}", &b)
+        .replace("{l13}", &l13);
     let mut rb = format!("code:src/a.rs@sha256:{a}, test:t.rs");
     let mut rows = String::new();
     let mut body = String::new();
@@ -1464,7 +1475,7 @@ fn a_done_means_item_locator_one_side_narrowed_and_the_other_re_pinned_resolves_
 }
 
 #[test]
-fn a_locator_both_sides_replaced_differently_is_refused_naming_both() {
+fn a_locator_both_sides_replaced_differently_is_refused_naming_both_observed_failing() {
     let dir = mfixture(
         "item-both",
         &[(MREC.to_string(), TWO_PINS.to_string())],
@@ -1489,4 +1500,197 @@ fn a_locator_both_sides_replaced_differently_is_refused_naming_both() {
         "{v}"
     );
     assert_eq!(std::fs::read_to_string(dir.join(MREC)).unwrap(), before);
+}
+
+const ONE_FILE_ITEM: &str =
+    "- A works. — evidence: code:src/a.rs@sha256:{a}\nRB: code:src/a.rs@sha256:{a}, test:t.rs\n";
+const TWO_FILE_RB: &str = "- A works. — evidence: code:src/a.rs@sha256:{a}\nRB: code:src/b.rs@sha256:{b}, code:src/a.rs@sha256:{a}, test:t.rs\n";
+const RANGE_ITEM: &str = "- A works. — evidence: code:src/a.rs#L1-L3@sha256:{l13}\nRB: code:src/a.rs#L1-L3@sha256:{l13}, test:t.rs\n";
+
+fn pin_args<'a>(rec: &'a str, flag: &'a str, value: &'a str) -> Vec<&'a str> {
+    vec![
+        "fix",
+        "--pin",
+        "--apply",
+        "--ids",
+        rec,
+        flag,
+        value,
+        "--by",
+        "tester",
+        "--actor",
+        "agent",
+        "--reason",
+        "the claim is narrower",
+    ]
+}
+
+fn run_ok(d: &Path, args: &[&str]) {
+    let (code, v) = urzua(d, args);
+    assert_eq!(code, Some(0), "{v}");
+}
+
+fn rebaseline(d: &Path) {
+    run_ok(
+        d,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            MREC,
+            "--by",
+            "tester",
+            "--actor",
+            "agent",
+            "--reason",
+            "the code changed",
+        ],
+    );
+}
+
+/// Replaces the pin that follows `needle` in `rec` with zeros, everywhere it
+/// is written: a pin no file hashes to.
+fn bogus_pin(d: &Path, needle: &str) {
+    let text = std::fs::read_to_string(d.join(MREC)).unwrap();
+    let at = text.find(needle).unwrap() + needle.len();
+    let hash = text[at..at + 64].to_string();
+    std::fs::write(d.join(MREC), text.replace(&hash, &"0".repeat(64))).unwrap();
+}
+
+fn moved(name: &str, items: &str, on_x: &dyn Fn(&Path), on_y: &dyn Fn(&Path)) -> common::TempDir {
+    let dir = mfixture(name, &[(MREC.to_string(), items.to_string())], on_x, on_y);
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    dir
+}
+
+/// `urzua fix --conflicts --apply` refuses the record, naming `needle`, and
+/// leaves the file as the merge wrote it.
+fn refused_untouched(dir: &Path, needle: &str) {
+    let before = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    let (code, v) = apply(dir);
+    assert_eq!(code, Some(1), "{v}");
+    assert_eq!(v["conflicts"][0]["outcome"], "refused", "{v}");
+    let reason = v["conflicts"][0]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains(needle), "{needle}: {v}");
+    assert_eq!(std::fs::read_to_string(dir.join(MREC)).unwrap(), before);
+}
+
+fn y_edits_the_first_function_and_re_pins(d: &Path) {
+    edit(d, "src/a.rs", 0, "9;");
+    rebaseline(d);
+}
+
+#[test]
+fn a_narrowing_whose_own_pin_matches_no_file_is_refused_observed_failing() {
+    let dir = moved(
+        "moved-own-pin",
+        TWO_PINS,
+        &|d| {
+            run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L1-L3"));
+            bogus_pin(d, "src/a.rs#L1-L3@sha256:");
+        },
+        &y_edits_the_first_function_and_re_pins,
+    );
+    refused_untouched(&dir, "does not hash to that side's pin");
+}
+
+#[test]
+fn a_re_pin_of_the_old_locator_that_matches_no_file_is_refused_observed_failing() {
+    let dir = moved(
+        "moved-other-pin",
+        TWO_PINS,
+        &|d| run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L1-L3")),
+        &|d| {
+            y_edits_the_first_function_and_re_pins(d);
+            bogus_pin(d, "code:src/a.rs@sha256:");
+        },
+    );
+    refused_untouched(&dir, "does not hash to that side's pin");
+}
+
+#[test]
+fn a_file_edited_after_its_re_pin_is_not_pinned_by_a_narrowing_merge_observed_failing() {
+    let dir = moved(
+        "moved-edited-after",
+        TWO_PINS,
+        &|d| run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L1-L3")),
+        &|d| {
+            y_edits_the_first_function_and_re_pins(d);
+            edit(d, "src/a.rs", 0, "8;");
+        },
+    );
+    refused_untouched(&dir, "changed there without a re-pin");
+}
+
+#[test]
+fn a_narrowing_over_a_pinned_file_still_conflicted_waits_for_it() {
+    let dir = moved(
+        "moved-unmerged-file",
+        TWO_PINS,
+        &|d| {
+            edit(d, "src/a.rs", 0, "7;");
+            run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L1-L3"));
+        },
+        &y_edits_the_first_function_and_re_pins,
+    );
+    refused_untouched(&dir, "still unmerged");
+}
+
+#[test]
+fn a_widening_the_other_side_re_pinned_the_old_range_of_is_refused_observed_failing() {
+    let dir = moved(
+        "moved-widened",
+        RANGE_ITEM,
+        &|d| run_ok(d, &pin_args(MREC, "--replace", "src/a.rs#L1-L3=src/a.rs")),
+        &|d| {
+            edit(d, "src/a.rs", 0, "9;");
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, "widened");
+}
+
+#[test]
+fn a_move_to_another_file_the_other_side_re_pinned_the_old_one_of_is_refused_observed_failing() {
+    let dir = moved(
+        "moved-other-file",
+        ONE_FILE_ITEM,
+        &|d| run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/b.rs")),
+        &y_edits_the_first_function_and_re_pins,
+    );
+    refused_untouched(&dir, "a different file");
+}
+
+#[test]
+fn a_new_locator_is_not_paired_with_a_dropped_pin_of_another_file_observed_failing() {
+    let dir = moved(
+        "moved-wrong-path",
+        TWO_FILE_RB,
+        &|d| {
+            run_ok(d, &pin_args(MREC, "--replace", "src/a.rs=src/a.rs#L1-L3"));
+            run_ok(d, &pin_args(MREC, "--remove", "src/b.rs"));
+        },
+        &|d| {
+            edit(d, "src/b.rs", 1, "3;");
+            rebaseline(d);
+            edit(d, "src/a.rs", 0, "9;");
+        },
+    );
+    let v = mapply(&dir);
+    assert!(
+        v["conflicts"][0]["pins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["recomputed"] == false),
+        "{v}"
+    );
+    let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    let as_pinned_by_x = sha256("fn f() {\n    1;\n}");
+    assert!(
+        text.contains(&format!("src/a.rs#L1-L3@sha256:{as_pinned_by_x}")),
+        "{text}"
+    );
+    assert!(!text.contains("replaced `src/b.rs`"), "{text}");
 }

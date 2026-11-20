@@ -249,60 +249,69 @@ fn pin_table(stages: [&[FoundPin]; 3]) -> Vec<PinSides> {
 }
 
 /// Marks each pin one side wrote in place of a locator the other side only
-/// re-pinned (`moved_from`), and names a locator both sides replaced with
-/// different ones, which neither side wins.
+/// re-pinned (`moved_from`), and names a locator both sides dropped and
+/// replaced with different ones, which neither side wins. A locator of the
+/// same file is paired first, so a pin is never matched with an unrelated
+/// file's; one left over is paired with any dropped locator of its site, which
+/// is a move to another file and is refused later.
 fn pair_moved_locators(pins: &mut [PinSides]) -> Option<String> {
     let mut taken: Vec<usize> = Vec::new();
+    let mut handled: Vec<usize> = Vec::new();
     let mut conflict = None;
-    for i in 0..pins.len() {
-        let new = &pins[i];
-        let by_ours = match (&new.ours, &new.theirs, &new.base) {
-            (Some(_), None, None) => true,
-            (None, Some(_), None) => false,
-            _ => continue,
-        };
-        let old = (0..pins.len()).find(|&j| {
-            let o = &pins[j];
-            j != i
-                && !taken.contains(&j)
-                && o.key == new.key
-                && o.base.is_some()
-                && if by_ours { &o.ours } else { &o.theirs }.is_none()
-        });
-        let Some(j) = old else { continue };
-        taken.push(j);
-        let other = if by_ours {
-            &pins[j].theirs
-        } else {
-            &pins[j].ours
-        };
-        match other {
-            Some(h) if Some(h) != pins[j].base.as_ref() => {
-                pins[i].moved_from = Some(MovedFrom {
-                    spelling: pins[j].spelling.clone(),
-                    path: pins[j].path.clone(),
-                    other_hash: h.clone(),
-                    changed_by_ours: by_ours,
-                });
-            }
-            Some(_) => {}
-            None => {
-                let rival = pins.iter().find(|r| {
-                    r.key == pins[i].key
-                        && r.base.is_none()
-                        && if by_ours { &r.theirs } else { &r.ours }.is_some()
-                        && if by_ours { &r.ours } else { &r.theirs }.is_none()
-                });
-                if let Some(r) = rival {
-                    let (ours, theirs) = if by_ours {
-                        (&pins[i], r)
-                    } else {
-                        (r, &pins[i])
-                    };
-                    conflict.get_or_insert(format!(
-                        "both sides replaced the locator '{}' in {} with different ones (ours: '{}'; theirs: '{}'); resolve it by hand",
-                        pins[j].spelling, pins[i].site, ours.spelling, theirs.spelling
-                    ));
+    for same_path in [true, false] {
+        for i in 0..pins.len() {
+            let by_ours = match (&pins[i].ours, &pins[i].theirs, &pins[i].base) {
+                (Some(_), None, None) => true,
+                (None, Some(_), None) => false,
+                _ => continue,
+            };
+            let new = &pins[i];
+            let old = (0..pins.len()).find(|&j| {
+                let o = &pins[j];
+                j != i
+                    && !handled.contains(&i)
+                    && !taken.contains(&j)
+                    && o.key == new.key
+                    && (o.path == new.path) == same_path
+                    && o.base.is_some()
+                    && if by_ours { &o.ours } else { &o.theirs }.is_none()
+            });
+            let Some(j) = old else { continue };
+            taken.push(j);
+            handled.push(i);
+            let other = if by_ours {
+                &pins[j].theirs
+            } else {
+                &pins[j].ours
+            };
+            match other {
+                Some(h) if Some(h) != pins[j].base.as_ref() => {
+                    pins[i].moved_from = Some(MovedFrom {
+                        spelling: pins[j].spelling.clone(),
+                        path: pins[j].path.clone(),
+                        other_hash: h.clone(),
+                        changed_by_ours: by_ours,
+                    });
+                }
+                Some(_) => {}
+                None => {
+                    let rival = pins.iter().find(|r| {
+                        r.key == pins[i].key
+                            && r.base.is_none()
+                            && if by_ours { &r.theirs } else { &r.ours }.is_some()
+                            && if by_ours { &r.ours } else { &r.theirs }.is_none()
+                    });
+                    if let Some(r) = rival {
+                        let (ours, theirs) = if by_ours {
+                            (&pins[i], r)
+                        } else {
+                            (r, &pins[i])
+                        };
+                        conflict.get_or_insert(format!(
+                            "both sides dropped the locator '{}' in {} and each added a different one (ours: '{}'; theirs: '{}'); resolve it by hand",
+                            pins[j].spelling, pins[i].site, ours.spelling, theirs.spelling
+                        ));
+                    }
                 }
             }
         }
@@ -989,6 +998,11 @@ fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation, note: Optio
         })
         .collect::<Vec<_>>()
         .join(", ");
+    let lead = if moved.iter().any(|p| p.moved_from.is_some()) {
+        "the merged sides narrowed or re-pinned"
+    } else {
+        "both merged sides re-pinned"
+    };
     let moved = moved
         .iter()
         .filter_map(|p| {
@@ -1006,7 +1020,7 @@ fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation, note: Optio
         .map(|n| format!(" {n}"))
         .collect::<String>();
     format!(
-        "{MERGE_ROW_PREFIX}{}): both merged sides re-pinned, {list}; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state.{note} **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin.",
+        "{MERGE_ROW_PREFIX}{}): {lead}, {list}; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state.{note} **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin.",
         attestation.label()
     )
 }

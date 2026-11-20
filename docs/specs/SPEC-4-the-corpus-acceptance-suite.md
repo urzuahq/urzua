@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.26'
+Version: '0.27'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:64fb50b17a24fae642e64a5a881385bcf12beb90245baae32282f60f6227855a, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
+Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:455eee13210d08ff7f91b02be619410ec445ae5431239d47d00de6c918122372, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
 Author: beauwilliams
 Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
@@ -309,7 +309,7 @@ built, and where it differs from the sketch:
 
 - **Commits, `--base` and shallow runs.** A case may list `commits`, each writing, renaming, removing or
   symlinking (`symlink`, path to target) files and committing; the fixture commit is tagged `base`, so `check --base base` gives the changed-path
-  rules a diff. `shallow: true` runs the case in a `--depth 1` clone made after the commits. A commit may name a `branch` to be cut from `base` instead of from the previous commit, and a case's `merge` names a branch to merge into the checked-out one after the commits; the merge must stop on a conflict, so a case can run over a repository left unmerged (`urzua fix --conflicts`).
+  rules a diff. `shallow: true` runs the case in a `--depth 1` clone made after the commits. A commit may name a `branch` to be cut from `base` instead of from the previous commit, and a case's `merge` names a branch to merge into the checked-out one after the commits; git must list an unmerged file afterwards, or the case is an error, and `merge` is not allowed with `shallow`, so a case can run over a repository left unmerged (`urzua fix --conflicts`).
   `expect_notices` matches the report's notices by `subject` and `message_contains`. Git history is part
   of the fixture, so a case's commits are written in its own file, not in the corpus.
 - **`corpus-g` (git history).** A shallow clone yields the `embodiment-drift-git` notice and not a clean
@@ -501,3 +501,5 @@ own-corpus case lacks the flag. A case over a fixture corpus needs none.
 > | 2026-11-17 | Bumped to `0.25`. The example case for `field.quality` expects `'Author' is empty`, the wording a finding about a field present with no value now has (an absent field is `missing from the header`). **Why:** `MILE-327`. | **substantive** |
 > | 2026-11-20 | Bumped to `0.26`. A case's commit may name a `branch` cut from `base`, and a case's `merge` merges a branch into the checked-out one and must stop on a conflict; `corpus-aj` holds the first case over an unmerged repository. Builds the case `BUG-210` needs, under the maintainer's decision of 2026-11-20 recorded in `SPEC-8` (option "Auto-resolve (Recommended)"). **Why:** `BUG-210`'s defect shows only in a repository a merge left unmerged, which no case could build. | **substantive** |
 > | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 5e48c899ec5f -> 64fb50b17a24. Reason: acceptance.rs: Commit gained an optional branch (checked out from the base tag before the commit) and Case an optional merge (a branch merged into the checked-out one after the commits, an error when it does not stop on a conflict); how a case is run, mutation-proven, sharded or gated is otherwise unchanged, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-20 | Bumped to `0.27`. A case's `merge` is an error unless git lists an unmerged file afterwards (not any non-zero exit), and is refused beside `shallow`. **Why:** review of the pull request: a merge that failed for another reason would have passed as the expected conflict. | **structural** |
+> | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 64fb50b17a24 -> 455eee13210d. Reason: acceptance.rs: a case's merge now errors unless git ls-files -u lists an unmerged file afterwards (it accepted any failed merge), and a case with both merge and shallow errors; how a case is run, mutation-proven, sharded or gated is otherwise unchanged, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

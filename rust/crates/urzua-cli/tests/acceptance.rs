@@ -85,8 +85,9 @@ struct Case {
     #[serde(default)]
     commits: Vec<Commit>,
     /// A branch to merge into the checked-out one after `commits`, so a case
-    /// can run over a repository left unmerged (`fix --conflicts`). The merge
-    /// must stop on a conflict, or the case is a harness error.
+    /// can run over a repository left unmerged (`fix --conflicts`). Git must
+    /// list an unmerged file afterwards, or the case is a harness error; not
+    /// allowed with `shallow`.
     merge: Option<String>,
     /// Run in a `--depth 1` clone of the corpus repository once `commits` are
     /// made, so a case can assert how a truncated history is reported.
@@ -465,6 +466,11 @@ impl Drop for TempFile {
 /// after `setup` has run, and a config the mutation breaks is a harness error
 /// (a rejected config proves nothing about the rule).
 fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<String>, String> {
+    if case.shallow && case.merge.is_some() {
+        return Err(
+            "a case cannot be both shallow and merge: a depth-1 clone has no merge state".into(),
+        );
+    }
     let (cwd, temp) = if case.corpus == "@repo" {
         (repo_root(), None)
     } else {
@@ -506,8 +512,16 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
             git(&t, &["commit", "-q", "-m", &format!("change {}", n + 1)])?;
         }
         if let Some(other) = &case.merge {
-            if git(&t, &["merge", "-q", "--no-edit", other]).is_ok() {
-                return Err(format!("merge of '{other}' did not stop on a conflict"));
+            let _ = git(&t, &["merge", "-q", "--no-edit", other]);
+            let unmerged = Command::new("git")
+                .args(["ls-files", "-u"])
+                .current_dir(&t)
+                .output()
+                .map_err(|e| format!("git ls-files -u: {e}"))?;
+            if unmerged.stdout.is_empty() {
+                return Err(format!(
+                    "merge of '{other}' left no unmerged file: it did not stop on a conflict"
+                ));
             }
         }
         if case.shallow {

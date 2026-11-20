@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.70'
+Version: '0.71'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -475,20 +475,28 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   When the working-tree file differs from the index only in line endings, the refusal says git's
   line-ending conversion (`core.autocrlf` or an `eol` attribute) wrote it, not a hand edit.
 - **A locator one side changed** (maintainer decision of 2026-11-20, option "Auto-resolve": "pointer
-  change wins, hash recomputed from the merged file and recorded in a merge revision row"). Where one
-  side replaced a pinned locator of a site (the evidence field or an item's evidence clause) with
-  another (a narrower scope, another file) and the other side only re-pinned the old one, the changed
-  locator wins and the old one is dropped; this holds in the evidence field and in an item alike. The pin
-  of the winning locator is recomputed from the merged file under its scope, not taken from either
-  side, when all the conditions above hold with the sides' attestations read per locator: the file at
-  the commit that changed the locator hashes, under the new locator's scope, to the pin it wrote, and
-  the file at the other commit hashes, under the old locator, to the pin that side re-pinned it to. If
-  the pinned file is itself unmerged the record waits on it as above. When both sides replaced the same
-  locator with different ones the record is refused, naming the old locator and both new ones. The
-  merge row lists the pin with the changed side's hash and the old locator's re-pin as the two hashes
-  and names the locator it replaced; `pins` in the report carry `moved_from` and `moved_from_pin`.
-  A side that changed the locator while the other did not re-pin keeps its pin as written, as any
-  one-sided change does.
+  change wins, hash recomputed from the merged file and recorded in a merge revision row"; limited to
+  a narrowing after review of the pull request found the other side's re-pin does not cover more). Where one side replaced a pinned
+  locator of a site (the evidence field or an item's evidence clause) with a narrower one in the same
+  file and the other side only re-pinned the old one, the narrower locator wins and the old one is
+  dropped; this holds in the evidence field and in an item alike. "Narrower" means the same path and an
+  old scope that contains the new: the whole file, or a range or symbol around the new range or symbol
+  (read in the file at the commit that changed the locator). The pin of the winning locator is
+  recomputed from the merged file under its scope when all the conditions above hold with the sides'
+  attestations read per locator: the file at the commit that changed the locator hashes, under the new
+  locator's scope, to the pin it wrote, and the file at the other commit hashes, under the old
+  locator, to the pin that side re-pinned it to. Because the old pin covers the new span, the
+  recomputed pin only covers code that side read. If the pinned file is itself unmerged the record
+  waits on it as above. **Refused, naming why:** a widening (a scope to the whole file, or to a scope
+  that does not contain the old one), a locator moved to another file, and a locator both sides dropped
+  and replaced with different ones (naming the old locator and both new ones), because the other
+  side's re-pin does not attest what the new pin would cover. A new locator is paired with a dropped
+  one of the same file first; a side that changed a locator while the other did not re-pin it keeps
+  its pin as written, as any one-sided change does. The merge row lists the pin with the changed
+  side's hash and the old locator's re-pin as the two hashes and names the locator it replaced;
+  `pins` in the report carry `moved_from` and `moved_from_pin`. A pin over a line range (`#Lx-Ly`) is
+  recomputed over the same lines of the merged file, which are other code when a merge inserted lines
+  above them; that holds for every recomputed range pin, not only these.
 - **A pinned file still unmerged.** When the pinned file is itself unmerged (for example a source file
   both sides edited), its merged content does not exist yet. The refusal says so, the conflict carries
   `waits_on` (the files), no re-pin is suggested, and when the run has such a record its `next_action`
@@ -861,3 +869,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-19 | Bumped to `0.69`. A `--conflicts --ids` entry that matches no unmerged record is `partial-failure` (exit 1, `next_action` `urzua fix --conflicts`) when git lists no unmerged file too; `nothing-conflicted` is only a run with no entry that failed. **Why:** it reported `nothing-conflicted` and exited 0, a silent no-op (`BUG-209`). | **substantive** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` ef63c51c34e0 -> c8c3ad750b4f. Reason: fix.rs skips the Embodiment and Status repairs and the unevidenced-success notice for a record whose type the rule's types: does not list **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-20 | Bumped to `0.70`. `--conflicts` resolves a locator one side changed while the other only re-pinned the old one: the changed locator wins, in the evidence field and in a Done-means item's clause, its pin is recomputed from the merged file under its scope with each side attested by its own locator, and a locator both sides replaced differently is refused naming both; the items comparison no longer counts a pinned locator's spelling. Maintainer decision of 2026-11-20, option "Auto-resolve (Recommended)": "Amend SPEC-8/ADR-67: pointer change wins, hash recomputed from the merged file and recorded in a merge revision row." **Why:** `BUG-210`: 19 of 24 conflicted records on the merge of main into a pull request were refused for a narrowed locator, which `MILE-284` meant the command to resolve. | **substantive** |
+> | 2026-11-20 | Bumped to `0.71`. The locator-change resolution is limited to a narrowing within one file (the old scope contains the new); a widening, a move to another file and a locator both sides dropped and replaced differently are refused with the reason, a new locator is paired with a dropped one of the same file, and each side is attested by its own locator (review of the pull request found a pairing across files and a recomputed pin over code the other side never re-pinned). States that a range pin is recomputed over the same lines of the merged file. **Why:** `BUG-210`. | **substantive** |

@@ -68,3 +68,10 @@ expect_json:
   - {at: /status, equals: resolved}
   - {at: /conflicts/0/outcome, equals: resolved}
   - {at: /failed, equals: []}
+  # Both sites carry the narrowed locator, replacing the old whole-file one, pinned to the hash of lines 1-3 of the merged file.
+  - {at: /conflicts/0/pins/0/locator, equals: "src/a.rs#L1-L3"}
+  - {at: /conflicts/0/pins/0/moved_from, equals: "src/a.rs"}
+  - {at: /conflicts/0/pins/0/merged, equals: "2090ef0e813a9e24ca56534151818b5084897221e5fded41d04be99b91a7968c"}
+  - {at: /conflicts/0/pins/1/locator, equals: "src/a.rs#L1-L3"}
+  - {at: /conflicts/0/pins/1/merged, equals: "2090ef0e813a9e24ca56534151818b5084897221e5fded41d04be99b91a7968c"}
+  - {at: /conflicts/0/pins/1/moved_from, equals: "src/a.rs"}
