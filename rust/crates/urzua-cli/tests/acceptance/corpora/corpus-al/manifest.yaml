@@ -1,0 +1,10 @@
+# Never reflow or normalize these fixtures: whitespace and wrapping are the material under test.
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; the milestone type declares a revision log and statuses.delivery.items, and a rust resolver names symbols; not a record.
+  - path: src/a.rs
+    irregularity: none -- the source file the milestone pins; not a record.
+  - path: t.rs
+    irregularity: none -- the test file the milestone cites; not a record.
+  - path: docs/milestones/MILE-1-symbol-narrowing.md
+    irregularity: pins the whole of src/a.rs in Realized-by and in its one Done means item, the state two branches then change differently (narrowing the locator to a symbol, editing the code above it).

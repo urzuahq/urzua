@@ -1,0 +1,33 @@
+schema_version: 2
+rules: {embodiment.consistency: error, status.delivery-agreement: error, status.done-items-shape: error}
+
+record_types:
+  milestone:
+    dir: "docs/milestones"
+    required_fields: [Status]
+    sections:
+      from: headings
+      required:
+        - {name: Done means}
+    statuses:
+      values: [Planned, InProgress, Done]
+      success: [Done]
+      progress: [InProgress, Done]
+      delivery:
+        delivered_tiers: [Implemented, Verified]
+        unevidenced_tiers: ["Not started"]
+        not_done: [Planned, InProgress]
+        set_status: Done
+        items:
+          section: "Done means"
+          clause_separator: " — "
+          evidence_marker: "evidence:"
+          waiver_marker: "waived:"
+          partial_status: "InProgress"
+          resolving_tiers: [Specified, Implemented, Verified]
+    revision_log: {marker: "**Revision log**", version_bump: {field: Version, classes: [substantive, structural]}}
+locator_resolvers:
+  - name: rust
+    glob: "**/*.rs"
+    start: '^\s*fn\s+{symbol}\b'
+    end: brace_balanced
