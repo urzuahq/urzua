@@ -246,3 +246,40 @@ fn a_renamed_decided_record_is_reported_with_the_pin_rule_off() {
     assert_eq!(found(&v).len(), 1, "{v}");
     assert_eq!(execution(&v)["population"]["examined"], 1, "{v}");
 }
+
+#[test]
+fn a_prefix_lines_record_is_judged_on_its_base_status_and_its_body_alone() {
+    let dir = common::TempDir::new("urzua-decided-prefix");
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    let cfg = config(true).replace(
+        "    header_shape: \"yaml-frontmatter\"\n",
+        "    fields: {from: prefix-lines}\n",
+    );
+    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
+    let doc = |status: &str, date: &str, decision: &str| {
+        format!(
+            "# 1 - X\n\nStatus: {status}\nDate: {date}\n\n## Decision\n\n{decision}\n\n## References\n\nNone.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | {ROW1} |\n"
+        )
+    };
+    std::fs::write(dir.join(REC), doc("Accepted", "2026-11-01", DECISION)).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "base"]);
+    git(&dir, &["tag", "base"]);
+
+    write(&dir, doc("Accepted", "2026-11-20", DECISION));
+    let v = run(&dir, &["--base", "base"]);
+    assert!(
+        found(&v).is_empty(),
+        "a header-field change is not a body change: {v}"
+    );
+    assert_eq!(execution(&v)["population"]["examined"], 1, "{v}");
+
+    write(&dir, doc("Accepted", "2026-11-01", "We use a list."));
+    let v = run(&dir, &["--base", "base"]);
+    assert_eq!(found(&v).len(), 1, "{v}");
+    assert_eq!(found(&v)[0]["line"], 8, "{v}");
+}

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.175'
+Version: '0.176'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d6cf0c6d8e5582206100d3a1f08601359c442e64202a8ff2035952987516ea2b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:26eec9c1f475ab595cf705f1b446d3d53f6051dff06702a63e116262036b3056, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -1669,6 +1669,7 @@ rules:
 - Text is compared as words, so re-wrapping, re-padding a table cell and re-drawing a table separator are not
   changes, and neither is a `*` or `+` bullet written `-`. Leading `>` blockquote marks are ignored; emphasis marks, numbered-list numbers and heading levels are
   compared as written. Header fields are left to the rules that judge them.
+- The merge base's copy is read as the type declares its header (`header_shape`, or `fields: {from: prefix-lines}`), so the status is read correctly at the base and only the body is compared.
 - One finding per record, on the first changed line of the current copy. A record renamed in the diff is compared with
   its copy under the old name. A record new in the diff, or not decided at the merge base,
   is counted eligible and unexamined; a run with no `--base` is `not-applicable`.
@@ -3100,3 +3101,4 @@ proves this configuration produces the three findings.
 > | 2026-11-20 | Bumped to `0.174`. `section.decided-body-changed` drops `exempt_sections` (no case for it) and compares a renamed record with its copy under the old name; the example uses the pattern `^Amendment \(\d{4}-\d{2}-\d{2}[,)]`, a matching section may be added at any section boundary, a pattern is case-sensitive and unanchored unless it starts with `^`, and leading `>` marks are ignored. **Why:** review of pull request #616: a renamed decided record skipped the rule, and `exempt_sections` skipped the added-section check for sections before an exempt one. | **substantive** |
 > | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 1a59ba010924 -> d6cf0c6d8e55. Reason: review fixes for section.decided-body-changed: exempt_sections is removed from config.rs, options.rs and table.rs, a record renamed in the diff is read against its old copy (check.rs, table.rs), the rule table and SPEC-2 and SPEC-3 say so, and tests are added; the claims this record cites are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-20 | Bumped to `0.175`. The approval of the `section.decided-body-changed` choices is cited as said in the orchestrating agent session on 2026-11-20, not on pull request #616. **Why:** the rows of `0.173` and the paragraph under "Decided records keep their body" named the wrong place; review of pull request #616. | **substantive** |
+> | 2026-11-20 | Bumped to `0.176`. `section.decided-body-changed` reads the merge base's copy with the type's declared header, including `fields: {from: prefix-lines}`. **Why:** review of pull request #616: a record of a prefix-lines type had an unreadable base header, so its rewrite was not examined. | **substantive** |

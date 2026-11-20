@@ -108,12 +108,18 @@ fn judge(record: &Record, ctx: &Judging<'_>, now: &str, then: &str) -> Verdict {
     let Some(type_config) = ctx.config.record_types.get(&record.record_type) else {
         return Verdict::Absent;
     };
-    let before = Record::parse_with_shape_and_prefix(
+    let model = crate::document_model::declared_model(&record.record_type, type_config)
+        .ok()
+        .flatten()
+        .and_then(|m| m.resolve().ok())
+        .unwrap_or_default();
+    let before = Record::parse_with_model(
         record.path.clone(),
         record.record_type.clone(),
         then,
         type_config.header_shape,
         record.type_prefix.clone(),
+        &model,
     );
     if before.header.is_unreadable() || record.header.is_unreadable() {
         return Verdict::Unreadable;
