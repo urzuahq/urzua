@@ -89,10 +89,11 @@ rules:
 
 1. Without urzua: prompt the agent, "Change the retry ceiling to 5 seconds for the new client." It edits
    `src/retry.rs`. The ADR still says 30 and nothing complains.
-2. Pin the claim to the code it names. The first command prints which records govern that symbol and the pin to
-   write; the second writes it and a revision-log row:
+2. Pin the claim to the code it names. `urzua explain` prints which records govern a file (the block below names `src/lib.rs`; in the demo it is `src/retry.rs`); give it
+   `'src/retry.rs#retry_ceiling_seconds'` (path, `#`, symbol) and it also prints the scoped pin to write. The
+   command below writes the pin and a revision-log row:
    ```sh
-   urzua explain 'src/retry.rs#retry_ceiling_seconds'
+   urzua explain src/lib.rs
    urzua fix --pin --apply --ids docs/adr/ADR-1-use-a-30s-retry-ceiling.md --actor agent \
      --reason "the constant is the ceiling the decision describes"
    ```
@@ -106,7 +107,7 @@ rules:
    In an agent session the agent can run `/repin <record path>`, which runs this with a reason it must write
    after reading the diff.
 
-**What you'll see.** Step 2's `explain` prints `governing_records` and a `scope.pin`
+**What you'll see.** Step 2's `explain` prints `governing_records` and, for the symbol form, a `scope.pin`
 (`src/retry.rs#retry_ceiling_seconds@sha256:...`). Step 3 reports two findings: `embodiment.consistency`
 ("stated Embodiment 'Implemented' disagrees with 'Drift detected', computed from Realized-by") and
 `embodiment.pin-stale` ("1 pinned evidence changed since it was pinned ... pinned a416a972afcb, now
