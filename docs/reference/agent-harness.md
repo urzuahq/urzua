@@ -233,6 +233,23 @@ line endings:
 
 Approving writes that file; declining writes nothing. Nothing is stored and no hook is added.
 
+**Where the host shows no prompt** (`bypassPermissions`, `acceptEdits`, `auto`, `dontAsk`, `plan`; `ADR-105`), the same
+mode answers the main session's gated Write, Edit or MultiEdit with a refusal that holds the exact input of one
+AskUserQuestion call. Its question begins `urzua approval <nonce>:` and names the record, the move, the gate and the
+group; its choices are `Approve <nonce>` and `Decline`. urzua's hook before the call refuses it if its input already
+carries `answers`, or if the wording or choices were changed; urzua's hook after the call reads the answer from the
+tool's result. Choosing `Approve <nonce>` keeps a one-use approval in `<git common dir>/urzua/approvals` for five
+minutes; the agent's retry of the same edit, with the same content, in the same session, is then written without a
+prompt, with the receipt row above naming the question and the host (`answering urzua's question <nonce> in an agent
+session under the host '<CLAUDE_CODE_ENTRYPOINT>'`). A decline, free text, an idle timeout or a question urzua's hook did
+not see first approves nothing. The two hooks are added by `urzua harness install`; until it is run again the question
+is asked but no answer is recorded.
+
+This is a guard for the normal case, not a security boundary: the host and its permission layer are trusted to report
+the person's answer, as for the permission prompt. Known ways past it: another hook or a host program that answers the
+question in the person's place; a shell command that writes an approval file, or runs `urzua harness run answer` itself;
+a person who approves without reading.
+
 **The local commit check.** Unchanged, with one addition: where `require_evidence` is on and there is no actors file, a
 gated move whose record carries a receipt row for that move is reported at `info`, saying it is recorded as approved in an
 agent session and not verified, where it would otherwise be an error. A receipt row for a gated move is a row of the record's declared revision log, read as that log with its date and class columns, that is in the head copy and not in the base copy the check compares against (the record at the merge base), whose narrative begins "Recorded as approved in an agent session, not verified" followed by this record's id, the status the move leaves and the status it enters (`<id> <field> moved from '<from>' to '<to>'`), and whose date is the date the check reads for that row's change: the day of the commit that added it (the later of its author and committer days), or the evaluation date while it is uncommitted. The row is text and unverified: the name in it is not checked. With `require_evidence` off nothing changes.

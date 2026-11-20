@@ -109,4 +109,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A person accepts a record in chat: the harness asks, records the answer and allows that one edit](ADR-102-a-person-accepts-a-record-in-chat-the-harness-asks-records-the-answer-and-allows-that-one-edit.md)
 - [urzua board is the one command whose product is a page for a person while stdout stays JSON](ADR-103-urzua-board-is-the-one-command-whose-product-is-a-page-for-a-person-while-stdout-stays-json.md)
 - [A rule entry lists the record types it judges](ADR-104-a-rule-entry-lists-the-record-types-it-judges.md)
+- [Where the host shows no prompt, the person approves a gated move by answering urzua's question](ADR-105-where-the-host-shows-no-prompt-the-person-approves-a-gated-move-by-answering-urzua-s-question.md)
 <!-- urzua:index:end -->

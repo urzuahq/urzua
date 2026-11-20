@@ -134,6 +134,9 @@ pub fn hook_command(event: &str) -> Option<String> {
         "session-start" => format!(
             r#"{find}[ -n "$found" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the session-start check could NOT run ('"$w"'), so no guardrail can judge an edit in this session. {FIX}","hookSpecificOutput":{{"hookEventName":"SessionStart","additionalContext":"urzua harness: urzua could not run ('"$w"'); no edit is judged in this session. {FIX}"}}}}'; exit 0"#
         ),
+        // Without the binary no question is marked as asked, so no answer
+        // can record an approval: the edit stays refused, and nothing to say.
+        "question" | "answer" => "exit 0".to_string(),
         _ => return None,
     };
     Some(format!("{run}{why}{tail}"))

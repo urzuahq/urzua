@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: —
 Blocked-on: —
-Realized-by: code:AGENTS.md@sha256:54ce46c6884c50d47c5e2d2220b7ff84e04f6c9507ac951293f24049c63e66b4
+Realized-by: code:AGENTS.md@sha256:cc82ae81f82240161e70d6c1b926f405a19d1648b34ca6c5eb39a92c8820718d
 ---
 # 36 — Write AGENTS.md capturing this session's practices
 
@@ -23,12 +23,12 @@ something worth writing rather than letting it keep living nowhere.
 
 ## Done means
 
-- `AGENTS.md` exists at the repository root. — evidence: code:AGENTS.md@sha256:54ce46c6884c50d47c5e2d2220b7ff84e04f6c9507ac951293f24049c63e66b4
-- `AGENTS.md` instructs an agent to track work in the tool's own record types. — evidence: code:AGENTS.md@sha256:54ce46c6884c50d47c5e2d2220b7ff84e04f6c9507ac951293f24049c63e66b4
-- `AGENTS.md` instructs an agent to verify claims against real runs rather than memory. — evidence: code:AGENTS.md@sha256:54ce46c6884c50d47c5e2d2220b7ff84e04f6c9507ac951293f24049c63e66b4
-- `AGENTS.md` instructs an agent never to silently rewrite an Accepted decision (amend with a dated `## Amendment`). — evidence: code:AGENTS.md@sha256:54ce46c6884c50d47c5e2d2220b7ff84e04f6c9507ac951293f24049c63e66b4
-- `AGENTS.md` instructs an agent not to build speculative capability. — evidence: code:AGENTS.md@sha256:54ce46c6884c50d47c5e2d2220b7ff84e04f6c9507ac951293f24049c63e66b4
-- Each of these is a section an agent reads at session start. — evidence: code:AGENTS.md@sha256:54ce46c6884c50d47c5e2d2220b7ff84e04f6c9507ac951293f24049c63e66b4
+- `AGENTS.md` exists at the repository root. — evidence: code:AGENTS.md@sha256:cc82ae81f82240161e70d6c1b926f405a19d1648b34ca6c5eb39a92c8820718d
+- `AGENTS.md` instructs an agent to track work in the tool's own record types. — evidence: code:AGENTS.md@sha256:cc82ae81f82240161e70d6c1b926f405a19d1648b34ca6c5eb39a92c8820718d
+- `AGENTS.md` instructs an agent to verify claims against real runs rather than memory. — evidence: code:AGENTS.md@sha256:cc82ae81f82240161e70d6c1b926f405a19d1648b34ca6c5eb39a92c8820718d
+- `AGENTS.md` instructs an agent never to silently rewrite an Accepted decision (amend with a dated `## Amendment`). — evidence: code:AGENTS.md@sha256:cc82ae81f82240161e70d6c1b926f405a19d1648b34ca6c5eb39a92c8820718d
+- `AGENTS.md` instructs an agent not to build speculative capability. — evidence: code:AGENTS.md@sha256:cc82ae81f82240161e70d6c1b926f405a19d1648b34ca6c5eb39a92c8820718d
+- Each of these is a section an agent reads at session start. — evidence: code:AGENTS.md@sha256:cc82ae81f82240161e70d6c1b926f405a19d1648b34ca6c5eb39a92c8820718d
 
 > **Revision log**
 >
@@ -51,3 +51,4 @@ something worth writing rather than letting it keep living nowhere.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` adf3721bd062 -> 76d534d10031. Reason: AGENTS.md: the files the harness keeps now include .git/urzua (the hook's double-registration claims), in the harness block and the two lists of protected and Bash-only paths **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` 76d534d10031 -> 958c88d9d339. Reason: AGENTS.md: the guardrail note says the editor hook's text fallback refuses every edit unless it reads with certainty that no guardrail refuses an unjudged edit **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` 958c88d9d339 -> 54ce46c6884c. Reason: AGENTS.md: the harness block says a gated edit under in_session: ask prompts the person with a receipt row and that the agent never writes a receipt row itself, and names the whole git directory as kept by the harness; the rest of the file is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` 54ce46c6884c -> cc82ae81f822. Reason: AGENTS.md: the generated harness block now says an in-session move to a gated status is put to the person through the permission prompt or, where the host shows none, one question urzua wrote, and that this is a guard for the normal case with the host trusted to report the answer; the rest of the file is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

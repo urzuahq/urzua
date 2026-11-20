@@ -666,6 +666,11 @@ enum HarnessRun {
     /// After a shell command, run `check` on the records git shows as changed
     /// and report; never blocks.
     PostCommand,
+    /// Before the agent asks the person a question: refuse an urzua approval
+    /// question whose input already carries answers or whose wording differs.
+    Question,
+    /// After the person answered a question: record an approval of a gated move.
+    Answer,
 }
 
 #[derive(Subcommand)]
@@ -1049,6 +1054,12 @@ fn dispatch_harness(config: Option<PathBuf>, target: HarnessTarget) -> ExitCode 
         HarnessTarget::Run {
             event: HarnessRun::PostCommand,
         } => harness::run_post_command(config),
+        HarnessTarget::Run {
+            event: HarnessRun::Question,
+        } => harness::run_question(config),
+        HarnessTarget::Run {
+            event: HarnessRun::Answer,
+        } => harness::run_answer(config),
     }
 }
 
