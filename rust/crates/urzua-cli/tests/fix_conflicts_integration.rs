@@ -474,7 +474,16 @@ fn milestone(n: usize, dir: &Path, items: &str) -> String {
             .collect::<Vec<_>>()
             .join("\n"),
     );
+    let l110 = sha256(
+        &std::fs::read_to_string(dir.join("src/a.rs"))
+            .unwrap()
+            .lines()
+            .take(10)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
     let items = items
+        .replace("{l110}", &l110)
         .replace("{a}", &a)
         .replace("{b}", &b)
         .replace("{l13}", &l13);
@@ -1648,7 +1657,7 @@ fn a_widening_the_other_side_re_pinned_the_old_range_of_is_refused_observed_fail
             rebaseline(d);
         },
     );
-    refused_untouched(&dir, "widened");
+    refused_untouched(&dir, "not the whole file");
 }
 
 #[test]
@@ -1693,4 +1702,98 @@ fn a_new_locator_is_not_paired_with_a_dropped_pin_of_another_file_observed_faili
         "{text}"
     );
     assert!(!text.contains("replaced `src/b.rs`"), "{text}");
+}
+
+const TEN_LINES_ITEM: &str = "- A works. — evidence: code:src/a.rs#L1-L10@sha256:{l110}\nRB: code:src/a.rs#L1-L10@sha256:{l110}, test:t.rs\n";
+
+fn rewrite(d: &Path, file: &str, f: &dyn Fn(&str) -> String) {
+    let text = std::fs::read_to_string(d.join(file)).unwrap();
+    std::fs::write(d.join(file), f(&text)).unwrap();
+}
+
+#[test]
+fn a_range_whose_lines_moved_in_the_other_sides_file_is_not_narrowed_on_merge_observed_failing() {
+    let dir = moved(
+        "moved-range-shifted",
+        TEN_LINES_ITEM,
+        &|d| {
+            run_ok(
+                d,
+                &pin_args(MREC, "--replace", "src/a.rs#L1-L10=src/a.rs#L1-L3"),
+            )
+        },
+        &|d| {
+            rewrite(d, "src/a.rs", &|t| {
+                format!(
+                    "// 1\n// 2\n// 3\n// 4\n// 5\n// 6\n// 7\n// 8\n// 9\n// 10\n{}",
+                    t.replacen("    1;", "    9;", 1)
+                )
+            });
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, "not the whole file");
+}
+
+#[test]
+fn a_range_the_other_side_edited_outside_of_is_not_narrowed_on_merge_observed_failing() {
+    let dir = moved(
+        "moved-range-outside",
+        TEN_LINES_ITEM,
+        &|d| {
+            rewrite(d, "src/a.rs", &|t| {
+                let lines: Vec<&str> = t.lines().collect();
+                let kept: Vec<&str> = lines[..3].iter().chain(&lines[8..]).copied().collect();
+                format!("{}\n", kept.join("\n"))
+            });
+            run_ok(
+                d,
+                &pin_args(MREC, "--replace", "src/a.rs#L1-L10=src/a.rs#L5-L6"),
+            );
+        },
+        &|d| {
+            rewrite(d, "src/a.rs", &|t| {
+                let mut t = t.replacen("fn f() {", "fn f() { // y", 1);
+                let last = t.rfind("}\n").unwrap();
+                t.replace_range(last..last + 1, "} // y");
+                t
+            });
+            rebaseline(d);
+        },
+    );
+    refused_untouched(&dir, "not the whole file");
+}
+
+#[test]
+fn two_narrowings_of_one_file_on_one_side_are_each_recomputed() {
+    let dir = moved(
+        "moved-two-sites",
+        ONE_FILE_ITEM,
+        &|d| {
+            let a = std::fs::read_to_string(d.join("src/a.rs")).unwrap();
+            let lines: Vec<&str> = a.lines().collect();
+            let (h13, h911) = (
+                sha256(&lines[..3].join("\n")),
+                sha256(&lines[8..11].join("\n")),
+            );
+            let whole = format!("code:src/a.rs@sha256:{}", sha256(&a));
+            rewrite(d, MREC, &|t| {
+                t.replacen(&whole, &format!("code:src/a.rs#L1-L3@sha256:{h13}"), 1)
+                    .replacen(&whole, &format!("code:src/a.rs#L9-L11@sha256:{h911}"), 1)
+            });
+        },
+        &|d| {
+            edit(d, "src/a.rs", 0, "9;");
+            edit(d, "src/a.rs", 1, "8;");
+            rebaseline(d);
+        },
+    );
+    mapply(&dir);
+    let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    let merged = std::fs::read_to_string(dir.join("src/a.rs")).unwrap();
+    let lines: Vec<&str> = merged.lines().collect();
+    for (scope, span) in [("L1-L3", &lines[..3]), ("L9-L11", &lines[8..11])] {
+        let want = format!("code:src/a.rs#{scope}@sha256:{}", sha256(&span.join("\n")));
+        assert_eq!(text.matches(&want).count(), 1, "{want}: {text}");
+    }
 }

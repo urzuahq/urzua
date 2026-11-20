@@ -984,6 +984,7 @@ fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation, note: Optio
                 ],
                 None => [short(&p.ours), short(&p.theirs)],
             };
+            // A moved pin lists the changed locator's hash first, then the old one's.
             if p.moved_from_pin.is_none() {
                 sides.sort();
             }

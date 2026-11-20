@@ -130,7 +130,7 @@ pub(crate) fn verified_hash(
         .into());
     }
     let at = |commit: &str| show(repo_root, &format!("{commit}:{path}"));
-    check_narrowing(repo_root, config, heads, pin, &locator)?;
+    check_narrowing(pin, &locator)?;
     for a in attested_sides(heads, pin, &locator)? {
         let (side, file) = (a.side, a.locator.path.clone());
         let bytes = show(repo_root, &format!("{}:{file}", a.commit))
@@ -176,17 +176,12 @@ pub(crate) fn verified_hash(
         .map_err(|e| format!("{path} cannot be hashed: {e}"))?)
 }
 
-/// A locator one side replaced is recomputed only when the other side's re-pin
-/// of the old one covers everything the new one pins: the same file, the old
-/// scope containing the new (a whole file, or a range or symbol around it).
-/// Otherwise the merged file would be pinned over code that side never read.
-fn check_narrowing(
-    repo_root: &Path,
-    config: &Config,
-    heads: &Heads,
-    pin: &PinSides,
-    new: &Locator,
-) -> Result<(), String> {
+/// A locator one side replaced is recomputed only when the old one is the whole
+/// file and the new one a scope of that same file: the other side's re-pin of
+/// the whole file then covers every line the new pin does. A re-pin of a range
+/// or symbol covers what that scope held in the other side's file, whose lines
+/// can sit elsewhere than in the changer's, so no containment is judged.
+fn check_narrowing(pin: &PinSides, new: &Locator) -> Result<(), String> {
     let Some(moved) = &pin.moved_from else {
         return Ok(());
     };
@@ -195,41 +190,12 @@ fn check_narrowing(
     let (new_name, old_name) = (&pin.spelling, &moved.spelling);
     if old.path != new.path {
         return Err(format!(
-            "one side replaced '{old_name}' with '{new_name}', a different file, and the other side's re-pin of '{old_name}' does not cover it; only a narrowing within one file is resolved on merge"
+            "one side replaced '{old_name}' with '{new_name}', a different file, and the other side's re-pin of '{old_name}' does not cover it; only a whole file narrowed to a scope of itself is resolved on merge"
         ));
     }
-    let (Some(old_scope), Some(new_scope)) = (&old.scope, &new.scope) else {
-        return if new.scope.is_none() && old.scope.is_some() {
-            Err(format!(
-                "one side widened '{old_name}' to '{new_name}', the whole file, and the other side's re-pin of '{old_name}' does not cover the rest of it; only a narrowing is resolved on merge"
-            ))
-        } else {
-            Ok(())
-        };
-    };
-    let commit = if moved.changed_by_ours {
-        &heads.ours
-    } else {
-        &heads.theirs
-    };
-    let bytes = show(repo_root, &format!("{commit}:{}", new.path)).map_err(|_| {
-        format!(
-            "{} does not exist at the commit that changed the locator",
-            new.path
-        )
-    })?;
-    let text = String::from_utf8(bytes).map_err(|_| "the file is not UTF-8".to_string())?;
-    let resolver = urzua_core::locator::select_resolver(&config.locator_resolvers, &new.path);
-    let span = |scope| {
-        resolver
-            .clone()
-            .and_then(|r| urzua_core::locator::resolve_scope(&text, r, scope))
-            .map_err(|e| e.to_string())
-    };
-    let (outer, inner) = (span(old_scope)?, span(new_scope)?);
-    if inner.start < outer.start || inner.end > outer.end {
+    if old.scope.is_some() {
         return Err(format!(
-            "'{new_name}' is not inside '{old_name}' where the locator was changed, so the other side's re-pin of '{old_name}' does not cover it; only a narrowing is resolved on merge"
+            "one side replaced '{old_name}' with '{new_name}', and '{old_name}' is a range or symbol, not the whole file: the other side's re-pin of it covers what it held in that side's file, which may not be the lines '{new_name}' covers in the merged file; only a whole file narrowed to a scope of itself is resolved on merge"
         ));
     }
     Ok(())
