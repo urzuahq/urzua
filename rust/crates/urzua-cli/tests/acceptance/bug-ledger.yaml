@@ -90,3 +90,5 @@
   reason: "the board reading the configuration twice, visible only when the configuration changes while a page builds; a corpus case runs one command over fixed files and cannot edit the configuration mid-build, so board_integration changes it during a delayed build and asserts the page"
 - bug: BUG-205
   reason: "the editor hook opening a second session before judging an edit; a cost with identical verdict and output, which no corpus case can observe, and children_agreement_integration holds the verdict and message unchanged"
+- bug: BUG-214
+  reason: "the installed hook command's shell fallback running the configuration validator on events that never read its verdict; it is shell and awk in the agent harness's hook entry, which no urzua command run over a corpus executes, and harness_fallback_integration records which events invoke awk"
