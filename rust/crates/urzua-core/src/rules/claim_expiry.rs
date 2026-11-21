@@ -514,31 +514,7 @@ fn header_in_text(config: &Config, record_type: &str, text: &str) -> crate::head
     if !config.record_types.contains_key(record_type) {
         return crate::header::parse(text);
     }
-    record_in_text(config, record_type, text).header
-}
-
-/// A copy of a record's text read as the loader reads a record of its type.
-pub(super) fn record_in_text(config: &Config, record_type: &str, text: &str) -> Record {
-    let Some(type_config) = config.record_types.get(record_type) else {
-        return Record::parse(PathBuf::new(), record_type.to_string(), text);
-    };
-    let model = crate::document_model::declared_model(record_type, type_config)
-        .ok()
-        .flatten()
-        .and_then(|m| m.resolve().ok())
-        .unwrap_or_default();
-    let prefix = type_config
-        .prefix
-        .clone()
-        .unwrap_or_else(|| record_type.to_ascii_uppercase());
-    Record::parse_with_model(
-        PathBuf::new(),
-        record_type.to_string(),
-        text,
-        type_config.header_shape,
-        prefix,
-        &model,
-    )
+    Record::parse_declared(config, PathBuf::new(), record_type, text).header
 }
 
 /// The anchor date of a record's text, `None` when the field is absent or not a date.

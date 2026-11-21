@@ -1021,3 +1021,86 @@ fn a_declared_identity_type_pairs_a_slug_rename_through_its_deleted_copy() {
         "{report}"
     );
 }
+
+fn prefix_lines(config: &str) -> String {
+    config.replace(
+        "    dir: \"docs/adr\"\n",
+        "    dir: \"docs/adr\"\n    fields: {from: prefix-lines}\n",
+    )
+}
+
+fn prefix_lines_adr(dir: &Path, file: &str, fields: &[(&str, &str)]) {
+    let mut body = format!("# {file}\n\n");
+    for (k, v) in fields {
+        body.push_str(&format!("{k}: {v}\n"));
+    }
+    body.push_str("\nprose\n");
+    std::fs::write(dir.join("docs/adr").join(file), body).unwrap();
+}
+
+#[test]
+fn a_deleted_prefix_lines_records_locators_pull_in_the_record_sharing_one() {
+    let config = prefix_lines(&RICH_CONFIG.replace(
+        "  embodiment.consistency: error\n",
+        "  embodiment.consistency: error\n  embodiment.locator-promotion-candidate: error\n",
+    ));
+    let dir = empty_repo("prefix-lines-deleted", &config);
+    std::fs::create_dir_all(dir.join("src/a")).unwrap();
+    std::fs::write(dir.join("src/a/x.rs"), "fn a() {}\n").unwrap();
+    let cites = [
+        ("Status", "Accepted"),
+        ("Embodiment", "Implemented"),
+        ("Realized-by", "code: src/a/x.rs"),
+    ];
+    prefix_lines_adr(&dir, "ADR-1-first.md", &cites);
+    prefix_lines_adr(&dir, "ADR-2-second.md", &cites);
+    tag_base(&dir);
+    git(&dir, &["rm", "-q", "docs/adr/ADR-2-second.md"]);
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(
+        report["scope"]["dependents"],
+        serde_json::json!(["docs/adr/ADR-1-first.md"]),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_prefix_lines_waivers_base_scope_is_read_so_a_rescope_reports_the_finding() {
+    let config = WAIVER_CONFIG.replace(
+        "    dir: \"docs/waiver\"\n",
+        "    dir: \"docs/waiver\"\n    fields: {from: prefix-lines}\n",
+    );
+    let dir = empty_repo("prefix-lines-waiver", &config);
+    std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
+    adr(
+        &dir,
+        "ADR-1-dangling.md",
+        "Accepted",
+        &[("Implements", "RFC-9999")],
+    );
+    let waiver = |scope: &str| {
+        format!("# 0001 — Waive it\n\nRule: pointer.resolution\nScope: {scope}\nReason: tracked elsewhere\n\nprose\n")
+    };
+    std::fs::write(
+        dir.join("docs/waiver/0001-w.md"),
+        waiver("docs/adr/ADR-1-dangling.md"),
+    )
+    .unwrap();
+    tag_base(&dir);
+    let (_, full) = check(&dir, &[]);
+    assert_eq!(
+        full["blocking"], false,
+        "precondition: the waiver applies: {full}"
+    );
+    std::fs::write(
+        dir.join("docs/waiver/0001-w.md"),
+        waiver("docs/adr/ADR-9-elsewhere.md"),
+    )
+    .unwrap();
+    let (code, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(code, Some(1), "{report}");
+    assert!(
+        finding_files(&report).iter().any(|f| f.contains("ADR-1")),
+        "{report}"
+    );
+}

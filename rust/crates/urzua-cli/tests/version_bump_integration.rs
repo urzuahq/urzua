@@ -198,3 +198,21 @@ fn a_malformed_declaration_is_a_config_error() {
         assert_eq!(v["status"], "not-run", "{bad}: {v}");
     }
 }
+
+#[test]
+fn a_prefix_lines_records_base_version_is_read_as_the_loader_reads_it() {
+    let decl = DECL.to_string() + "    fields: {from: prefix-lines}\n";
+    let doc = |rows: &[&str]| {
+        spec("0.1", rows).replace(
+            "---\nStatus: Accepted\nVersion: '0.1'\n---\n# 1 - X\n",
+            "# 1 - X\n\nStatus: Accepted\nVersion: 0.1\n",
+        )
+    };
+    let dir = fixture("prefix-lines", &decl);
+    write(&dir, doc(&[ROW1]));
+    git(&dir, &["commit", "-q", "-m", "prefix-lines"]);
+    git(&dir, &["tag", "-f", "base"]);
+    write(&dir, doc(&[ROW1, ROW2]));
+    let v = run(&dir, &["--base", "base"]);
+    assert_eq!(hits(&v), 1, "{v}");
+}
