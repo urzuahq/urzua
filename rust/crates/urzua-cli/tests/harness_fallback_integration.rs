@@ -664,6 +664,45 @@ fn without_urzua_silence_is_stdout_and_stderr_and_post_command_says_one_short_li
     }
 }
 
+#[test]
+fn without_urzua_only_the_edit_fallback_reads_the_configuration() {
+    use std::os::unix::fs::PermissionsExt;
+    let cmds = commands();
+    let closed = session("closed");
+    let stubs = common::TempDir::new("urzua-fallback-awk-stub");
+    let log = stubs.join("calls");
+    let stub = stubs.join("awk");
+    std::fs::write(
+        &stub,
+        "#!/bin/sh\necho called >> \"$AWK_LOG\"\ncat >/dev/null\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let combo = Combo {
+        shell: vec![PathBuf::from("/bin/sh")],
+        awk: stub,
+    };
+    let payload = write_payload(&closed);
+    for (event, reads) in [
+        ("SessionStart", false),
+        ("PostToolUse", false),
+        ("PreToolUse", true),
+    ] {
+        let _ = std::fs::remove_file(&log);
+        let (out, _, _) = run_env(
+            &cmds[event],
+            &combo,
+            Some(&closed.to_string_lossy()),
+            &closed,
+            &payload,
+            true,
+            &[("AWK_LOG", &log.to_string_lossy())],
+        );
+        assert!(out.contains("could NOT run"), "{event}: {out}");
+        assert_eq!(log.exists(), reads, "{event}: awk called: {}", log.exists());
+    }
+}
+
 /// Every configuration people actually write that this repository holds: its
 /// own, the acceptance corpora and fixtures, what `urzua init` writes for each
 /// profile and in adopt mode, and the YAML examples in the reference docs that

@@ -85,11 +85,18 @@ END{if(dp>0||q)u=1;shut();if(!u&&!c)print "allow"}' < "$k" 2>/dev/null"##;
 /// `CLAUDE_PROJECT_DIR` and from the working directory, each resolved to its
 /// physical path first (a symlinked session directory is the directory it
 /// points to), the nearest `.urzua/config.yaml` at or above it. `found` is set
-/// when either finds one; `bad` when one is not a regular, readable, NUL-free
-/// file that `CERTAIN_ALLOW` reads as open. The walk ends at the root whatever
-/// `dirname` returns there (busybox gives `//` for `//`), so it always
-/// terminates; nothing it reads comes from the payload.
-const FIND_CONFIG: &str = r##"found=""; bad=""; for s in "${CLAUDE_PROJECT_DIR:-}" "$PWD"; do [ -n "$s" ] || continue; d=$(cd "$s" 2>/dev/null && pwd -P); [ -n "$d" ] || d=$s; while [ -n "$d" ]; do if [ -e "$d/.urzua/config.yaml" ]; then k="$d/.urzua/config.yaml"; found=1; if [ -f "$k" ] && [ -r "$k" ] && [ "$(tr -d '\000' < "$k" | wc -c)" -eq "$(wc -c < "$k")" ] && [ "$(CERTAIN)" = allow ]; then :; else bad=1; fi; break; fi; n=$(dirname "$d"); [ "$n" = "$d" ] && break; d=$n; done; done; "##;
+/// when either finds one. The walk ends at the root whatever `dirname` returns
+/// there (busybox gives `//` for `//`), so it always terminates; nothing it
+/// reads comes from the payload.
+///
+/// `$(READ)` is where the walk reads a configuration it found: [`READ_CONFIG`]
+/// for the edit hook, which needs the verdict, and nothing for the events that
+/// only report, which must not pay for a validator whose answer they never use.
+const FIND_CONFIG: &str = r##"found=""; bad=""; for s in "${CLAUDE_PROJECT_DIR:-}" "$PWD"; do [ -n "$s" ] || continue; d=$(cd "$s" 2>/dev/null && pwd -P); [ -n "$d" ] || d=$s; while [ -n "$d" ]; do if [ -e "$d/.urzua/config.yaml" ]; then k="$d/.urzua/config.yaml"; found=1; READ break; fi; n=$(dirname "$d"); [ "$n" = "$d" ] && break; d=$n; done; done; "##;
+
+/// Sets `bad` when the configuration at `$k` is not a regular, readable,
+/// NUL-free file that `CERTAIN_ALLOW` reads as open.
+const READ_CONFIG: &str = r##"if [ -f "$k" ] && [ -r "$k" ] && [ "$(tr -d '\000' < "$k" | wc -c)" -eq "$(wc -c < "$k")" ] && [ "$(CERTAIN)" = allow ]; then :; else bad=1; fi; "##;
 
 const FIX: &str = "Install urzua (https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md), then run: urzua harness status";
 
@@ -115,7 +122,9 @@ const FIX: &str = "Install urzua (https://github.com/urzuahq/urzua/blob/main/doc
 /// or backslash, so it is safe inside the JSON.
 pub fn hook_command(event: &str) -> Option<String> {
     let certain = CERTAIN_ALLOW.replace('\n', " ");
-    let find = FIND_CONFIG.replace("$(CERTAIN)", &format!("$({certain})"));
+    let read = READ_CONFIG.replace("$(CERTAIN)", &format!("$({certain})"));
+    let find_only = FIND_CONFIG.replace("READ ", "");
+    let find = FIND_CONFIG.replace("READ ", &read);
     // `command -v` finds the binary without running it, so a missing one
     // writes nothing to stderr. The fallback reads the payload only to drain
     // it, so the host's write never meets a closed pipe.
@@ -129,10 +138,10 @@ pub fn hook_command(event: &str) -> Option<String> {
             r#"{find}[ -n "$found" ] || exit 0; if [ -z "$bad" ]; then printf '%s\n' '{{"systemMessage":"urzua harness: the editor hook could NOT run ('"$w"'), so this edit was not judged; .urzua/config.yaml lets an unjudged edit through. {FIX}"}}'; exit 0; fi; printf '%s\n' '{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"urzua harness: the editor hook could NOT run ('"$w"'). Without it no edit in this repository can be judged, and .urzua/config.yaml does not let an unjudged edit through, so every edit is refused until urzua is installed or upgraded. A person can also edit outside the agent harness. {FIX}"}}}}'; exit 0"#
         ),
         "post-command" => format!(
-            r#"{find}[ -n "$found" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the post-command check could NOT run ('"$w"'). {FIX}"}}'; exit 0"#
+            r#"{find_only}[ -n "$found" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the post-command check could NOT run ('"$w"'). {FIX}"}}'; exit 0"#
         ),
         "session-start" => format!(
-            r#"{find}[ -n "$found" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the session-start check could NOT run ('"$w"'), so no guardrail can judge an edit in this session. {FIX}","hookSpecificOutput":{{"hookEventName":"SessionStart","additionalContext":"urzua harness: urzua could not run ('"$w"'); no edit is judged in this session. {FIX}"}}}}'; exit 0"#
+            r#"{find_only}[ -n "$found" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the session-start check could NOT run ('"$w"'), so no guardrail can judge an edit in this session. {FIX}","hookSpecificOutput":{{"hookEventName":"SessionStart","additionalContext":"urzua harness: urzua could not run ('"$w"'); no edit is judged in this session. {FIX}"}}}}'; exit 0"#
         ),
         // Without the binary no question is marked as asked, so no answer
         // can record an approval: the edit stays refused, and nothing to say.
