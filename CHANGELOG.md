@@ -4,6 +4,12 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.14 (2026-11-21)
+
+### Fixes
+
+- A record type that declares `fields: {from: prefix-lines}` has its merge-base copy read the way the loader reads it. Before, a `--base` run read that copy as YAML front matter, so the decider gate (`diff.decider-required`) treated a move from Proposed as unreadable, `revision-log.version-bump-required` read the base version as absent, and a deleted record's locators, a changed waiver's old `Scope` and a child record's base status were lost when deciding which unchanged records a change affects. A pure rename of such a record is paired with its base copy by `Stable-Id` rather than judged as a new record by `header.scaffold-mismatch`. `urzua fix` also pairs such a record by `Stable-Id`, so a revision log deleted and the record re-added at another path is refused rather than replaced.
+
 ## 0.4.13 (2026-11-20)
 
 ### Features
