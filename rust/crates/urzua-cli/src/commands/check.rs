@@ -2628,8 +2628,19 @@ fn load_renamed_paths(
     for path in deleted {
         match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, path) {
             Ok(text) => {
-                let header = urzua_core::header::parse(&text);
-                if let Some(id) = header.get_reserved("Stable-Id") {
+                let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+                let record_type = session
+                    .config
+                    .sorted_type_names()
+                    .into_iter()
+                    .find(|t| {
+                        let c = &session.config.record_types[*t];
+                        c.owns_dir(path.parent()) && !c.excludes(file_name)
+                    })
+                    .map_or("", String::as_str);
+                let record =
+                    urzua_core::record::Record::parse_declared(&session.config, path.clone(), record_type, &text);
+                if let Some(id) = record.header.get_reserved("Stable-Id") {
                     if !id.trim().is_empty() {
                         gone.insert(id.trim().to_string());
                     }

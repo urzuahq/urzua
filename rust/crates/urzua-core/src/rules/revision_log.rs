@@ -251,12 +251,11 @@ fn judge_version_bump(
     let Some(first) = added.first() else {
         return Outcome::Examined;
     };
-    let before = crate::record::Record::parse_with_shape_and_prefix(
+    let before = crate::record::Record::parse_declared(
+        config,
         record.path.clone(),
-        record.record_type.clone(),
+        &record.record_type,
         then_text,
-        type_config.header_shape,
-        record.type_prefix.clone(),
     );
     let field = bump.field.trim();
     let norm = |v: Option<&str>| v.map(|v| v.trim().to_string());

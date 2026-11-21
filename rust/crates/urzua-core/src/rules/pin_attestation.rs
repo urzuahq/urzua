@@ -406,7 +406,12 @@ pub fn diff_pin_changed_unattested(
             else {
                 return Outcome::Absent;
             };
-            let mut before = claim_expiry::record_in_text(config, &record.record_type, then);
+            let mut before = crate::record::Record::parse_declared(
+                config,
+                std::path::PathBuf::new(),
+                &record.record_type,
+                then,
+            );
             delivery_items::attach_done_items_to(&mut before, config, then);
             let events = added_events(config, record, now, then);
             let shown = record.path.display().to_string();

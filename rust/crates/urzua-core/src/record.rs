@@ -50,6 +50,53 @@ pub struct Record {
 }
 
 impl Record {
+    /// `content` read as a record of `record_type` with the type's resolved
+    /// document model deciding where the header fields are, as the loader reads
+    /// it. Unlike the loader, a model that does not resolve is not an error
+    /// here: the copy is read with the type's `header_shape` alone, since the
+    /// loader has already reported that model for the current tree. Every copy of a record read from outside the tree (a merge-base or
+    /// older commit's text) goes through here, so a type whose fields are not
+    /// front matter reads the same at every commit (`BUG-213`).
+    pub fn parse_declared(
+        config: &crate::config::Config,
+        path: PathBuf,
+        record_type: &str,
+        content: &str,
+    ) -> Self {
+        match config.record_types.get(record_type) {
+            Some(type_config) => Self::parse_as_type(path, record_type, type_config, content),
+            None => Self::parse(path, record_type.to_string(), content),
+        }
+    }
+
+    /// [`Record::parse_declared`] with the type's configuration in hand, for a
+    /// caller that reads it from a configuration other than the current one
+    /// (the merge base's).
+    pub fn parse_as_type(
+        path: PathBuf,
+        record_type: &str,
+        type_config: &crate::config::RecordTypeConfig,
+        content: &str,
+    ) -> Self {
+        let model = crate::document_model::declared_model(record_type, type_config)
+            .ok()
+            .flatten()
+            .and_then(|m| m.resolve().ok())
+            .unwrap_or_default();
+        let prefix = type_config
+            .prefix
+            .clone()
+            .unwrap_or_else(|| record_type.to_ascii_uppercase());
+        Self::parse_with_model(
+            path,
+            record_type.to_string(),
+            content,
+            type_config.header_shape,
+            prefix,
+            &model,
+        )
+    }
+
     /// Parse using the default (`yaml-frontmatter`) header shape, kept for callers that have no per-type shape to declare.
     pub fn parse(path: PathBuf, record_type: String, content: &str) -> Self {
         Self::parse_with_shape(path, record_type, content, HeaderShape::default())
