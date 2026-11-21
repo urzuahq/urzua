@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M7XYZXYFDRFWMS8K2T2FJK1V
 Status: Fixed
-Found-in: a maintainer's macOS session on 2026-11-21, where a urzua too old to have `harness hook`, the session-start fallback took about 4.5 minutes on a 257-line configuration and the agent host timed out the turn. Read from `command.rs`; not slow on Linux (0.05-0.09 s).
+Found-in: a maintainer's macOS session on 2026-11-21, where, with a urzua too old to have `harness hook`, the session-start fallback took about 4.5 minutes on a 257-line configuration and the agent host timed out the turn. Read from `command.rs`; not slow on Linux (0.05-0.09 s).
 Realized-by: test:rust/crates/urzua-cli/tests/harness_fallback_integration.rs#without_urzua_only_the_edit_fallback_reads_the_configuration@sha256:71c7de32d6fbbda2024f2fb7e21db22e00bfdbbd99ebb577271373c3560017a0
 ---
 # 214 — Hook fallback runs the YAML validator on events that never read its verdict
