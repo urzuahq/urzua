@@ -1,0 +1,7 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under, declaring an adr type whose fields are bare prefix lines (no front matter) and that only the maintainers group (alice) may move an adr to Accepted or Rejected; not a record.
+  - path: docs/adr/ADR-1-queue.md
+    irregularity: none at the base commit; the case's change moves it from Proposed to Accepted.
+  - path: actors-outsider.json
+    irregularity: the actors file the gate writes for a pull request authored by someone outside the maintainers group; not a record.

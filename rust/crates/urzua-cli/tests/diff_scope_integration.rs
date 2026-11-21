@@ -1104,3 +1104,43 @@ fn a_prefix_lines_waivers_base_scope_is_read_so_a_rescope_reports_the_finding() 
         "{report}"
     );
 }
+
+#[test]
+fn a_renamed_prefix_lines_record_is_paired_by_its_base_stable_id_not_judged_as_new() {
+    let config = prefix_lines(
+        "schema_version: 2\nrules:\n  header.scaffold-mismatch: error\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\", \"Note\"]\n    pointer_fields: []\n    narrative_fields: []\n",
+    );
+    let dir = empty_repo("prefix-lines-rename", &config);
+    let fields = [
+        ("Stable-Id", "01M7W8EZ84B0CNEPGQY72HFJQA"),
+        ("Status", "Accepted"),
+        ("Note", "hand-written"),
+    ];
+    prefix_lines_adr(&dir, "ADR-1-x.md", &fields);
+    tag_base(&dir);
+    let new = [
+        ("Stable-Id", "01M7W8EZ84B0CNEPGQY72HFJQB"),
+        ("Status", "Accepted"),
+        ("Note", "hand-written"),
+    ];
+    prefix_lines_adr(&dir, "ADR-2-y.md", &new);
+    git(&dir, &["add", "-A"]);
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert!(
+        rule_files(&report, "header.scaffold-mismatch")
+            .iter()
+            .any(|f| f.ends_with("ADR-2-y.md")),
+        "precondition: a new record with a hand-written field is reported: {report}"
+    );
+    git(&dir, &["rm", "-q", "-f", "docs/adr/ADR-2-y.md"]);
+    git(
+        &dir,
+        &["mv", "docs/adr/ADR-1-x.md", "docs/adr/ADR-1-renamed.md"],
+    );
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(
+        rule_files(&report, "header.scaffold-mismatch"),
+        Vec::<String>::new(),
+        "{report}"
+    );
+}

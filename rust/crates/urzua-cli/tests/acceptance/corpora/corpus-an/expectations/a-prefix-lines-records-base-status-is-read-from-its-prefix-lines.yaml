@@ -1,0 +1,15 @@
+id: a-prefix-lines-records-base-status-is-read-from-its-prefix-lines
+corpus: corpus-an
+bugs: [BUG-213]
+# ADR-1's fields are bare prefix lines. Its merge-base copy is read the way the
+# loader reads it, so the gate names the move from Proposed rather than
+# treating the base copy as unreadable.
+commits:
+  - write:
+      docs/adr/ADR-1-queue.md: "# ADR-1: Queue\n\nStatus: Accepted\n\nprose\n"
+invocation: [check, --base, base, --actors, actors-outsider.json]
+expect_exit: 1
+expect_findings:
+  - {rule: diff.decider-required, severity: error, file: docs/adr/ADR-1-queue.md, message_contains: "moved from 'Proposed' to 'Accepted'"}
+expect_rules_ran:
+  - diff.decider-required

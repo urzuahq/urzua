@@ -50,9 +50,11 @@ pub struct Record {
 }
 
 impl Record {
-    /// `content` read as a record of `record_type` exactly as the loader reads
-    /// it: the type's resolved document model decides where the header fields
-    /// are. Every copy of a record read from outside the tree (a merge-base or
+    /// `content` read as a record of `record_type` with the type's resolved
+    /// document model deciding where the header fields are, as the loader reads
+    /// it. Unlike the loader, a model that does not resolve is not an error
+    /// here: the copy is read with the type's `header_shape` alone, since the
+    /// loader has already reported that model for the current tree. Every copy of a record read from outside the tree (a merge-base or
     /// older commit's text) goes through here, so a type whose fields are not
     /// front matter reads the same at every commit (`BUG-213`).
     pub fn parse_declared(

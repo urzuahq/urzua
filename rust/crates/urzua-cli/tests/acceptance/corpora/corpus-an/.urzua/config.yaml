@@ -1,0 +1,16 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  diff.decider-required: error
+record_types:
+  adr:
+    dir: docs/adr
+    fields: {from: prefix-lines}
+    required_fields: [Status]
+    statuses:
+      values: [Proposed, Accepted, Rejected]
+authority:
+  deciders:
+    maintainers: {logins: [Alice]}
+  gates:
+    - {type: adr, to: [Accepted, Rejected], by: maintainers}
