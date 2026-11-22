@@ -180,8 +180,10 @@ urzua reverify --pin-only --apply --ids docs/adr/ADR-0001-use-postgres.md \
 
 A locator can also carry a scope, `path#Symbol` or a line range `path#L10-L40`, to pin one item of a
 file; a scope must be pinned, as in `code:src/lib.rs#Config@sha256:<hash>`. Symbols need a
-`locator_resolvers` entry per language; a line range needs none. See `SPEC-3`, "Scoped evidence
-pins".
+`locator_resolvers` entry per language; a line range needs none. A member of a type is
+`path#Type::member`; when a field and a method share a name, a resolver whose member entries declare
+a `kind` lets `path#Type::name[fn]` or `path#Type::name[field]` pick one. See `SPEC-3`, "Scoped
+evidence pins".
 
 ### When the evidence changes
 

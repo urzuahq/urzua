@@ -303,7 +303,7 @@ fn explain_scope(
     Ok(ScopeExplanation {
         scope: scope.to_string(),
         resolver: match scope {
-            locator::Scope::Symbol(_) => resolver.map(|r| r.name.clone()),
+            locator::Scope::Symbol { .. } => resolver.map(|r| r.name.clone()),
             locator::Scope::Range { .. } => None,
         },
         start: span.start,
