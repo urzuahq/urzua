@@ -1815,7 +1815,9 @@ fn hook_entry_problems(
     }
     // An entry the bundle wants that the lock does not list (a release added it
     // after the install) is not wired until `install` writes it. Without a
-    // readable settings file the walk above has already named every locked entry.
+    // readable settings file the walk above has already named every locked entry;
+    // a file the lock lists nothing for is named once here.
+    let mut unreadable_reported: Vec<&str> = Vec::new();
     for (file, w) in wanted {
         let listed = lock.entries.iter().any(|e| {
             e.file == *file
@@ -1827,6 +1829,14 @@ fn hook_entry_problems(
             continue;
         }
         let Some(doc) = cached_doc(docs, root, file).as_ref() else {
+            let locked_here = lock.entries.iter().any(|e| e.file == *file);
+            if !locked_here && !unreadable_reported.contains(&file.as_str()) {
+                unreadable_reported.push(file);
+                problems.push(Problem {
+                    check: "hook-entry",
+                    message: format!("{file} is missing or unreadable, so no hook entry is wired in it: the guardrail does not run (run `urzua harness status`, then `urzua harness install`)"),
+                });
+            }
             continue;
         };
         if settings::find(doc, &w.event, &w.matcher, &w.handler).is_none() {
