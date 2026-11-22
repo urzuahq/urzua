@@ -1453,26 +1453,31 @@ pub fn run_limits(config: Option<PathBuf>) -> ExitCode {
     }
 }
 
-/// The hash of each hook entry the bundle and configuration want now, keyed by
-/// (settings file, entry key), for the session-start check.
-pub(crate) fn wanted_entry_hashes(
+/// The hook entries the bundle and configuration want now, with the settings
+/// file each belongs to, for the session-start check.
+pub(crate) fn wanted_entries(
     root: &Path,
     config: &urzua_core::config::Config,
     adapters: &[String],
-) -> BTreeMap<(String, String), String> {
+) -> Vec<(String, settings::Entry)> {
     let env = Env {
         root: root.to_path_buf(),
         types: declared_types(config),
         harness: config.harness.clone(),
     };
     desired(&env, adapters)
-        .map(|want| {
-            want.entries
-                .iter()
-                .map(|(file, e)| ((file.clone(), e.key()), e.hash()))
-                .collect()
-        })
+        .map(|want| want.entries)
         .unwrap_or_default()
+}
+
+/// The hash of each wanted hook entry, keyed by (settings file, entry key).
+pub(crate) fn wanted_entry_hashes(
+    wanted: &[(String, settings::Entry)],
+) -> BTreeMap<(String, String), String> {
+    wanted
+        .iter()
+        .map(|(file, e)| ((file.clone(), e.key()), e.hash()))
+        .collect()
 }
 
 /// The adapters the lock names, for `doctor` and `session-start`.

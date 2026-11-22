@@ -1787,10 +1787,11 @@ fn adapter_problems(lock: &lock::Lock, problems: &mut Vec<Problem>) -> Vec<Strin
 fn hook_entry_problems(
     root: &Path,
     lock: &lock::Lock,
-    wanted: &std::collections::BTreeMap<(String, String), String>,
+    wanted: &[(String, settings::Entry)],
     docs: &mut SettingsDocs,
     problems: &mut Vec<Problem>,
 ) {
+    let hashes = super::wanted_entry_hashes(wanted);
     for e in &lock.entries {
         let doc = cached_doc(docs, root, &e.file);
         let found = doc
@@ -1805,7 +1806,7 @@ fn hook_entry_problems(
                 check: "hook-entry",
                 message: format!("the hook entry '{}' in {} is not the one the install wrote (its hash differs from {}): it may no longer run the guardrail (run `urzua harness status`, then `urzua harness update --force`)", e.key(), e.file, lock::LOCK_PATH),
             }),
-            Some(_) if wanted.get(&(e.file.clone(), e.key())).is_some_and(|h| *h != e.hash) => problems.push(Problem {
+            Some(_) if hashes.get(&(e.file.clone(), e.key())).is_some_and(|h| *h != e.hash) => problems.push(Problem {
                 check: "hook-entry",
                 message: format!("the hook entry '{}' in {} is out of date: the bundle or the configuration (such as harness.limits.hook_timeout_seconds) now renders it differently (run `urzua harness update`)", e.key(), e.file),
             }),
@@ -1813,30 +1814,25 @@ fn hook_entry_problems(
         }
     }
     // An entry the bundle wants that the lock does not list (a release added it
-    // after the install) is not wired until `install` writes it.
-    for (file, key) in wanted.keys() {
-        if lock
-            .entries
-            .iter()
-            .any(|e| e.file == *file && e.key() == *key)
-        {
+    // after the install) is not wired until `install` writes it. Without a
+    // readable settings file the walk above has already named every locked entry.
+    for (file, w) in wanted {
+        let listed = lock.entries.iter().any(|e| {
+            e.file == *file
+                && e.event == w.event
+                && e.matcher == w.matcher
+                && e.handler == w.handler
+        });
+        if listed {
             continue;
         }
-        let mut parts = key.splitn(3, '|');
-        let (event, matcher, handler) = (
-            parts.next().unwrap_or_default(),
-            parts.next().unwrap_or_default(),
-            parts.next().unwrap_or_default(),
-        );
-        let matcher = (!matcher.is_empty()).then(|| matcher.to_string());
-        let wired = cached_doc(docs, root, file)
-            .as_ref()
-            .and_then(|d| settings::find(d, event, &matcher, handler))
-            .is_some();
-        if !wired {
+        let Some(doc) = cached_doc(docs, root, file).as_ref() else {
+            continue;
+        };
+        if settings::find(doc, &w.event, &w.matcher, &w.handler).is_none() {
             problems.push(Problem {
                 check: "hook-entry",
-                message: format!("the hook entry '{key}' in {file} is not wired: the installed bundle predates it, so the guardrail does not run (run `urzua harness install`)"),
+                message: format!("the hook entry '{}' in {file} is not wired: the installed bundle predates it, so the guardrail does not run (run `urzua harness install`)", w.key()),
             });
         }
     }
@@ -1972,7 +1968,7 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
     version_problem(&lock, &mut problems);
     let command_dirs = adapter_problems(&lock, &mut problems);
     let mut docs = SettingsDocs::new();
-    let wanted = super::wanted_entry_hashes(&ws.repo_root, &ws.config, &lock.adapters);
+    let wanted = super::wanted_entries(&ws.repo_root, &ws.config, &lock.adapters);
     hook_entry_problems(&ws.repo_root, &lock, &wanted, &mut docs, &mut problems);
     owned_file_problems(&ws.repo_root, &lock, &command_dirs, &mut problems);
     kill_switch_problems(&ws.repo_root, &lock, &mut docs, &mut problems);
