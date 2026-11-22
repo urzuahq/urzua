@@ -47,11 +47,14 @@ locator_resolvers:
       spans: all
     # Two member patterns, counted together: a method ends at its closing brace, and
     # a struct field (`Type::field`, in the `struct Type {` span) at the next field.
+    # `Type::name[fn]` or `Type::name[field]` selects one when a field and a method share a name.
     member:
       - start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*fn\s+{symbol}\b'
         end: brace_balanced
+        kind: fn
       - start: '^\s*(pub(\([^)]*\))?\s+)?{symbol}\s*:([^:]|$)'
         end: indent
+        kind: field
     # `Type::<Trait>::member`: `impl Trait for Type {`, with an optional path before the trait.
     trait_container:
       start: '^\s*impl(<.*?>)?\s+([A-Za-z_][A-Za-z0-9_]*::)*{trait}(<[^{]*>)?\s+for\s+{symbol}\b'
