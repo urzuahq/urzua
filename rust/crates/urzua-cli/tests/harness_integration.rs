@@ -1371,6 +1371,22 @@ fn session_start_does_not_call_every_entry_predating_when_the_settings_file_is_g
 }
 
 #[test]
+fn session_start_names_a_missing_settings_file_when_the_lock_lists_no_entries() {
+    let dir = fixture("session-empty-lock-no-settings", &config(""));
+    install(&dir);
+    wire_git_hooks(&dir);
+    let ok = path_with(&["urzua", "python3", "git", "sh"]);
+    let mut lock: serde_json::Value = serde_json::from_str(&read(&dir, LOCK)).unwrap();
+    lock["entries"] = serde_json::json!([]);
+    std::fs::write(dir.join(LOCK), serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+    std::fs::remove_file(dir.join(SETTINGS)).unwrap();
+    let v = session_start(&dir, &ok, true);
+    assert_ne!(v["verdict"], "allow", "{v}");
+    assert_eq!(checks_of(&v), ["hook-entry"], "{v}");
+    assert!(msg(&v).contains("is missing or unreadable"), "{v}");
+}
+
+#[test]
 fn session_start_names_the_unpointed_hook_directory_and_states_no_consequence_for_git_hooks_alone()
 {
     let deny = format!(
