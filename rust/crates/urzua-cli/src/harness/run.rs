@@ -1812,6 +1812,34 @@ fn hook_entry_problems(
             Some(_) => {}
         }
     }
+    // An entry the bundle wants that the lock does not list (a release added it
+    // after the install) is not wired until `install` writes it.
+    for (file, key) in wanted.keys() {
+        if lock
+            .entries
+            .iter()
+            .any(|e| e.file == *file && e.key() == *key)
+        {
+            continue;
+        }
+        let mut parts = key.splitn(3, '|');
+        let (event, matcher, handler) = (
+            parts.next().unwrap_or_default(),
+            parts.next().unwrap_or_default(),
+            parts.next().unwrap_or_default(),
+        );
+        let matcher = (!matcher.is_empty()).then(|| matcher.to_string());
+        let wired = cached_doc(docs, root, file)
+            .as_ref()
+            .and_then(|d| settings::find(d, event, &matcher, handler))
+            .is_some();
+        if !wired {
+            problems.push(Problem {
+                check: "hook-entry",
+                message: format!("the hook entry '{key}' in {file} is not wired: the installed bundle predates it, so the guardrail does not run (run `urzua harness install`)"),
+            });
+        }
+    }
 }
 
 /// The files the install owns are the ones it wrote: a translator that was
