@@ -63,16 +63,7 @@ fn deleted_record_facts(
             }
             let content = urzua_io::read_at_commit(repo_root, &changes.merge_base, path)
                 .map_err(|e| format!("could not read deleted record {}: {e}", path.display()))?;
-            let record = Record::parse_with_shape_and_prefix(
-                path.clone(),
-                type_name.clone(),
-                &content,
-                type_config.header_shape,
-                type_config
-                    .prefix
-                    .clone()
-                    .unwrap_or_else(|| type_name.to_ascii_uppercase()),
-            );
+            let record = Record::parse_declared(config, path.clone(), type_name, &content);
             if let Some(id) = rules::record_id(&record) {
                 ids.push(urzua_core::values::RecordId::new(&id).as_str().to_string());
             }
@@ -117,16 +108,7 @@ fn touched_waiver_scopes(
             let Ok(content) = urzua_io::read_at_commit(repo_root, &changes.merge_base, path) else {
                 continue;
             };
-            let record = Record::parse_with_shape_and_prefix(
-                path.clone(),
-                type_name.to_string(),
-                &content,
-                type_config.header_shape,
-                type_config
-                    .prefix
-                    .clone()
-                    .unwrap_or_else(|| type_name.to_ascii_uppercase()),
-            );
+            let record = Record::parse_declared(config, path.clone(), type_name, &content);
             waivers.extend(urzua_core::waiver::load_suppressions(
                 &[record],
                 &suppression_type,
@@ -372,27 +354,7 @@ fn deleted_records(
                 continue;
             }
         };
-        let prefix = type_config
-            .prefix
-            .clone()
-            .unwrap_or_else(|| type_name.to_ascii_uppercase());
-        let old = match crate::discovery::resolved_model(type_name, type_config) {
-            Ok(model) => Record::parse_with_model(
-                path.clone(),
-                type_name.to_string(),
-                &content,
-                type_config.header_shape,
-                prefix,
-                &model,
-            ),
-            Err(_) => Record::parse_with_shape_and_prefix(
-                path.clone(),
-                type_name.to_string(),
-                &content,
-                type_config.header_shape,
-                prefix,
-            ),
-        };
+        let old = Record::parse_as_type(path.clone(), type_name, type_config, &content);
         out.push((path.clone(), old));
     }
     out
@@ -538,15 +500,11 @@ pub(crate) fn committed_statuses(
                 }
             }
             Ok(Some(content)) => {
-                let old = Record::parse_with_shape_and_prefix(
+                let old = Record::parse_declared(
+                    config,
                     record.path.clone(),
-                    record.record_type.clone(),
+                    &record.record_type,
                     &content,
-                    type_config.header_shape,
-                    type_config
-                        .prefix
-                        .clone()
-                        .unwrap_or_else(|| record.record_type.to_ascii_uppercase()),
                 );
                 let field =
                     rules::relation_field_name(config, &record.record_type, RelationRole::Status);
@@ -637,16 +595,12 @@ fn parents_of_moved_children(
         let base =
             urzua_io::read_at_commit_if_present(repo_root, &changes.merge_base, &record.path);
         let moved = match (base, config.record_types.get(&record.record_type)) {
-            (Ok(Some(content)), Some(type_config)) => {
-                let old = Record::parse_with_shape_and_prefix(
+            (Ok(Some(content)), Some(_)) => {
+                let old = Record::parse_declared(
+                    config,
                     record.path.clone(),
-                    record.record_type.clone(),
+                    &record.record_type,
                     &content,
-                    type_config.header_shape,
-                    type_config
-                        .prefix
-                        .clone()
-                        .unwrap_or_else(|| record.record_type.to_ascii_uppercase()),
                 );
                 let read =
                     |r: &Record, field: &str| r.header.get(field).map(|v| v.trim().to_string());

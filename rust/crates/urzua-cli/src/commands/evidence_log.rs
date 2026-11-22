@@ -5,6 +5,7 @@
 use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use urzua_core::record::Record;
 
 use urzua_core::config::{Config, RevisionLogId, RevisionLogShape};
 use urzua_core::fix::new_log::{self, LogPlan};
@@ -148,6 +149,8 @@ impl<'a> LogHistory<'a> {
     /// base, the record's recent history.
     fn committed_log(
         &self,
+        config: &Config,
+        record_type: &str,
         record: &Path,
         stable_id: Option<&str>,
         id: &RevisionLogId,
@@ -156,7 +159,7 @@ impl<'a> LogHistory<'a> {
         if let Some(hit) = self.seen.borrow().get(record) {
             return hit.clone();
         }
-        let hit = self.find(record, stable_id, id, shape);
+        let hit = self.find(config, record_type, record, stable_id, id, shape);
         self.seen
             .borrow_mut()
             .insert(record.to_path_buf(), hit.clone());
@@ -165,6 +168,8 @@ impl<'a> LogHistory<'a> {
 
     fn find(
         &self,
+        config: &Config,
+        record_type: &str,
         record: &Path,
         stable_id: Option<&str>,
         id: &RevisionLogId,
@@ -195,7 +200,8 @@ impl<'a> LogHistory<'a> {
                 .into_iter()
                 .find(|p| {
                     copy(base, p).is_some_and(|t| {
-                        urzua_core::header::parse(&t)
+                        Record::parse_declared(config, p.clone(), record_type, &t)
+                            .header
                             .get_reserved("Stable-Id")
                             .is_some_and(|v| v.trim() == sid)
                             && has_log(&t)
@@ -260,10 +266,19 @@ pub(crate) fn evidence_log(
     if plan == LogPlan::Present {
         return EvidenceLog::Present;
     }
-    let stable_id = urzua_core::header::parse(content)
+    let record_type_name = record_type.unwrap_or_default();
+    let stable_id = Record::parse_declared(config, record.to_path_buf(), record_type_name, content)
+        .header
         .get_reserved("Stable-Id")
         .map(|s| s.to_string());
-    if let Some(spec) = history.committed_log(record, stable_id.as_deref(), &id, &shape) {
+    if let Some(spec) = history.committed_log(
+        config,
+        record_type_name,
+        record,
+        stable_id.as_deref(),
+        &id,
+        &shape,
+    ) {
         return EvidenceLog::Refused(
             format!(
                 "the committed copy {spec} has a Revision log ({}) that the record no longer has -- refusing to {verb} into a new log; restore that section first",

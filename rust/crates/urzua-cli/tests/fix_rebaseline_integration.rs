@@ -1852,3 +1852,44 @@ fn a_created_log_records_its_base_in_the_report_and_the_row() {
     commit_all(&dir);
     assert!(unattested(&check_base(&dir)).is_empty());
 }
+
+#[test]
+fn a_prefix_lines_record_deleted_and_re_added_elsewhere_is_paired_by_its_stable_id() {
+    let config = CONFIG.replace(
+        "    dir: \"docs/adr\"\n",
+        "    dir: \"docs/adr\"\n    fields: {from: prefix-lines}\n",
+    );
+    let dir = logless_with("prefix-lines-readded", &config, "", LOGGED);
+    let text = |title: &str, body: &str| {
+        format!(
+            "# {title}\n\nStable-Id: 01TESTSTABLEID0000000000AB\nEmbodiment: Implemented\nRealized-by: spec:docs/s.md, code:src/a.rs@sha256:{}, test:t.rs\n\n{body}",
+            sha256(V1)
+        )
+    };
+    // The base copy's body is long enough that git's rename detection does not
+    // pair it with the re-added record: only its Stable-Id can.
+    git(&dir, &["checkout", "-q", "main"]);
+    std::fs::write(
+        dir.join(A),
+        text(
+            "ADR-1: T",
+            &("Body line of the decided text.\n".repeat(40)
+                + "\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Decided the thing. | **substantive** |\n"),
+        ),
+    )
+    .unwrap();
+    commit_all(&dir);
+    git(&dir, &["checkout", "-q", "-B", "work"]);
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    git(&dir, &["rm", "-q", "-f", A]);
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    commit_all(&dir);
+    let new = "docs/adr/ADR-7-other.md";
+    std::fs::write(
+        dir.join(new),
+        text("ADR-7: Entirely rewritten", "Nothing alike.\n"),
+    )
+    .unwrap();
+    commit_all(&dir);
+    assert_restore_refused(&dir, new);
+}

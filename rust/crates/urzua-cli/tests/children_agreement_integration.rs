@@ -640,3 +640,33 @@ fn a_blocked_edit_still_names_the_parent_it_contradicts() {
         "{v}"
     );
 }
+
+#[test]
+fn a_prefix_lines_childs_base_status_is_read_so_a_body_change_does_not_pull_in_the_parent() {
+    let cfg = on().replace(
+        "    header_shape: yaml-frontmatter\n",
+        "    fields: {from: prefix-lines}\n",
+    );
+    let doc = |n: u32, status: &str, part_of: &str| {
+        let line = if part_of.is_empty() {
+            String::new()
+        } else {
+            format!("Part-of: {part_of}\n")
+        };
+        format!("# {n} - Work\n\nStatus: {status}\n{line}\nprose\n")
+    };
+    let dir = repo("prefix-lines", &cfg, &[]);
+    std::fs::write(dir.join(path(1)), doc(1, "Planned", "")).unwrap();
+    std::fs::write(dir.join(path(2)), doc(2, "Active", "WORK-1")).unwrap();
+    common::commit_all(&dir, 1);
+    let (_, _, full) = run(&dir, &["check"]);
+    assert_eq!(findings(&full).len(), 1, "precondition: {full}");
+    std::fs::write(
+        dir.join(path(2)),
+        format!("{}\nMore prose.\n", doc(2, "Active", "WORK-1")),
+    )
+    .unwrap();
+    let (_, _, v) = run(&dir, &["check", "--base", "HEAD"]);
+    assert!(findings(&v).is_empty(), "{v}");
+    assert_eq!(v["scope"]["dependents"], serde_json::json!([]), "{v}");
+}
