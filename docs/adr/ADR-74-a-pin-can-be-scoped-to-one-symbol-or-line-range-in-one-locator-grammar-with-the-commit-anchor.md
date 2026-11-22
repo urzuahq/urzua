@@ -375,10 +375,12 @@ and `Type::<Trait>[fn]` do not, because a kind selects a member entry and those 
 member. A `kind` has no `.`, unlike a `seg`. The suffix closes the symbol, so it sits after the last
 segment and before any anchor (`path#Type::name[fn]@sha256:<hex>`). Point 1's parse order is
 unchanged: the anchors are taken first, then the text after the last `#` is the scope. `[` and `]`
-were not in `seg` and appear nowhere else in the grammar, so no locator that parsed before reads
-differently: a tail that contained `[` was never a symbol and was part of the path. That stays true
-when the text before the tail's first `[` is not a symbol (`x[1].rs#9[a]` is a path). When it is a
-symbol and the suffix is not exactly one well-formed `[kind]` on a member (`A::b[]`, `A::b[f.n]`,
+were not in `seg`, so no scope that parsed before has a different meaning: a tail that contained
+`[` was never a symbol and was part of the path. One narrow change follows. A path whose last `#`
+part is a symbol followed by `[` (`src/a#b[c]`, `src/x#y[ab].rs`, `a.rs#A::b[]`) parsed as a path
+before and now reads as a kind suffix, reported when malformed. No locator in this repository's
+corpus has that shape. When the text before the tail's first `[` is not a symbol, the tail is still
+part of the path (`x[1].rs#9[a]` is a path). When it is a symbol and the suffix is not exactly one well-formed `[kind]` on a member (`A::b[]`, `A::b[f.n]`,
 `A::b[fn]x`, `A::b[fn][field]`, `A[fn]`), the locator is malformed and `embodiment.locator-exists`
 reports a malformed kind suffix naming the grammar, never a path missing from the tree.
 
@@ -428,3 +430,4 @@ whole trait impl. Exact key names and test vectors are `SPEC-3`'s.
 > | 2026-11-05 | Amendment added: a resolver's `member` may be a list of entries, each with its own `start` and `end`; matches are counted across entries as well as spans, and a line two entries match is ambiguous; a container may match a struct or type declaration, so a field is addressable (`indent` end kind, known limit stated). **Why:** `#319` (`MILE-185`) extends point 5's grammar and the independent review asked for a recorded decision; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
 > | 2026-11-05 | Amendment accepted. Folded in the review's wording points: `trait_container` spans also take the member entries, a one-line struct's fields are not addressable, and point 5 is read with the amendment. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-22 | Amendment added and accepted: a resolver's member entry may declare a `kind`, unique within the resolver and validated at load, and a member scope may end in `[kind]` to try only the entries of that kind; an undeclared kind is reported, and an unsuffixed scope resolves as before. **Why:** `MILE-352`: a field and a method of one name could be pinned only by line range. Maintainer decision, 2026-11-22 (AskUserQuestion answer to the orchestrating agent): question "MILE-352: ... How should a locator tell them apart? Any grammar change is an ADR-74 amendment you'd accept.", answer "Declared kind suffix (Recommended)". `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-22 | Amendment point 1 corrected before merge: it said no locator that parsed before reads differently, but a path whose last `#` part is a symbol followed by `[` (`src/a#b[c]`) parsed as a path and now reads as a kind suffix; the text states that narrow change and that no locator in this corpus has the shape. **Why:** independent review of `#623`. | **substantive** |

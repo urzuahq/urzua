@@ -1150,3 +1150,13 @@ fn spec_3_vectors_25_to_29_select_a_member_by_kind() {
         Err(ScopeError::NotFound(m)) if m.contains("'b' of kind 'fn'")
     ));
 }
+
+#[test]
+fn more_than_one_match_of_the_selected_kind_is_still_ambiguous() {
+    let src = "struct Cfg {\n    known: u8,\n}\nimpl Cfg {\n    fn known(&self) {}\n}\nimpl Cfg {\n    fn known(&self) {}\n}\n";
+    assert_eq!(
+        kind_span(src, "Cfg::known[fn]"),
+        Err(ScopeError::Ambiguous { lines: vec![5, 8] })
+    );
+    assert_eq!(kind_span(src, "Cfg::known[field]"), Ok((2, 2)));
+}
