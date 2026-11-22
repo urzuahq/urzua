@@ -8,8 +8,9 @@ fn ok(raw: &str) -> Locator {
 }
 
 fn sym(parts: &[&str]) -> Scope {
-    Scope::Symbol(
-        parts
+    Scope::Symbol {
+        kind: None,
+        segments: parts
             .iter()
             .map(
                 |p| match p.strip_prefix('<').and_then(|p| p.strip_suffix('>')) {
@@ -18,7 +19,7 @@ fn sym(parts: &[&str]) -> Scope {
                 },
             )
             .collect(),
-    )
+    }
 }
 
 // ---- grammar and parse order ------------------------------------------------
@@ -534,6 +535,7 @@ fn an_indent_container_matches_members_at_its_child_indent() {
     r.members = vec![MemberDecl {
         start: "^\\s+{symbol}:".to_string(),
         end: EndKind::Indent,
+        kind: None,
     }];
     let t = "a:\n  x:\n    deep: 1\n  y: 2\nb:\n  x: 3\n";
     assert_eq!(resolve_with(&r, t, "a::x"), Ok((2, 3)));
@@ -613,8 +615,22 @@ fn rust_with_fields() -> LocatorResolver {
     r.members.push(MemberDecl {
         start: FIELD_MEMBER.to_string(),
         end: EndKind::Indent,
+        kind: None,
     });
     r
+}
+
+/// `rust_with_fields` with each member entry naming its kind.
+fn rust_with_kinds() -> LocatorResolver {
+    let mut r = rust_with_fields();
+    r.members[0].kind = Some("fn".to_string());
+    r.members[1].kind = Some("field".to_string());
+    r
+}
+
+fn kind_span(text: &str, scope: &str) -> Result<(usize, usize), ScopeError> {
+    let s = ok(&format!("f.rs#{scope}")).scope.unwrap();
+    resolve_scope(text, Some(&rust_with_kinds()), &s).map(|s| (s.start, s.end))
 }
 
 fn field_span(text: &str, scope: &str) -> Result<(usize, usize), ScopeError> {
@@ -998,4 +1014,139 @@ fn a_leading_pattern_that_does_not_compile_is_reported_every_time() {
             "{err}"
         );
     }
+}
+
+// ---- a member kind suffix (`Type::member[kind]`) -------------------------------
+
+#[test]
+fn a_kind_suffix_parses_on_the_last_member_segment_before_the_pin() {
+    let l = ok(&format!("src/a.rs#Cfg::known[fn]@sha256:{SHA}"));
+    assert_eq!(l.path, "src/a.rs");
+    assert_eq!(
+        l.scope,
+        Some(Scope::Symbol {
+            segments: vec![Segment::Name("Cfg".into()), Segment::Name("known".into())],
+            kind: Some("fn".into()),
+        })
+    );
+    assert_eq!(l.display(), "src/a.rs#Cfg::known[fn]");
+    assert_eq!(l.spelling, "src/a.rs#Cfg::known[fn]");
+    let l = ok("a.rs#A::<Tr>::m[my_kind-2]");
+    assert_eq!(l.scope.unwrap().to_string(), "A::<Tr>::m[my_kind-2]");
+}
+
+#[test]
+fn a_malformed_kind_suffix_is_reported_never_read_as_a_path() {
+    for bad in [
+        "a.rs#A::b[]",
+        "a.rs#A::b[fn",
+        "a.rs#A::b[f.n]",
+        "a.rs#A::b[1fn]",
+        "a.rs#A::b[fn]x",
+        "a.rs#A::b[fn][field]",
+        "a.rs#A[fn]",
+        "a.rs#A::<Tr>[fn]",
+    ] {
+        assert!(
+            matches!(parse_locator(bad), Err(LocatorError::MalformedKind(_))),
+            "{bad}: {:?}",
+            parse_locator(bad)
+        );
+    }
+}
+
+#[test]
+fn locators_without_a_suffix_parse_as_before() {
+    assert_eq!(ok("a.rs#A::b").scope, Some(sym(&["A", "b"])));
+    assert_eq!(ok("a.rs#A::<T>::b").scope, Some(sym(&["A", "<T>", "b"])));
+    // A tail that is no symbol even before its `[` stays part of the path.
+    let l = ok("dir/x[1].rs#9[a]");
+    assert_eq!((l.path.as_str(), l.scope), ("dir/x[1].rs#9[a]", None));
+}
+
+#[test]
+fn a_field_and_a_method_of_one_name_each_resolve_to_their_own_span_by_kind() {
+    assert_eq!(kind_span(FIELDS_SRC, "Cfg::known[field]"), Ok((5, 5)));
+    assert_eq!(kind_span(FIELDS_SRC, "Cfg::known[fn]"), Ok((10, 12)));
+    // Unsuffixed stays ambiguous, kinds declared or not.
+    assert_eq!(
+        kind_span(FIELDS_SRC, "Cfg::known"),
+        Err(ScopeError::Ambiguous { lines: vec![5, 10] })
+    );
+}
+
+#[test]
+fn a_kind_with_no_match_is_not_found_naming_the_kind() {
+    let err = kind_span(FIELDS_SRC, "Cfg::spec[fn]").unwrap_err();
+    assert!(
+        matches!(&err, ScopeError::NotFound(m) if m.contains("'fn'")),
+        "{err}"
+    );
+    assert_eq!(kind_span(FIELDS_SRC, "Cfg::spec[field]"), Ok((6, 6)));
+}
+
+#[test]
+fn a_kind_no_entry_declares_is_reported_never_ignored() {
+    let err = kind_span(FIELDS_SRC, "Cfg::known[method]").unwrap_err();
+    assert_eq!(
+        err,
+        ScopeError::UnknownKind {
+            kind: "method".into(),
+            resolver: "rust".into(),
+            declared: "fn, field".into(),
+        }
+    );
+    // A resolver that declares no kinds at all rejects every suffix.
+    let err = field_span(FIELDS_SRC, "Cfg::known[fn]").unwrap_err();
+    assert!(err.to_string().contains("declared: none"), "{err}");
+}
+
+#[test]
+fn an_entry_without_a_kind_is_never_selected_by_a_suffix() {
+    let mut r = rust_with_kinds();
+    r.members[1].kind = None;
+    let s = ok("f.rs#Cfg::required[fn]").scope.unwrap();
+    assert!(matches!(
+        resolve_scope(FIELDS_SRC, Some(&r), &s),
+        Err(ScopeError::NotFound(_))
+    ));
+}
+
+#[test]
+fn a_member_kind_is_validated_at_load() {
+    let one: LocatorResolver = yaml_serde::from_str(
+        "name: r\nglob: '**/*.rs'\nstart: '{symbol}'\nend: blank_line\ncontainer: {start: '{symbol}', end: brace_balanced}\nmember:\n  - {start: 'a {symbol}', end: indent, kind: field}\n  - {start: 'b {symbol}', end: brace_balanced}\n",
+    )
+    .unwrap();
+    assert_eq!(one.members[0].kind.as_deref(), Some("field"));
+    assert_eq!(one.members[1].kind, None);
+    assert_eq!(validate_resolvers(&[one]), Ok(()));
+    let mut r = rust_with_kinds();
+    r.members[1].kind = Some("fn".into());
+    let err = validate_resolvers(&[r]).unwrap_err();
+    assert!(err.contains("'rust'") && err.contains("twice"), "{err}");
+    let mut r = rust_with_kinds();
+    r.members[1].kind = Some("fi eld".into());
+    let err = validate_resolvers(&[r]).unwrap_err();
+    assert!(err.contains("'rust'") && err.contains("malformed"), "{err}");
+}
+
+/// SPEC-3 vectors 25 to 29: a member selected by its declared kind.
+#[test]
+fn spec_3_vectors_25_to_29_select_a_member_by_kind() {
+    let t = "struct A {\n    /// d\n    a: u8,\n    b: u8,\n}\nimpl A {\n    fn a(&self) {}\n}\n";
+    assert_eq!(kind_span(t, "A::a[field]"), Ok((2, 3)));
+    assert_eq!(kind_span(t, "A::a[fn]"), Ok((7, 7)));
+    assert_eq!(
+        kind_span(t, "A::a"),
+        Err(ScopeError::Ambiguous { lines: vec![3, 7] })
+    );
+    assert!(matches!(
+        kind_span(t, "A::a[method]"),
+        Err(ScopeError::UnknownKind { declared, .. }) if declared == "fn, field"
+    ));
+    assert!(matches!(
+        kind_span(t, "A::b[fn]"),
+        Err(ScopeError::NotFound(m)) if m.contains("'b' of kind 'fn'")
+    ));
 }

@@ -1,0 +1,8 @@
+# Never reflow or normalize these fixtures: whitespace and wrapping are the material under test.
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; its rust resolver declares two member entries, kind fn (a method) and kind field (a struct field); not a record.
+  - path: src/cfg.rs
+    irregularity: none -- a struct with a field `known` and a method `known()` of the same name; not a record.
+  - path: docs/adr/ADR-1-a-field-and-its-getter.md
+    irregularity: none -- pins `Cfg::known[fn]` and `Cfg::known[field]`, each to its own span.

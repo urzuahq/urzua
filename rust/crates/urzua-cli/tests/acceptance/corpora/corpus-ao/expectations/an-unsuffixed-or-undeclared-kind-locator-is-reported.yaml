@@ -1,0 +1,12 @@
+id: an-unsuffixed-or-undeclared-kind-locator-is-reported
+corpus: corpus-ao
+# Without a suffix `Cfg::known` is ambiguous between the field and the method;
+# a suffix naming a kind no member entry declares is reported, never ignored.
+commits:
+  - write:
+      docs/adr/ADR-2-unselected.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: 'code:src/cfg.rs#Cfg::known, code:src/cfg.rs#Cfg::known[method]'\n---\n# ADR-2 - unselected\n"
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.locator-exists, file: docs/adr/ADR-2-unselected.md, message_contains: "ambiguous"}
+  - {rule: embodiment.locator-exists, file: docs/adr/ADR-2-unselected.md, message_contains: "kind 'method' is declared by no member entry"}

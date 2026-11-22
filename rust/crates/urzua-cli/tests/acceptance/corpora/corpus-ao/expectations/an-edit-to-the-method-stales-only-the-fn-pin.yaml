@@ -1,0 +1,25 @@
+id: an-edit-to-the-method-stales-only-the-fn-pin
+corpus: corpus-ao
+# The method's body changes and the field does not: only the pin on
+# `Cfg::known[fn]` is stale.
+commits:
+  - write:
+      src/cfg.rs: |
+        pub struct Cfg {
+            /// The names every record must carry.
+            pub known: Vec<String>,
+            pub spec: Option<String>,
+        }
+
+        impl Cfg {
+            /// How many names are known.
+            pub fn known(&self) -> usize {
+                self.known.iter().count()
+            }
+        }
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.pin-stale, file: docs/adr/ADR-1-a-field-and-its-getter.md, message_contains: "Cfg::known[fn]"}
+expect_no_findings:
+  - {rule: embodiment.pin-stale, message_contains: "Cfg::known[field]"}
