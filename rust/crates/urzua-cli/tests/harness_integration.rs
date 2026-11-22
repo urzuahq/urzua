@@ -1284,6 +1284,93 @@ fn session_start_is_quiet_when_ready_and_names_each_thing_that_would_fail_open()
 }
 
 #[test]
+fn session_start_names_a_bundle_hook_entry_the_lock_predates() {
+    let dir = fixture("session-lock-predates", &config(""));
+    install(&dir);
+    wire_git_hooks(&dir);
+    let ok = path_with(&["urzua", "python3", "git", "sh"]);
+    let v = session_start(&dir, &ok, true);
+    assert_eq!(v["verdict"], "allow", "{v}");
+
+    // A lock written before the bundle gained the AskUserQuestion entries.
+    let mut lock: serde_json::Value = serde_json::from_str(&read(&dir, LOCK)).unwrap();
+    lock["entries"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|e| e["matcher"] != "AskUserQuestion");
+    std::fs::write(dir.join(LOCK), serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+    // Cut each AskUserQuestion group out of the pretty-printed settings as text,
+    // so the other entries keep the bytes the lock hashed.
+    let text = read(&dir, SETTINGS);
+    let mut kept: Vec<&str> = Vec::new();
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
+        if line == "      {"
+            && lines
+                .peek()
+                .is_some_and(|l| l.contains("\"AskUserQuestion\""))
+        {
+            for l in lines.by_ref() {
+                if l.starts_with("      }") {
+                    break;
+                }
+            }
+            if let Some(last) = kept.pop() {
+                kept.push(last.trim_end_matches(','));
+            }
+            continue;
+        }
+        kept.push(line);
+    }
+    std::fs::write(dir.join(SETTINGS), format!("{}\n", kept.join("\n"))).unwrap();
+
+    let v = session_start(&dir, &ok, true);
+    assert_eq!(checks_of(&v), ["hook-entry", "hook-entry"], "{v}");
+    assert!(msg(&v).contains("AskUserQuestion"), "{v}");
+    assert!(msg(&v).contains("is not wired"), "{v}");
+    assert!(msg(&v).contains("urzua harness install"), "{v}");
+}
+
+#[test]
+fn session_start_is_silent_for_a_wired_entry_the_lock_does_not_list() {
+    let dir = fixture("session-unlisted-wired", &config(""));
+    install(&dir);
+    wire_git_hooks(&dir);
+    let ok = path_with(&["urzua", "python3", "git", "sh"]);
+    let full = read(&dir, LOCK);
+    let count = serde_json::from_str::<serde_json::Value>(&full).unwrap()["entries"]
+        .as_array()
+        .unwrap()
+        .len();
+    // Each entry in turn, the edit entry whose matcher holds `|` included.
+    for i in 0..count {
+        let mut lock: serde_json::Value = serde_json::from_str(&full).unwrap();
+        lock["entries"].as_array_mut().unwrap().remove(i);
+        std::fs::write(dir.join(LOCK), serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+        let v = session_start(&dir, &ok, true);
+        assert_eq!(v["verdict"], "allow", "entry {i}: {v}");
+    }
+}
+
+#[test]
+fn session_start_does_not_call_every_entry_predating_when_the_settings_file_is_gone() {
+    let dir = fixture("session-unlisted-no-settings", &config(""));
+    install(&dir);
+    wire_git_hooks(&dir);
+    let ok = path_with(&["urzua", "python3", "git", "sh"]);
+    let mut lock: serde_json::Value = serde_json::from_str(&read(&dir, LOCK)).unwrap();
+    lock["entries"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|e| e["matcher"] != "AskUserQuestion");
+    std::fs::write(dir.join(LOCK), serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+    std::fs::remove_file(dir.join(SETTINGS)).unwrap();
+    let v = session_start(&dir, &ok, true);
+    assert!(!msg(&v).contains("predates"), "{v}");
+    assert!(msg(&v).contains("is not wired"), "{v}");
+}
+
+#[test]
 fn session_start_names_the_unpointed_hook_directory_and_states_no_consequence_for_git_hooks_alone()
 {
     let deny = format!(
