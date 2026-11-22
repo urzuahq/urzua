@@ -108,7 +108,7 @@ fn judge(record: &Record, ctx: &Judging<'_>, now: &str, then: &str) -> Verdict {
     if !ctx.config.record_types.contains_key(&record.record_type) {
         return Verdict::Absent;
     }
-    let before = record_in_text(ctx.config, &record.record_type, then);
+    let before = Record::parse_declared(ctx.config, PathBuf::new(), &record.record_type, then);
     if before.header.is_unreadable() || record.header.is_unreadable() {
         return Verdict::Unreadable;
     }

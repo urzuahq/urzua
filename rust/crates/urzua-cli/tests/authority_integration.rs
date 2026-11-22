@@ -950,3 +950,36 @@ fn the_base_copys_status_key_is_read_folding_case_like_the_head_and_deletions() 
     assert_eq!(code, 0, "{v}");
     assert!(decider_findings(&v).is_empty(), "{v}");
 }
+
+#[test]
+fn a_prefix_lines_records_base_status_is_read_as_the_loader_reads_it() {
+    let cfg = config().replace(
+        "    dir: \"docs/adr\"\n",
+        "    dir: \"docs/adr\"\n    fields: {from: prefix-lines}\n",
+    );
+    let dir = fixture("prefix-lines", &cfg);
+    std::fs::write(
+        dir.join(PATH_1),
+        "# ADR-1: T\n\nStatus: Proposed\n\nprose\n",
+    )
+    .unwrap();
+    git(&dir, &["commit", "-q", "-am", "prefix-lines"]);
+    std::fs::write(
+        dir.join(PATH_1),
+        "# ADR-1: T\n\nStatus: Accepted\n\nprose\n",
+    )
+    .unwrap();
+    let actors = write_actors(
+        &dir,
+        serde_json::json!({"schema": 1, "pr_author": "mallory", "approvers": []}),
+    );
+    let (code, v) = check_base(&dir, &["--actors", &actors]);
+    assert_eq!(code, 1, "{v}");
+    let found = decider_findings(&v);
+    assert_eq!(found.len(), 1, "{v}");
+    let message = found[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("Proposed") && !message.contains("could not be read"),
+        "{message}"
+    );
+}
