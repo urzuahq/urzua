@@ -1,0 +1,26 @@
+---
+Stable-Id: 01M859GC4NTVJWZ06D753PK54X
+Status: Fixed
+Found-in: "Running the documented command with a nonexistent tag in the URL: `curl` printed a 404 and the pipeline exited 0."
+Realized-by: test:scripts/install-test.sh@sha256:deea59418d7d6e3c4ba773dd2b3306221dfdf58c3a54d39c443951bc14073891
+---
+# 218 — The documented install command pipes the script into sh, so a failed download exits 0 with nothing installed
+
+## What was wrong
+
+`docs/reference/install.md` documented `curl ... | sh -s -- --version "$tag"` for both the `gh` and the CI install. When the download fails, `sh` reads empty input and the pipeline exits `0` having installed nothing, so a setup script or CI step that ran it believed `urzua` was installed. Both commands now save the script with `curl -o urzua-install.sh` and run it with `&& sh urzua-install.sh`, so a failed download exits `22`.
+
+## Why nothing caught it
+
+`scripts/install-test.sh` ran the installer itself with stubbed downloads, and nothing examined the commands the documentation tells a person to run. It now fails if any documented command pipes into `sh` or `bash`.
+
+## References
+
+`docs/reference/install.md`; the `docs: no documented command pipes a download into a shell` check in `scripts/install-test.sh`.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-23 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: scripts/install-test.sh@sha256:deea59418d7d Reason: Pin the install-script test that fails when a documented command pipes a download into a shell **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |
+> | 2026-11-23 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `Realized-by computes to Verified` -- stated `Open` disagreed with the computed value `Fixed`. | **structural** |

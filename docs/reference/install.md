@@ -19,11 +19,14 @@ release:
 
 ```sh
 tag=$(gh release view --repo urzuahq/urzua --json tagName --jq .tagName)
-curl -fsSL --proto '=https' --tlsv1.2 "https://raw.githubusercontent.com/urzuahq/urzua/$tag/scripts/install.sh" | sh -s -- --version "$tag"
+curl -fsSL --proto '=https' --tlsv1.2 -o urzua-install.sh "https://raw.githubusercontent.com/urzuahq/urzua/$tag/scripts/install.sh" && sh urzua-install.sh --version "$tag"
 ```
 
-To install an exact release instead, set `tag` to its tag and run the second line. To
-read the script before running it, save it with `curl -fsSLO` and run `sh install.sh`.
+To install an exact release instead, set `tag` to its tag and run the second line. The script is
+saved and run only if the download succeeded: piping `curl` into `sh` exits `0` having installed
+nothing when the download fails, because `sh` reads empty input. A failed download here exits
+non-zero (`22` from `curl`). To read the script before running it, run the `curl` command alone and
+open `urzua-install.sh`.
 
 The script verifies the archive it downloads, but nothing verifies the script itself: it is fetched
 over HTTPS from the tag, and a tag can be moved. Where that matters, pin a commit sha in the URL in
@@ -38,8 +41,8 @@ the checksum from the release you pin (see [checksums](#checksums)):
 ```sh
 tag="${URZUA_TAG:?set URZUA_TAG to an exact release tag, such as vX.Y.Z}"
 sha256="${URZUA_SHA256:?set URZUA_SHA256 to the sha256 of this platform's archive at that tag}"
-curl -fsSL --proto '=https' --tlsv1.2 "https://raw.githubusercontent.com/urzuahq/urzua/$tag/scripts/install.sh" \
-  | sh -s -- --version "$tag" --sha256 "$sha256"
+curl -fsSL --proto '=https' --tlsv1.2 -o urzua-install.sh "https://raw.githubusercontent.com/urzuahq/urzua/$tag/scripts/install.sh" \
+  && sh urzua-install.sh --version "$tag" --sha256 "$sha256"
 ```
 
 For a CI job that checks a repository's records, [the gate action](ci.md) does this for you.
