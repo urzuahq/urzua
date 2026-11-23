@@ -718,6 +718,9 @@ fn run_opened(mut opened: Opened, args: CheckArgs) -> Result<CheckReport, Failur
         as_of: crate::as_of(),
         status,
         files_examined,
+        examined: urzua_core::report::Examined {
+            files: files_examined,
+        },
         records_read_by_any_rule,
         rules_executed: executions,
         rules_selected: selection,

@@ -9,6 +9,9 @@
       "source": "clock"
     },
     "blocking": true,
+    "examined": {
+      "files": 4
+    },
     "files_examined": 4,
     "findings": [
       {

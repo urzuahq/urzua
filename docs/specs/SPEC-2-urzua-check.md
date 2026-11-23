@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.193'
+Version: '0.194'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:c5138779e78f7fb5d2a24d72a08981b1dd2834c7b334cae4cf99ffcdd75162d0, code:rust/crates/urzua-core/src/rules.rs@sha256:960c264aaba685079377199b706a84320b0c402c052e6f891303bbb746dd504e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:2dfb5060f1e8bc86c9f8c3354435112c5519203e560609a9619bc83415c4c2d6, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:4299b921cd08f47a2f918bfa9888875787e90ca84255d470fccf2a968aa2c34b, code:rust/crates/urzua-core/src/rules.rs@sha256:960c264aaba685079377199b706a84320b0c402c052e6f891303bbb746dd504e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:2dfb5060f1e8bc86c9f8c3354435112c5519203e560609a9619bc83415c4c2d6, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -666,6 +666,7 @@ report unchanged. `claim_max_age_days` and the audit grace measure elapsed secon
   "status": "ok",
   "as_of": { "date": "2026-11-08", "source": "clock" },
   "files_examined": 51,
+  "examined": { "files": 51 },
   "records_read_by_any_rule": 51,
   "rules_executed": [
     {
@@ -695,6 +696,14 @@ report unchanged. `claim_max_age_days` and the audit grace measure elapsed secon
   ]
 }
 ```
+
+`examined` is an object of per-unit counts of what the run examined, under the unit names a consuming gate shares
+(`ADR-106`, `MILE-358`). `check` counts one unit, `files`, and `examined.files` always equals `files_examined`: the same
+record files, over the same scope. It is added beside `files_examined`, which stays; neither key is renamed or removed,
+because consumers read the existing one (`ADR-46` rejects a shared envelope, `RFC-3` §3 a shared status enum). A unit
+`check` does not count is absent from the object rather than `0`. A report whose `status` is `not-run` and that could not start (it carries `error`) prints neither key; one that started and selected nothing prints both at `0`.
+The report validates against the published agent CLI contract's gate-report schema, a vendored copy of which
+`rust/crates/urzua-cli/tests/agent_cli_contract_integration.rs` checks it against.
 
 (`rules_executed`/`findings` truncated above for length; a real run lists every declared rule and every
 finding.)
@@ -1699,3 +1708,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-20 | Bumped to `0.193`. `section.decided-body-changed` drops `exempt_sections`, compares a record renamed in the diff with its copy under the old name, says a matching section may be added at any section boundary, that a pattern is case-sensitive and unanchored unless it starts with `^`, and that leading `>` marks are ignored (rule table regenerated). **Why:** review of pull request #616: a renamed decided record skipped the rule, and `exempt_sections` skipped the added-section check for sections before an exempt one. | **substantive** |
 > | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` b70c1eace569 -> 31ada9b4a0e8. Reason: review fixes for section.decided-body-changed: exempt_sections is removed from config.rs, options.rs and table.rs, a record renamed in the diff is read against its old copy (check.rs, table.rs), the rule table and SPEC-2 and SPEC-3 say so, and tests are added; the claims this record cites are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-21 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 31ada9b4a0e8 -> c5138779e78f. Reason: BUG-213: load_renamed_paths reads a deleted record's merge-base copy through Record::parse_declared with the governing type's declared document model instead of YAML header::parse, so a prefix-lines rename pairs by Stable-Id; nothing else in check.rs changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-23 | Bumped to `0.194`. `check`'s report gains `examined`, an object of per-unit counts (`files`, equal to `files_examined`), added beside `files_examined`, which stays; a `not-run` report that could not start prints neither, and one that started prints both at `0`. **Why:** `MILE-358` and `ADR-106`: a consuming gate reads `examined` directly, and the maintainer accepted on 2026-11-23 that "the shared contract is urzua's existing shape, and urzua conforms by addition only". | **substantive** |
+> | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c5138779e78f -> 4299b921cd08. Reason: Read the diff of check.rs: run_opened fills CheckReport.examined from files_examined; nothing else in the run path changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

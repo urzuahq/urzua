@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/urzuahq/agent-cli-kit/main/schemas/report.schema.json",
+  "title": "Report (base layer)",
+  "type": "object",
+  "required": ["status", "next_action", "next_action_reason", "next_action_inputs"],
+  "properties": {
+    "status": {"type": "string", "minLength": 1},
+    "next_action": {"type": ["string", "null"]},
+    "next_action_reason": {"type": ["string", "null"]},
+    "next_action_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["placeholder", "flag", "means"],
+        "properties": {
+          "placeholder": {"type": "string", "pattern": "^<.+>$"},
+          "flag": {"type": "string"},
+          "means": {"type": "string"}
+        }
+      }
+    },
+    "error": {"type": "string"},
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "subject", "message"],
+        "properties": {
+          "severity": {"type": "string"},
+          "subject": {"type": "string"},
+          "message": {"type": "string"}
+        }
+      }
+    },
+    "schema_version": {"type": "integer"},
+    "tool": {"$ref": "#/$defs/tool"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"next_action": {"type": "null"}}, "required": ["next_action"]},
+      "then": {"properties": {"next_action_reason": {"type": "null"}}},
+      "else": {"properties": {"next_action_reason": {"type": "string"}}}
+    },
+    {
+      "if": {"required": ["error"]},
+      "then": {"properties": {"status": {"const": "not-run"}}}
+    }
+  ],
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    }
+  }
+}

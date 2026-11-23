@@ -10,6 +10,9 @@
       "source": "clock"
     },
     "blocking": false,
+    "examined": {
+      "files": 1
+    },
     "files_examined": 1,
     "findings": [],
     "next_action": null,

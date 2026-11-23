@@ -4,6 +4,21 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.14 (2026-11-23)
+
+### Features
+
+- `urzua check`'s JSON report gains `examined`, an object with one count per unit (`{"files": N}`), so a gate that reads per-unit counts needs no adapter. It sits beside `files_examined`, which stays and always equals `examined.files`; no key is renamed or removed. A `not-run` report that could not start (it carries `error`) prints neither key; one that started and selected nothing prints both at 0.
+- A symbol locator can tell a field from a method of the same name. Each `member` entry of a `locator_resolvers` resolver may declare a `kind` (any name you choose, such as `fn` or `field`), and a locator selects one with a suffix: `src/cfg.rs#Cfg::known[fn]` or `src/cfg.rs#Cfg::known[field]`. Only the entries of that kind are tried. A suffix naming a kind no entry declares is reported by `embodiment.locator-exists` with the kinds the resolver does declare, and a malformed suffix (`Cfg::known[]`, `Cfg[fn]`) is reported as malformed. A malformed `kind`, or two entries of one resolver with the same kind, is a config load error naming the resolver. Locators without a suffix resolve exactly as before, so declaring kinds stales no existing pin.
+
+### Fixes
+
+- A record type that declares `fields: {from: prefix-lines}` has its merge-base copy read the way the loader reads it. Before, a `--base` run read that copy as YAML front matter, so the decider gate (`diff.decider-required`) treated a move from Proposed as unreadable, `revision-log.version-bump-required` read the base version as absent, and a deleted record's locators, a changed waiver's old `Scope` and a child record's base status were lost when deciding which unchanged records a change affects. A pure rename of such a record is paired with its base copy by `Stable-Id` rather than judged as a new record by `header.scaffold-mismatch`. `urzua fix` also pairs such a record by `Stable-Id`, so a revision log deleted and the record re-added at another path is refused rather than replaced.
+- The hook fallback that runs when `urzua` cannot (not on PATH, or a release without `harness hook`) no longer validates `.urzua/config.yaml` for the session-start and post-command events, which never used the result. Only the edit fallback reads the configuration now, so the other two answer at once instead of running the YAML check, which was slow enough on some platforms to time out the agent host.
+- `urzua harness run session-start` no longer reports the harness as installed and wired when `.urzua/harness.lock` lists no hook entries for the agent's settings file and that file is missing. It names the file as missing or unreadable, once, so the guardrail that is not running is reported.
+- The session-start check names a hook entry the current bundle wants that the lock does not list (such as the two AskUserQuestion entries a release added after the install) as not wired, and says to run `urzua harness install`. Before, it walked only the lock's entries, so a repository installed before such a release heard nothing at session start.
+- The one-line description in `urzua --help` and the README no longer says the engine "never judges the change". It now calls urzua the governance engine for coding agents: decisions, who accepted them and their evidence are records in your repository, checked against the rules you declared, with the same answer for the same records. It says urzua checks that a change's evidence exists and is linked, not that the code is right.
+
 ## 0.4.13 (2026-11-20)
 
 ### Features

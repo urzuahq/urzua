@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "bundle_version": "0.4.13",
+  "bundle_version": "0.4.14",
   "adapters": [
     "claude-code"
   ],
@@ -30,7 +30,7 @@
       "event": "PostToolUse",
       "matcher": "Bash",
       "handler": "post-command",
-      "hash": "sha256:9b8d110499be7c8d5bc1a2cbe9067c1e48c4e933ca64683c8c644ef70532b036"
+      "hash": "sha256:bc37fa74e839cf39a43e02ffb1cea2fc2c9fb30f2fcb7ce67e84ca692d5e8ce2"
     },
     {
       "file": ".claude/settings.json",
@@ -50,7 +50,7 @@
       "file": ".claude/settings.json",
       "event": "SessionStart",
       "handler": "session-start",
-      "hash": "sha256:ca08347b217809146284abce9e3d2e7921d17abf8b60a3f3d0d86cf39a17b7e7"
+      "hash": "sha256:c5988a53ee06b79b0344a8181bd4afcc80a8f8577a64e02488da2b06dc6fdc30"
     }
   ],
   "blocks": [

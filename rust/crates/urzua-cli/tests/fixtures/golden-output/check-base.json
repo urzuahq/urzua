@@ -11,6 +11,9 @@
       "source": "clock"
     },
     "blocking": true,
+    "examined": {
+      "files": 2
+    },
     "files_examined": 2,
     "findings": [
       {
