@@ -34,3 +34,4 @@ other half of "native"; its shape is not settled yet and is not part of this mil
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-23 | Recorded the direction for the alias question in Done means item 1: the maintainer accepted on 2026-11-23, relayed from the gate tool's design thread, that "the shared contract is urzua's existing shape, and urzua conforms by addition only", so `examined` is added beside `files_examined` and nothing is renamed. The ADR that item asks for is still to be written. The `describe` answer is filed as `MILE-359`. | **structural** |
