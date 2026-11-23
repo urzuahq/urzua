@@ -44,7 +44,7 @@ fn own_config_declares_a_level_for_every_shipped_rule() {
 /// Rules the build ships that the configuration cannot declare yet: the latest
 /// release rejects a rule key it does not know, so the line is added once a release
 /// carries the rule.
-const NOT_YET_RELEASED: &[&str] = &["status.children-agreement"];
+const NOT_YET_RELEASED: &[&str] = &[];
 
 fn git(dir: &Path, args: &[&str]) {
     assert!(Command::new("git")
