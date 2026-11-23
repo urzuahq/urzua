@@ -565,6 +565,7 @@ name = "urzua-cli"
 version = "0.4.13"
 dependencies = [
  "clap",
+ "regex",
  "serde",
  "serde_json",
  "urzua-cli",

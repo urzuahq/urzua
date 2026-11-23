@@ -2,7 +2,7 @@
 //! `fixtures/agent-cli-contract/` from a release tag (`MILE-358`, `MILE-359`, `ADR-106`).
 //! The check reads the local copy only: a `$ref` is answered from the vendored directory, never from
 //! the network. It is a structural check of the schemas' stated requirements, not a general JSON
-//! Schema validator.
+//! Schema validator; it answers the keywords the contract permits its schemas to use.
 
 mod common;
 
@@ -22,26 +22,67 @@ fn load(name: &str) -> Value {
     serde_json::from_str(&text).unwrap()
 }
 
-/// A structural check of the keywords the vendored schemas state, not a general JSON Schema
-/// validator: no crate that is one passes the repository's licence and MSRV policy. It supports
-/// exactly the keywords these five files use, and panics on any other, so a schema that grows a rule
-/// this check cannot read fails the test instead of passing unchecked.
+/// The JSON Schema keywords the contract permits its schemas to use; the contract's own `make check`
+/// fails on any other. This check answers each of them, and panics on anything else.
+const CONTRACT_KEYWORDS: [&str; 22] = [
+    "$schema",
+    "$id",
+    "$ref",
+    "$defs",
+    "title",
+    "description",
+    "type",
+    "enum",
+    "const",
+    "required",
+    "properties",
+    "additionalProperties",
+    "items",
+    "pattern",
+    "format",
+    "minimum",
+    "minLength",
+    "maxLength",
+    "allOf",
+    "if",
+    "then",
+    "else",
+];
+
+/// Resolves `file#/json/pointer`, `#/json/pointer` or `file` against the vendored directory.
+fn resolve(target: &str, root: &Value) -> (Value, Value) {
+    let (file, pointer) = target.split_once('#').unwrap_or((target, ""));
+    let base = if file.is_empty() {
+        root.clone()
+    } else {
+        load(file)
+    };
+    let node = base
+        .pointer(pointer)
+        .unwrap_or_else(|| panic!("`$ref` {target} does not resolve"))
+        .clone();
+    (node, base)
+}
+
+/// A structural check of the contract's permitted keywords, not a general JSON Schema validator: no
+/// crate that is one passes the repository's licence and MSRV policy. `format` is an annotation
+/// here, as it is by default in draft 2020-12.
 fn check(schema: &Value, root: &Value, instance: &Value, at: &str, errors: &mut Vec<String>) {
-    let Some(map) = schema.as_object() else {
-        panic!("{at}: schema is not an object");
+    let map = match schema {
+        Value::Bool(true) => return,
+        Value::Bool(false) => {
+            errors.push(format!("{at}: not allowed"));
+            return;
+        }
+        Value::Object(map) => map,
+        _ => panic!("{at}: schema is neither an object nor a boolean"),
     };
     for (keyword, rule) in map {
         match keyword.as_str() {
-            "$schema" | "$id" | "title" | "$defs" => {}
+            "$schema" | "$id" | "title" | "description" | "format" | "$defs" => {}
             "$ref" => {
-                let target = rule.as_str().unwrap();
-                match target.strip_prefix("#/$defs/") {
-                    Some(def) => check(&root["$defs"][def], root, instance, at, errors),
-                    None => {
-                        let file = load(target);
-                        check(&file, &file, instance, at, errors);
-                    }
-                }
+                let (node, base) = resolve(rule.as_str().unwrap(), root);
+                check(&node, &base, instance, at, errors);
             }
             "type" => {
                 let names: Vec<&str> = match rule {
@@ -72,6 +113,14 @@ fn check(schema: &Value, root: &Value, instance: &Value, at: &str, errors: &mut 
                     }
                 }
             }
+            "additionalProperties" => {
+                let declared = map.get("properties").and_then(Value::as_object);
+                for (key, value) in instance.as_object().into_iter().flatten() {
+                    if declared.is_none_or(|d| !d.contains_key(key)) {
+                        check(rule, root, value, &format!("{at}/{key}"), errors);
+                    }
+                }
+            }
             "items" => {
                 for (i, item) in instance.as_array().into_iter().flatten().enumerate() {
                     check(rule, root, item, &format!("{at}/{i}"), errors);
@@ -87,10 +136,17 @@ fn check(schema: &Value, root: &Value, instance: &Value, at: &str, errors: &mut 
                     errors.push(format!("{at}: expected {rule}, got {instance}"));
                 }
             }
-            "minLength" => {
+            "minLength" | "maxLength" => {
                 if let Some(text) = instance.as_str() {
-                    if (text.chars().count() as u64) < rule.as_u64().unwrap() {
-                        errors.push(format!("{at}: shorter than {rule}"));
+                    let len = text.chars().count() as u64;
+                    let bound = rule.as_u64().unwrap();
+                    let fails = if keyword == "minLength" {
+                        len < bound
+                    } else {
+                        len > bound
+                    };
+                    if fails {
+                        errors.push(format!("{at}: length {len} fails {keyword} {bound}"));
                     }
                 }
             }
@@ -101,17 +157,11 @@ fn check(schema: &Value, root: &Value, instance: &Value, at: &str, errors: &mut 
                     }
                 }
             }
-            "additionalProperties" => {
-                for (key, value) in instance.as_object().into_iter().flatten() {
-                    check(rule, root, value, &format!("{at}/{key}"), errors);
-                }
-            }
             "pattern" => {
-                assert_eq!(rule, "^<.+>$", "only the placeholder pattern is supported");
+                let re = regex::Regex::new(rule.as_str().unwrap()).unwrap();
                 if let Some(text) = instance.as_str() {
-                    let inner = text.strip_prefix('<').and_then(|t| t.strip_suffix('>'));
-                    if inner.is_none_or(str::is_empty) {
-                        errors.push(format!("{at}: `{text}` is not a <placeholder>"));
+                    if !re.is_match(text) {
+                        errors.push(format!("{at}: `{text}` does not match {rule}"));
                     }
                 }
             }
@@ -143,8 +193,42 @@ fn is_type(value: &Value, name: &str) -> bool {
         "string" => value.is_string(),
         "boolean" => value.is_boolean(),
         "null" => value.is_null(),
-        "integer" => value.is_i64() || value.is_u64(),
+        "number" => value.is_number(),
+        "integer" => value.as_f64().is_some_and(|n| n.fract() == 0.0),
         other => panic!("type `{other}` is not supported by this structural check"),
+    }
+}
+
+/// Every keyword in a schema position, walked through the subschema-bearing keywords. Each `pattern`
+/// must compile and each `$ref` must resolve.
+fn keywords_of(schema: &Value, root: &Value, found: &mut std::collections::BTreeSet<String>) {
+    let Some(map) = schema.as_object() else {
+        return;
+    };
+    for (keyword, rule) in map {
+        found.insert(keyword.clone());
+        match keyword.as_str() {
+            "properties" | "$defs" => rule
+                .as_object()
+                .unwrap()
+                .values()
+                .for_each(|s| keywords_of(s, root, found)),
+            "allOf" => rule
+                .as_array()
+                .unwrap()
+                .iter()
+                .for_each(|s| keywords_of(s, root, found)),
+            "items" | "additionalProperties" | "if" | "then" | "else" => {
+                keywords_of(rule, root, found)
+            }
+            "pattern" => {
+                regex::Regex::new(rule.as_str().unwrap()).unwrap();
+            }
+            "$ref" => {
+                resolve(rule.as_str().unwrap(), root);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -224,6 +308,60 @@ fn the_vendored_copy_matches_its_own_checksums() {
         2,
         "VERSION is `<tag> <commit>`"
     );
+}
+
+#[test]
+fn every_vendored_schema_uses_only_the_contract_keywords_and_every_pattern_compiles() {
+    let mut found = std::collections::BTreeSet::new();
+    for entry in std::fs::read_dir(schema_dir()).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        if name.ends_with(".schema.json") {
+            let root = load(&name);
+            keywords_of(&root, &root, &mut found);
+        }
+    }
+    let outside: Vec<&String> = found
+        .iter()
+        .filter(|k| !CONTRACT_KEYWORDS.contains(&k.as_str()))
+        .collect();
+    assert!(
+        outside.is_empty(),
+        "keywords outside the contract's list: {outside:?}"
+    );
+}
+
+#[test]
+fn the_check_answers_the_keywords_the_fixture_schemas_do_not_exercise() {
+    let root = serde_json::json!({});
+    let fails = |schema: Value, instance: Value| {
+        let mut errors = Vec::new();
+        check(&schema, &root, &instance, "", &mut errors);
+        !errors.is_empty()
+    };
+    assert!(fails(
+        serde_json::json!({"maxLength": 2}),
+        serde_json::json!("abc")
+    ));
+    assert!(!fails(
+        serde_json::json!({"maxLength": 3}),
+        serde_json::json!("abc")
+    ));
+    assert!(fails(
+        serde_json::json!({"pattern": "^[0-9]+$"}),
+        serde_json::json!("1a")
+    ));
+    assert!(fails(
+        serde_json::json!({"properties": {"a": {}}, "additionalProperties": false}),
+        serde_json::json!({"a": 1, "b": 2})
+    ));
+    assert!(!fails(
+        serde_json::json!({"properties": {"a": {}}, "additionalProperties": false}),
+        serde_json::json!({"a": 1})
+    ));
+    assert!(!fails(
+        serde_json::json!({"description": "x", "format": "date-time"}),
+        serde_json::json!("not a date")
+    ));
 }
 
 #[test]
