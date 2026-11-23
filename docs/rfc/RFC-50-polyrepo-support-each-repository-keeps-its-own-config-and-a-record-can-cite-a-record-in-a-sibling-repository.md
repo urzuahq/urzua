@@ -20,14 +20,14 @@ proposes how to record it. It decides nothing. Several choices are left to the m
 
 ## Motivation
 The maintainer's direction, given 2026-11-23 and relayed from the organisation's coordination
-thread, quoted as relayed:
+thread. The first point quotes the relayed words; the rest paraphrase the relayed direction:
 
 - urzua supports polyrepo whatever way one organisation arranges its repositories: "there's a lot
   of companies that have this problem".
-- Configs never merge. Each repository keeps its own config and rules, and no org-level config
-  governs several repositories.
+- Configs never merge, each repository keeps its own config and rules, and there is no org-level
+  config governing several repositories.
 - The org view is built from each repository's `urzua export`, in the fixed vocabulary the engine
-  already produces. A cross-repository view inside `urzua board` is acceptable.
+  already produces, and a cross-repository view in `urzua board` is acceptable.
 - A record citing a record or schema in another repository is the one new engine capability.
 - `RFC-27` is settled explicitly.
 
@@ -42,9 +42,11 @@ This repository's own records show the gap:
   "is what makes cross-repo resolution possible". No record has taken this up since.
 - `MILE-24` (Planned, Phase 4) holds "a cross-repo decision graph" and "an org rollup". `RFC-27`
   §3 and its 2026-11-08 amendment class both as ecosystem.
-- Outside this repository, three sibling repositories this organisation runs carry urzua records.
-  Each is governed by its own configuration and release. All four repositories give every record a
-  `stable_id` with no duplicate inside any one of them. Nothing checks uniqueness across them.
+- Outside this repository, three sibling repositories this organisation runs carry urzua records,
+  each governed by its own configuration and release. As reported by the organisation coordination
+  thread's survey of 2026-11-23 (not checkable from this repository), all four repositories give
+  every record a `stable_id` with no duplicate inside any one of them. Nothing checks uniqueness
+  across them.
 
 ## Proposal
 
@@ -79,7 +81,7 @@ read". It is never skipped silently.
 
 A reference to another repository's record is written `<repo>:<id>` (for example `<repo>:RFC-2`) or
 as a bare `stable_id`. Display ids collide across repositories: several of the four repositories each
-have an `RFC-1`. An unqualified display id therefore always means a record in this repository,
+have an `RFC-1` (as reported by the 2026-11-23 survey). An unqualified display id therefore always means a record in this repository,
 as it does today. In the snapshot, a qualified reference resolves to the target's `stable_id`, and
 that `stable_id` is the key the engine stores. The display id is what a person reads. Once resolved:
 
@@ -114,7 +116,7 @@ recomputes `state` from raw statuses with a merged vocabulary. `urzua board` may
 `StateCategory` (`rust/crates/urzua-core/src/view_model.rs:25-46`, `state_of` at 218-259) gives
 `open` to a type that declares no `progress` list and `none` to a type with no statuses. In this
 repository's export of 2026-11-23, 28 of 762 records are `open` (20 rfc, 4 condition, 3 bug, 1 adr)
-and 16 are `none` (all waivers). In the three sibling repositories, most or all records are `open`.
+and 16 are `none` (all waivers). The 2026-11-23 survey reports that in the three sibling repositories most or all records are `open`.
 In the view, `finished`, `dropped`, `under-way` and `not-started` mean the same thing in every
 repository, because each export derived them from that repository's declared lists. `open` means
 "nothing declared says whether work began", and that is not `not-started`.
@@ -129,15 +131,17 @@ require a type to declare `progress` is the vocabulary question left open (open 
 Today's export has no version field. Its top-level keys are `status`, `record_count`, `types`,
 `type_roles`, `read`, `records`, `roadmap` and the `next_action` trio. Repositories also pin
 different releases: this repository's CI pins `v0.4.7` for its corpus gate
-(`.github/workflows/ci.yml:174`), and the siblings run 0.4.13. `MILE-360` (Planned, not built) adds
+(`.github/workflows/ci.yml:174`), and the 2026-11-23 survey reports that the siblings run 0.4.13. `MILE-360` (Planned, not built) adds
 a `paused` state that older exports never emit. A reader of several exports therefore needs to know
 which vocabulary each export was written in.
 
 The proposal: this RFC depends on `MILE-359`, which gives every report, `export` included, a
 `schema_version`. The snapshot envelope copies that `schema_version` and records the
 `urzua_version` that wrote it. A reader refuses an export whose `schema_version` it does not know,
-with one finding, and counts its references eligible and unexamined. Under `MILE-359`'s
-addition-only rule, adding `paused` to the state set bumps the version. An older reader then refuses
+with one finding, and counts its references eligible and unexamined. This RFC proposes,
+as its own policy, that adding a value to the state set (such as `paused`) bumps the version.
+`MILE-359` sets no bump policy, and its addition-only rule arguably implies that additions do not
+bump. That conflict is for the ADR on `MILE-359` to settle. Under this proposal an older reader refuses
 a newer export rather than misreading `paused`. A newer reader shows that an older export cannot
 express `paused`, and does not claim the repository has nothing paused.
 
@@ -164,13 +168,24 @@ rewritten:
 
 The narrower test, proposed for that ADR: **a cross-repository reading is engine scope when it is
 computed only from exports the engine itself wrote, keeps each record in its own repository's
-vocabulary, holds no state between runs, and is reproducible from the committed snapshots alone.**
-The test does not admit `ADR-37`'s generated dashboard. That dashboard reads the records through its
-own parser and presents a curated layout for an audience, and its separate parser was exactly the
-drift `urzua export` was built to end. The test also stays true once the board reads other
-repositories' exports, because those exports are the engine's own output, versioned (section 6),
-and committed. The board would still compute no state, use no service and add no vocabulary. Trend
-analytics over time fail the test, because they hold state between runs, so they stay in `MILE-24`.
+vocabulary, holds no state between runs, and, for a snapshot source, is reproducible from the
+committed snapshots alone.** A checkout source (section 2) gives the same reading of whatever tree is
+checked out, which is reproducible only as far as that tree is; `check` in CI would read snapshots
+only (open question 3).
+
+This test also admits `ADR-37`'s generated dashboard. `scripts/generate-dashboard.py` builds its data
+only from `urzua check`, `explain`, `graph` and `export --format json` through `run_urzua`
+(lines 176-186), and holds no state between runs. Nothing in the code distinguishes it from a board
+reading the same output. What remains is where each ships and who chooses the layout: `urzua board`
+is a command of the engine binary with one fixed layout (`ADR-103`), and the dashboard is a script
+in this repository with a layout curated for this project. That is a packaging difference, not a
+property of the reading. Two consequences follow, and the maintainer chooses between them (open
+question 7): either the ADR accepts that this class covers both, and the dashboard is engine-scope
+eligible while staying a script; or the ADR adds a criterion that the reading ships in the engine
+binary with no audience-specific layout, which excludes the dashboard by packaging and should say
+so. The test stays true once the board reads other repositories' exports, because those exports are
+the engine's own versioned output (section 6). Trend analytics over time fail the test, because they
+hold state between runs, so they stay in `MILE-24`.
 
 ### 8. Finding 4: ADR-103 should be settled in the same pass
 
@@ -217,12 +232,12 @@ ULIDs make that unlikely but not impossible, since records can be copied between
   It also contradicts `SPEC-1`'s config-driven thesis, under which one binary serves repositories of
   different shapes. A merged config would make one repository's rules depend on another's, and the
   resolution order would become a second config format (the same worry as `SPEC-3`'s open question
-  on scoped overrides, line 2012).
+  on scoped overrides, line 2013).
 - **A separate ecosystem tool on `urzua export` only.** It would keep `RFC-27` intact. But a
   reference from one record to another repository's record is a property of the record, and
   checking it is what `pointer.resolution` does locally. Done outside, a citing repository's `check`
   would pass references nothing examined, the silent no-op `SPEC-1` forbids. The org view alone
-  could live outside, and section 7 asks the maintainer to choose.
+  could live outside; open question 8 asks the maintainer to choose.
 - **Doing nothing.** `MILE-358` and `MILE-359` keep naming another repository's work in prose that
   nothing checks. Each organisation then writes its own cross-repository script, the hand-written
   linter `SPEC-1` exists to replace.
@@ -248,6 +263,13 @@ ULIDs make that unlikely but not impossible, since records can be copied between
    `error` past a declared maximum snapshot age.
 6. **Prefix syntax.** `<repo>:<id>` collides with nothing in today's id grammar (`ADR-64`'s
    structured parsing), but `<repo>/<id>` or a URL form are alternatives. The maintainer chooses.
+7. **Does the scope test admit the dashboard?** Accept that section 7's test admits `ADR-37`'s
+   dashboard as well, or add a packaging criterion that excludes it, stated as packaging.
+8. **Engine or ecosystem for the org view.** Qualified references belong in `check` either way. The
+   org view could instead be an ecosystem tool reading the same snapshots, which leaves `RFC-27`
+   intact and needs no ADR narrowing it. Options: in `urzua board` (the maintainer's relayed
+   direction allows it); outside the engine; or outside first, moved in once a second organisation
+   asks.
 
 ## Non-goals
 - Merging, inheriting or overlaying configuration across repositories.
@@ -271,3 +293,4 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-23 | Initial RFC, `Status: Draft`. Filed from the maintainer's polyrepo direction of 2026-11-23, relayed from the organisation's coordination thread. | **structural** |
+> | 2026-11-23 | Review fixes: the scope test admits the generated dashboard, stated plainly with the choice put to the maintainer; the version-bump policy stated as this RFC's own; reproducibility limited to snapshot sources; open questions 7 and 8 added; motivation bullets marked as paraphrase; SPEC-3 line corrected; sibling-repository facts labelled as survey reports. | **structural** |
