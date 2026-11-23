@@ -17,16 +17,18 @@ consuming gate needs to call urzua without an adapter: `name`, `version`, `contr
 ## Why
 
 `MILE-358` names a `describe` answer as the other half of a gate reading urzua natively, and left
-its shape unsettled. It is settled now, on the rule that urzua's existing shape is the contract and
-urzua conforms by addition only: the maintainer accepted that plan on 2026-11-23, after a review
+its shape unsettled. The field list above is the proposal; the rule it follows is settled, that
+urzua's existing shape is the contract and urzua conforms by addition only: the maintainer accepted that plan on 2026-11-23, after a review
 found that changing the report's shape would break consumers silently (`hooks.rs` reads
 `next_action` with `as_str()`), would contradict `RFC-3`'s non-goal of a shared status enum, and
 would reintroduce the shared envelope type `ADR-46` rejected. Every reporting command already
 prints `status`, `next_action`, `next_action_reason` and `next_action_inputs` (checked 2026-11-23
 against `check`, `explain`, `graph`, `board`, `roadmap`, `audit`, `export`, `doctor`, `rules`,
 `index`, `refs`, `fix`, `reverify`, `waive`, `hooks`, `harness status`, `harness adapters`,
-`harness limits`, `migrate`, `import`, `init` and `new`), so the base layer needs nothing changed.
-`mcp`, `harness hook` and `harness run` print another program's format and are `exempt`.
+`harness limits`, `harness record`, `harness uninstall --dry-run`, `migrate`, `import`, `init` and
+`new`), so the base layer needs nothing changed. `mcp` speaks JSON-RPC and `harness hook` prints
+the agent's hook format; `harness run` prints a verdict with no `status`. All three would be
+`exempt`, a profile for a command a gate does not call as a check.
 
 ## Done means
 
