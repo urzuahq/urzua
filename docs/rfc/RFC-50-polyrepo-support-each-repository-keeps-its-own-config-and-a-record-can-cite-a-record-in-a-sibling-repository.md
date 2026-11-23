@@ -62,31 +62,45 @@ release's `urzua export` wrote, and never as rules.
 
 ### 2. Sibling snapshots, and a workspace file that is local tooling only
 
-`check` reads siblings only from snapshots committed in the citing repository, for example
-`.urzua/siblings/<name>.json`. Each snapshot is self-describing: `{schema_version, repository,
-commit, generated_at, urzua_version, records}`, where `repository` is the sibling's forge identity
-(`owner/name`), `commit` is the sibling commit the export was taken from, and each record carries a
-content hash. The qualifier `<name>` in a reference is the snapshot's declared name. This mirrors
-the issue snapshot `citation.issue-exists` already uses (`SPEC-3`, "Cited issues and pull
-requests", lines 782-835): written by a refresh command, committed, checked for `schema_version` and
-repository, with `generated_at` on every finding. CI never needs the network, a second checkout or
-any file outside the repository.
+The maintainer chose committed snapshots for CI and a workspace file for the sibling list (Q2,
+Q3). The file layout, the envelope and the workspace file's form below are the author's proposal.
 
-A **workspace file** maps sibling names to local checkout paths and holds nothing else: no rule, no
-level, no vocabulary. It is local tooling. The snapshot refresh command reads it to find each
-sibling's checkout, and the client's org view reads it to find the repositories to show. A person
-keeps it wherever suits them, in a home repository or outside any repository, and it is never
-committed into each repository. `check` in CI never reads it. Locally, when a sibling's checkout is
-present, the refresh reads it; `check` still resolves against the committed snapshot, so a local run
-and CI agree.
+`check` in CI reads siblings only from snapshots committed in the citing repository, one file per
+sibling at `.urzua/siblings/<name>.json`. Each snapshot is self-describing: `{name, repository,
+commit, generated_at, schema_version, urzua_version, records}`. `name` is the qualifier used in
+references and must equal the filename; `check` reports a file whose envelope `name` differs from
+its filename. `repository` is the sibling's forge identity (`owner/name`), `commit` is the sibling
+commit the export was taken from, and each record carries a content hash. This follows the issue
+snapshot `citation.issue-exists` already uses (`SPEC-3`, "Cited issues and pull requests", lines
+782-835): written by a refresh command, committed, checked for `schema_version`, with `generated_at`
+on every finding. CI never needs the network, a second checkout or any file outside the
+repository.
+
+**The committed snapshot files are the repository's declaration of its siblings** (author's
+proposal; open question 10 asks whether config should also name them). A sibling a repository may
+cite is one it has a snapshot file for. A `<repo>:<id>` whose `<repo>` has no snapshot file is
+reported, at `warn`, as "not declared". A sibling whose records must not be copied in (section 9) is
+declared by committing a stub snapshot: the envelope with no records.
+
+A **workspace file** (author's proposal for the form the maintainer's Q2 answer takes) maps sibling
+names to local checkout paths and holds nothing else: no rule, no level, no vocabulary. It is local
+tooling. The snapshot refresh command reads it to find each sibling's checkout, and the client's org
+view reads it to find the repositories to show. A person keeps it wherever suits them, in a home
+repository or outside any repository, and it is never committed into each repository. `check` in CI
+never reads it.
+
+Locally, following the Q3 answer ("a local checkout is used when present"), a `check` run outside CI
+resolves a sibling against its checkout when the workspace file names one that is present, and
+against the committed snapshot otherwise. The report names the source it read for each sibling, so
+a local result that differs from CI's is visible as a different source, not a silent disagreement.
 
 This is how a workspace file squares with "configs never merge": it governs nothing. Each
 repository's own config declares the maximum snapshot age and the levels its references are held to
 (section 9).
 
 Nothing reaches a forge or a service. `RFC-14` already judged (line 128) that "a cross-repo graph has
-no natural forge surface". A reference to a sibling with no committed snapshot is reported as
-"declared, not read". It is never skipped silently.
+no natural forge surface". A reference to a sibling with no snapshot is reported as "not declared",
+and one whose snapshot is a stub is counted eligible and unexamined. Neither is skipped silently.
 
 ### 3. Qualified references
 
@@ -118,8 +132,8 @@ that `stable_id` is the key the engine stores. The display id is what a person r
   target's current status. Open question 9 asks whether a reference from a decided record must be
   pinned; it is still open.
 
-A reference is unexamined, and counted as eligible and unexamined, when the sibling has no snapshot,
-its snapshot is unparsable, of another `schema_version` or of another repository, or the
+A reference is unexamined, and counted as eligible and unexamined, when the sibling has a stub snapshot,
+its snapshot is unparsable, of another `schema_version`, or named differently from its file, or the
 target is not in the snapshot. In each case one finding names the reason. The report keeps the
 existing split of examined against found (`SPEC-1`: no silent no-op), so a check whose snapshot
 never loaded cannot pass as one that found nothing.
@@ -189,12 +203,18 @@ org rollup (`MILE-24`)" in the ecosystem. The maintainer's change of direction d
 moves out as the ecosystem's client. So `RFC-27` is not amended or narrowed, no ADR narrows it, and
 no scope test is proposed. The split, by `RFC-27`'s own tests:
 
-- **Engine scope:** the versioned export, sibling snapshots and their refresh, and cross-repository
-  citations in `check`. A citation resolved against a snapshot makes the citing record more
-  verifiable (§2).
+- **Engine scope:** the versioned export, sibling snapshots, and cross-repository citations in
+  `check`. Resolving a citation against a snapshot is relationship resolution, which `RFC-27` §2
+  names as engine scope; it makes the citing record more verifiable. It was never `MILE-24`'s
+  work, so nothing moves out of `MILE-24`, which stays ecosystem as a whole.
+- **The snapshot refresh:** engine scope by §2, not by the 2026-11-08 amendment. The amendment's
+  class of derived readings "writes nothing", and a refresh writes a file, so it is not in that
+  class. It passes §2's test the way `urzua refs refresh` does for `citation.issue-exists`: it
+  produces the committed input that makes citations verifiable. It also stays clear of what the
+  amendment keeps out: it holds no state about the work, reads only records (through each sibling's
+  own `urzua export`), and needs no service, since it reads local checkouts.
 - **Ecosystem:** the cross-repository org view and the org rollup, built in the client from the
-  engine's output (§3). `MILE-24`'s org rollup needs no move for `RFC-27`'s sake; the
-  cross-repository citation part of `MILE-24`'s decision graph is engine scope through this RFC.
+  engine's output (§3).
 
 ### 8. Finding 4: ADR-103
 
@@ -210,12 +230,13 @@ the command. This RFC defers to it and changes no status.
 - **A private target.** The snapshot is committed into the citing repository, so it copies the
   target's titles and statuses there. A refresh writes only what the sibling's export would show to
   whoever runs it, and a repository that must not hold a private sibling's records declares that
-  sibling with no snapshot. Its references are then eligible and unexamined, never resolved against
+  sibling with a stub snapshot, envelope only (section 2). Its references are then eligible and unexamined, never resolved against
   data the reader cannot see. `RFC-11`'s declared boundaries apply to the snapshot file like any
   other path.
-- **A renamed repository.** The qualifier is the local declared name, not the forge name. A rename
-  changes the snapshot's `repository` at the next refresh. The mismatch with the declared identity
-  produces one finding, and references re-resolve on `stable_id` without edits.
+- **A renamed repository.** The qualifier is the snapshot's `name`, not the forge name, so a rename
+  changes no reference. It changes the snapshot's `repository` at the next refresh, and
+  `check --base` reports a snapshot whose `repository` differs from the merge base's copy, as one
+  finding (author's proposal). References keep resolving on `stable_id`.
 - **Circular references.** Resolution reads one level, the snapshot of the target. It never follows
   the target's own qualified references, so a cycle across repositories cannot loop. `roadmap`
   ordering stays within one repository, and a cross-repository `Depends-on` is shown, not
@@ -263,6 +284,13 @@ ULIDs make that unlikely but not impossible, since records can be copied between
    record that is not terminal must be pinned, so a decision cannot rest on a sibling Draft that
    changes silently; (c) every qualified reference is pinned. (b) is the author's recommendation.
    Not answered on 2026-11-23.
+10. **Is the committed snapshot set enough as each repository's declaration of its siblings?**
+    Options: (a) yes, the set of `.urzua/siblings/*.json` files is the declaration (section 2),
+    which keeps Q2's answer that the sibling list is not in each repository's config; (b) each
+    repository's own config also names its siblings, by name and `owner/name` with no path, which
+    is closer to how `citation.issue-exists` checks `issue_refs.repository` (`SPEC-3`) and would let
+    `check` compare a snapshot's `repository` with a declared one rather than only with the merge
+    base's copy. (a) is the author's proposal. The maintainer decides.
 
 ### Answered
 
@@ -271,7 +299,7 @@ answers are relayed and paraphrased here, apart from the quotation in Motivation
 the Proposal.
 
 1. **Shared vocabulary:** yes, opt-in. The engine publishes a versioned vocabulary file, and a
-   repository adopts it by name and version; no rules are imported (section 5) A first reader had been
+   repository adopts it by name and version; no rules are imported (section 5). A first reader had been
    copying this repository's `rfc` status block into its own config, and the coordination thread
    reports two sibling repositories have since copied it by hand; this answers both.
 2. **Where the sibling list lives:** a workspace file, chosen over each repository's config. The
@@ -319,5 +347,6 @@ the Proposal.
 > | 2026-11-23 | Review fixes: the scope test admits the generated dashboard, stated plainly with the choice put to the maintainer; the version-bump policy stated as this RFC's own; reproducibility limited to snapshot sources; open questions 7 and 8 added; motivation bullets marked as paraphrase; SPEC-3 line corrected; sibling-repository facts labelled as survey reports. | **structural** |
 > | 2026-11-23 | Corrected the survey's count for the third sibling repository: 7 `open` records, 3 rfc and 4 spec, not most or all of its records. The point it supports is unchanged. | **structural** |
 > | 2026-11-23 | First-reader input: the snapshot records the sibling `commit` and a per-record content hash; a qualified reference may be pinned and is reported when its target changed (open question 9); file citation marked lowest priority, since a vendored, pinned local copy already serves schemas; non-goals add section anchors and gate receipts. | **structural** |
-> | 2026-11-23 | A second first reader: a `<repo>:path` citation is stated not to stand in for vendoring, and open question 1 notes two siblings copied this repository's `rfc` status block by hand. | **structural** |
+> | 2026-11-23 | A second reader: a `<repo>:path` citation is stated not to stand in for vendoring, and open question 1 notes two siblings copied this repository's `rfc` status block by hand. | **structural** |
 > | 2026-11-23 | Folded in the maintainer's answers of 2026-11-23, relayed from the coordination thread: the board moves out as the ecosystem client, so the reversal of `RFC-27`, the ADR narrowing it, its amendment pointer and the scope test are dropped; the org view is ecosystem and cross-repository citations stay engine scope; sibling snapshots committed per repository with a local-only workspace file; opt-in versioned vocabulary; `warn`, then `error` past a declared maximum age; `<repo>:<id>`; `ADR-103` deferred to its own rework. Open questions 1-8 moved to Answered; 9 stays open. | **structural** |
+> | 2026-11-23 | Review fixes, labelled as the author's proposal: the snapshot envelope gains `name`, checked against its filename; the committed snapshot set is the sibling declaration, an undeclared qualifier is a `warn`, a private sibling is a stub snapshot, a rename is caught by `check --base`; open question 10 added. A local `check` reads a present checkout, as the Q3 answer says. Refresh justified under `RFC-27` §2; `MILE-24` stays ecosystem as a whole. Two typos fixed. | **structural** |
