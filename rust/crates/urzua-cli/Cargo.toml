@@ -41,3 +41,4 @@ harness = false
 
 [dev-dependencies]
 urzua-cli = { path = ".", features = ["test-seams"] }
+regex = { workspace = true }

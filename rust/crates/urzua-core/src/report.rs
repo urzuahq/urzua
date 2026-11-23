@@ -955,11 +955,22 @@ pub enum AsOfSourceKind {
     Clock,
 }
 
+/// The per-unit counts of what a `check` run examined. `files` is the only
+/// unit `check` counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct Examined {
+    pub files: usize,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CheckReport {
     pub status: ReportStatus,
     pub as_of: AsOf,
     pub files_examined: usize,
+    /// What the run examined as one count per unit, under the unit names a
+    /// consuming gate shares; `files` always equals `files_examined`
+    /// (`ADR-106`).
+    pub examined: Examined,
     /// How many records some rule actually reached a verdict about
     /// ([`records_read_by_any_rule`]). `files_examined` says what was read off
     /// disk; this says what was judged, and the gap between them is a run whose
@@ -2365,6 +2376,7 @@ mod tests {
             },
             status: ReportStatus::Ok,
             files_examined: 1,
+            examined: Examined { files: 1 },
             records_read_by_any_rule: 0,
             rules_executed: vec![],
             rules_selected: None,
@@ -2393,6 +2405,7 @@ mod tests {
             },
             status: ReportStatus::FindingsPresent,
             files_examined: 1,
+            examined: Examined { files: 1 },
             records_read_by_any_rule: 1,
             rules_executed: vec![],
             rules_selected: None,

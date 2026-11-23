@@ -110,4 +110,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [The board leaves the engine: it is the first ecosystem client, a binary in this repository that reads only published JSON](ADR-103-the-board-leaves-the-engine-it-is-the-first-ecosystem-client-a-binary-in-this-repository-that-reads-only-published-json.md)
 - [A rule entry lists the record types it judges](ADR-104-a-rule-entry-lists-the-record-types-it-judges.md)
 - [Where the host shows no prompt, the person approves a gated move by answering urzua's question](ADR-105-where-the-host-shows-no-prompt-the-person-approves-a-gated-move-by-answering-urzua-s-question.md)
+- [The check report's examined is an object of per-unit counts added beside files_examined](ADR-106-the-check-report-s-examined-is-an-object-of-per-unit-counts-added-beside-files-examined.md)
 <!-- urzua:index:end -->

@@ -427,7 +427,7 @@ record was not in the set it reads. "Nothing wrong" is indistinguishable from "n
 3. Prompt "Rename `ADR-2-use-a-queue.md` to `0002-queue.md`", then `urzua check`.
 4. Open the report's `rules_executed` for any rule.
 
-**What you'll see.** Step 2: `files_examined: 0` and `records_read_by_any_rule: 0`, and `type.dir-matches-nothing`
+**What you'll see.** Step 2: `files_examined: 0` (and `examined.files: 0`) and `records_read_by_any_rule: 0`, and `type.dir-matches-nothing`
 errors ("record type 'adr' declares dir 'docs/adr', which does not exist -- every rule for this type examines
 nothing"). Step 3: `filename.identity-pattern` reports the file instead of dropping it ("file name does not match
 the 'TYPE-NNNN-slug.md' convention ... rename: 0002-queue.md -> ADR-0002-queue.md"). Step 4: every rule has a
@@ -742,7 +742,7 @@ changed a value the scaffold wrote. The assigned number is provisional (scene 12
 
 **Show it.**
 
-1. `urzua check`, then read `status`, `blocking`, `files_examined` and `rules_executed`.
+1. `urzua check`, then read `status`, `blocking`, `files_examined` (or `examined.files`, the same count) and `rules_executed`.
 2. Edit the config so one rule is `info` and another `error`. Run again, and run `urzua check --fail-on warning`.
 3. On a branch, change one record and run `urzua check --base origin/main`.
 4. Run `urzua check docs/adr` and `urzua check --rules field.quality`.
