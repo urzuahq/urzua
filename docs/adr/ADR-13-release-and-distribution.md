@@ -51,6 +51,27 @@ public launch, `v0.1.0` is tagged now — proving the pipeline end to end while 
 (private, no external consumer depending on it) rather than discovering a break at the moment it
 matters most.
 
+## Amendment (2026-11-23): the versioner, the targets, the release gate and the attestation step are not what the Decision describes
+
+*Status of this amendment: proposed, pending maintainer review. The Decision text above is unchanged.*
+
+Four statements in the Decision no longer describe the workflows, found while reviewing the release flow
+against `.github/workflows/` and `knope.toml`. The choice of GitHub release binaries only, with no crates.io
+and no Homebrew, stands.
+
+- **The versioner is `knope`, not `cargo-release`.** `ADR-29` chose `knope` and `ADR-45` sequences it as a
+  `prepare-release` pull request and a `release` step; nothing invokes `cargo-release`. `rust/release.toml`
+  is read by no workflow, script or `knope.toml` step, so the Consequence that it is load-bearing does not
+  hold. What keeps `cargo publish` impossible is `publish = false` on every crate.
+- **Two targets are built, not three.** `publish-release.yml` builds `aarch64-apple-darwin` and
+  `x86_64-unknown-linux-gnu`. There is no `x86_64-apple-darwin` build; an Intel Mac builds from source.
+- **The release gate is not a `ci`-conclusion query.** There is no tag-triggered `release.yml` and no
+  `verify-ci` job. `publish-release.yml` runs `checks.yml` against the merge commit it tags (`ADR-47`).
+  The Consequence that a renamed `ci` job breaks release-gating therefore no longer holds either.
+- **Attestation is blocking.** The Decision says the `actions/attest-build-provenance` step is non-blocking
+  with `continue-on-error`. The step carries no `continue-on-error`, so a failed attestation fails the
+  `build` job and no archive is uploaded. The Consequences already say the escape hatch was removed.
+
 ## Reversibility
 
 Adding crates.io/Homebrew later is additive, not a reversal — `publish = false` is easy to flip
@@ -84,3 +105,4 @@ disappoint if something about the release shape needs to change before public la
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-23 | Amendment added: the versioner is `knope`, two targets are built, the release gate is `checks.yml` on the merge commit, and the attestation step is blocking. **Why:** found while reviewing the release flow against the workflows; proposed, pending maintainer review. The Decision is unchanged. | **substantive** |
