@@ -383,3 +383,14 @@ pub fn path_with_urzua() -> std::ffi::OsString {
     ));
     std::env::join_paths(dirs).unwrap()
 }
+
+/// Writes `input` to the child's stdin and closes it. A hook may exit without
+/// reading its input, so a broken pipe means "not read" and the caller asserts
+/// on the output; any other write error is a real failure.
+pub fn write_stdin(child: &mut std::process::Child, input: &str) {
+    use std::io::Write;
+    let mut stdin = child.stdin.take().unwrap();
+    if let Err(e) = stdin.write_all(input.as_bytes()) {
+        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
+    }
+}
