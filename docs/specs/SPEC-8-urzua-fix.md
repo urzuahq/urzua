@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.77'
+Version: '0.78'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -396,10 +396,11 @@ the same `PATHS` scoping.
   `Drift detected` that is no longer drifted.
 - **Scoped pins** (`ADR-74`, `SPEC-3`). A pin on `path#scope` is listed and re-pinned like any
   other, from the hash of the span its scope resolves to now, and the edit keeps the scope in the
-  spelling as written. Each listed pin of a scoped locator carries `span` (`start`, `end` and the
+  spelling as written, a member kind suffix (`Type::name[fn]`, `SPEC-3`) included. An unknown kind
+  is a scope that does not resolve, so it is refused like one. Each listed pin of a scoped locator carries `span` (`start`, `end` and the
   pinned `text`), so the reviewer diffs exactly those lines and sees that the resolver found the
   item the decision is about; the revision row names the lines. A scoped pin that does not resolve
-  (renamed, deleted, ambiguous, no resolver, range past the end of the file, file missing or unreadable) is never re-pinned,
+  (renamed, deleted, ambiguous, a kind no member entry declares, no resolver, range past the end of the file, file missing or unreadable) is never re-pinned,
   because re-hashing whatever is there now would turn a deleted symbol into a silent pass. It is
   listed under `failed_pins` (`record`, `locator`, `reason`), per pin and not per record, status is
   `partial-failure`, and the record's other stale pins still move. A rename is repaired by editing
@@ -902,3 +903,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-20 | Bumped to `0.77`. Corrects `0.76`: the lines before the merged span are still compared when both sides re-pinned a scope, so removing that comparison would have changed an outcome (a symbol one side pulled a doc comment into is refused); each side is confined only relative to its own span start. The refusal for lines above a range or a both-sides symbol names what happened per scope kind. **Why:** review of the pull request for `BUG-212`. | **structural** |
 > | 2026-11-21 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` e34ae347e45e -> 741d74b614d4. Reason: BUG-213: a test is appended, a_prefix_lines_record_deleted_and_re_added_elsewhere_is_paired_by_its_stable_id; existing tests are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-21 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 741d74b614d4 -> c566717e9a27. Reason: BUG-213: the appended prefix-lines Stable-Id pairing test gained a comment explaining its long base body; existing tests are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-22 | Bumped to `0.78`. A re-pin keeps a scope's member kind suffix (`Type::name[fn]`) as written, and a scope naming a kind no member entry declares is refused like any unresolved scope. **Why:** `MILE-352` / `ADR-74` amendment of 2026-11-22, chosen by the maintainer (2026-11-22, AskUserQuestion answer to the orchestrating agent): question "MILE-352: ... How should a locator tell them apart? Any grammar change is an ADR-74 amendment you'd accept.", answer "Declared kind suffix (Recommended)". | **substantive** |

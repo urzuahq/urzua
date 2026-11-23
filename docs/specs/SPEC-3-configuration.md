@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.177'
+Version: '0.178'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d6cf0c6d8e5582206100d3a1f08601359c442e64202a8ff2035952987516ea2b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:042aba542b2465b552d39b0c7b1e4223c8ad8a933e03d7914458bc83608aca2d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -2265,7 +2265,9 @@ and a file-level pin keeps the meaning above.
 locator := path [ "#" scope ] [ "@" anchor ]
 scope   := range | symbol
 range   := "L" N [ "-L" M ]      N and M decimal, no leading zero, 1 <= N <= M
-symbol  := seg ( "::" ( seg | "<" seg ">" ) )*     seg := [A-Za-z_] [A-Za-z0-9_.-]*
+symbol  := seg ( "::" ( seg | "<" seg ">" ) )* [ "[" kind "]" ]
+                                         seg := [A-Za-z_] [A-Za-z0-9_.-]*
+kind    := [A-Za-z_] [A-Za-z0-9_-]*      only after a member: at least one `::`, last segment a seg
 anchor  := "sha256:" 64 lowercase hex  |  7 to 64 lowercase hex (a commit)
 ```
 
@@ -2278,6 +2280,13 @@ locator with both anchors, a `@sha256:` that is not a pin, or a glob with a scop
 path that contains `#` and fails the grammar is reported as malformed, never as a path missing from
 the tree; there is no escape, so a file whose name ends `#word` cannot be cited. A commit anchor
 parses and is reported `commit anchor not yet supported` (it is reserved for `MILE-84`).
+
+A `[kind]` suffix (`ADR-74`, amendment of 2026-11-22) selects the member entries of that declared
+kind: `Type::name[fn]`, `Type::<Trait>::name[field]`. It sits at the end of the symbol, before any
+anchor. `[` and `]` are not in `seg`, so no scope that parsed before has a different meaning. A tail
+whose text before its first `[` is a symbol, and whose suffix is not one well-formed `[kind]` after a
+member (`A::b[]`, `A::b[f.n]`, `A::b[fn]x`, `A[fn]`, `A::<T>[fn]`), is a malformed kind, never a
+path; a tail that is no symbol before its `[` is still part of the path.
 
 **The hashed bytes.** A scope resolves to a contiguous span of whole lines. The pinned bytes are
 those lines, each with at most one trailing `\r` removed, joined by `\n`, with no trailing newline,
@@ -2306,8 +2315,10 @@ locator_resolvers:
                                 # one mapping, or a list when members end differently
       - start: '^\s*(pub\s+)?fn\s+{symbol}\b'
         end: brace_balanced
+        kind: fn                # optional: `Type::name[fn]` selects this entry
       - start: '^\s*(pub\s+)?{symbol}\s*:([^:]|$)'   # a struct field, up to the next field
         end: indent
+        kind: field
     trait_container:            # `Type::<Trait>` and `Type::<Trait>::member`
       start: '^\s*impl(<.*?>)?\s+([A-Za-z_][A-Za-z0-9_]*::)*{trait}(<[^{]*>)?\s+for\s+{symbol}\b'
       end: brace_balanced
@@ -2319,8 +2330,10 @@ the regular-expression-escaped text from the record, so a `.` in a symbol is a l
 `start`, `container.start` and every `member.start` must contain `{symbol}`, a `trait_container.start`
 also `{trait}`; a malformed pattern or glob, a missing placeholder, a `member` (any entry of a list) with no `container`
 or `trait_container` or the reverse for `container`, a `container` end kind other than
-`brace_balanced`, `indent` or `heading`, an unknown key, a repeated name and two resolvers with the
-same glob are config-load errors. A file covered by two different globs is reported where a scope
+`brace_balanced`, `indent` or `heading`, an unknown key, a repeated name, two resolvers with the
+same glob, a member `kind` that does not match `[A-Za-z_][A-Za-z0-9_-]*` and two member entries of
+one resolver with the same `kind` are config-load errors, each naming the resolver. The engine knows
+no kind names: a kind is whatever the resolver declares. A file covered by two different globs is reported where a scope
 in it is resolved, never resolved by the first.
 
 **End kinds (normative, append-only).** An end kind finds the last line of an item from its first
@@ -2352,7 +2365,11 @@ that end differently, such as a Rust method (`brace_balanced`) and a struct fiel
 the next field or the closing brace: the closing `>,` of a field whose type spans lines is level
 with the field and is not part of the span). The container may match a `struct` as well as an
 `impl`, so `Type::field` is found in the struct's span and `Type::method` in the impls'; a name used
-by both is ambiguous. A direct child of a `brace_balanced`
+by both is ambiguous unless the locator selects one by kind. With a `[kind]` suffix only the member
+entries declaring that kind are tried, counted by the same rule: none matching is not found (naming
+the kind), more than one is still ambiguous, and a kind no entry of the resolver declares is
+reported as such, with the kinds it does declare, never ignored. Without a suffix every entry is
+tried, kinds declared or not, exactly as before. A direct child of a `brace_balanced`
 container is a line that starts at brace depth one; of an `indent` container, a line at the
 indentation of the container's first non-blank body line; of a `heading` container, a heading one
 level deeper. A match deeper inside another member (a nested `fn`) is not a candidate. A member's
@@ -2364,7 +2381,7 @@ of the same name in different inline modules are one namespace in the first buil
 **Reasons.** `embodiment.locator-exists` reports, once per locator, with the locator and the cause:
 the path is missing or untracked; the locator does not parse (naming the grammar); the file is not
 valid UTF-8; no resolver covers the file, or several do; the symbol, container or member is not
-found; it is ambiguous (with the candidate lines); the form is unsupported for that resolver; the
+found; the kind is declared by no member entry; it is ambiguous (with the candidate lines); the form is unsupported for that resolver; the
 end is not found; the range lies beyond the end of the file; a commit anchor is not yet supported;
 and a scope given without a pin (drift is then judged on the whole file). A locator reported this
 way is not also judged for drift.
@@ -2410,6 +2427,11 @@ inclusive) or the failure. Rows 1 to 12 use the `rust` resolver above with the `
 | 22 | as 21, with `impl A {` / `    fn a(&self) {}` / `}` appended | `A::a` | ambiguous: lines 3, 7 (a field and a method) |
 | 23 | as 21 | `A::z` | not found |
 | 24 | `struct A {` / `    b: Vec<` / `        u8,` / `    >,` / `    c: u8,` / `}` (resolver of 21) | `A::b` | 2-3 (the closing `>,` is level with the field and is not included) |
+| 25 | as 22, the resolver of 21 with `kind: fn` on the `fn` entry and `kind: field` on the field entry | `A::a[field]` | 2-3 |
+| 26 | as 25 | `A::a[fn]` | 7-7 |
+| 27 | as 25 | `A::a` | ambiguous: lines 3, 7 (no suffix: as 22) |
+| 28 | as 25 | `A::a[method]` | kind `method` is declared by no member entry (declared: fn, field) |
+| 29 | as 25 | `A::b[fn]` | not found (member `b` of kind `fn`) |
 | 19 | the bytes `a\r\nb\r\r\nc\n`, lines 1-3 | | pinned bytes `a\nb\r\nc` |
 | 20 | the bytes `\uFEFFfn a() {\n}\n`, lines 1-2 | | pinned bytes `fn a() {\n}` |
 
@@ -3106,3 +3128,4 @@ proves this configuration produces the three findings.
 > | 2026-11-20 | Bumped to `0.177`. `section.decided-body-changed` compares the lines above a header, such as the title before prefix-lines fields, and states where an amendment goes when the revision log has no heading of its own. **Why:** review of pull request #616: a changed title above a prefix-lines header was not compared. | **substantive** |
 > | 2026-11-20 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 26eec9c1f475 -> 69a7014fd422. Reason: own_config_integration.rs: section.decided-body-changed is removed from NOT_YET_RELEASED now that release 0.4.13 carries it and the configuration declares it; the test logic is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-21 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 69a7014fd422 -> 042aba542b24. Reason: own_config_integration.rs changed only by emptying NOT_YET_RELEASED now that status.children-agreement is declared in the configuration; the tests those specs pin it for are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-22 | Bumped to `0.178`. A resolver's member entry may declare a `kind`, validated at load (charset, unique within the resolver), and a symbol scope may end in `[kind]` to try only the entries of that kind; an undeclared kind is reported, an unsuffixed scope resolves as before. Grammar, resolution, reasons and vectors 25-29 added. **Why:** `MILE-352` / `ADR-74` amendment of 2026-11-22: a field and a method of one name (`Population::unreadable`) could only be pinned by line range. The maintainer chose this spelling (2026-11-22, AskUserQuestion answer to the orchestrating agent): question "MILE-352: ... How should a locator tell them apart? Any grammar change is an ADR-74 amendment you'd accept.", answer "Declared kind suffix (Recommended)". | **substantive** |

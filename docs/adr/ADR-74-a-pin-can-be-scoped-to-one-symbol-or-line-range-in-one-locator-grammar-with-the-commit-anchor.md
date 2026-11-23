@@ -351,6 +351,64 @@ end kinds and the counting rule serve any language whose items nest, and none of
 `trait_container` pattern are unchanged, but the member entries of point 1 also apply inside the span a
 `trait_container` finds, so `A::<Trait>::b` may resolve to a field or a method by the same counting rule. Exact key names and test vectors are `SPEC-3`'s.
 
+## Amendment (2026-11-22): a member entry may declare a kind, and a locator may select it
+
+*Status of this amendment: accepted by the maintainer on 2026-11-22. Asked "MILE-352: ... How should a locator tell them apart? Any grammar change is an ADR-74 amendment you'd accept.", the maintainer chose "Declared kind suffix (Recommended)", whose option text was: "Each resolver member entry may declare a kind name in config (e.g. fn, field). A locator selects one with a bracket suffix: `report.rs#Population::unreadable[fn]` or `[field]`. The engine knows no kind names. An unsuffixed locator behaves as today (ambiguous if both match). Additive; a field plus a same-named getter is common in Rust, so adopters hit this too." (AskUserQuestion answer to the orchestrating agent, 2026-11-22). `Status` stays `Accepted`, and the Decision text and the amendment of 2026-11-05 are unchanged.*
+
+Point 2 of the amendment of 2026-11-05 makes `Type::known` ambiguous when a struct has a field `known`
+and a method `known()`, and nothing in the grammar could name one of them. `MILE-111`
+(`Population::unreadable`, a field and its getter) therefore pinned a line range, which goes stale
+whenever lines above it move (`MILE-352`). This amendment lets a locator name one of them. It is
+additive: everything decided above, and the counting rule of the earlier amendment, are unchanged for
+every locator without a suffix.
+
+**1. Grammar.** Point 1's `symbol` gains an optional suffix:
+
+```
+symbol  := seg ( "::" ( seg | "<" seg ">" ) )* [ "[" kind "]" ]
+kind    := [A-Za-z_] [A-Za-z0-9_-]*
+```
+
+The suffix is allowed only on a symbol that names a member: at least one `::`, and a last segment that
+is a `seg`, not a `<Trait>`. So `Type::name[fn]` and `Type::<Trait>::name[field]` parse; `Name[fn]`
+and `Type::<Trait>[fn]` do not, because a kind selects a member entry and those forms resolve no
+member. A `kind` has no `.`, unlike a `seg`. The suffix closes the symbol, so it sits after the last
+segment and before any anchor (`path#Type::name[fn]@sha256:<hex>`). Point 1's parse order is
+unchanged: the anchors are taken first, then the text after the last `#` is the scope. `[` and `]`
+were not in `seg`, so no scope that parsed before has a different meaning: a tail that contained
+`[` was never a symbol and was part of the path. One narrow change follows. A path whose last `#`
+part is a symbol followed by `[` (`src/a#b[c]`, `src/x#y[ab].rs`, `a.rs#A::b[]`) parsed as a path
+before and now reads as a kind suffix, reported when malformed. No locator in this repository's
+corpus has that shape. When the text before the tail's first `[` is not a symbol, the tail is still
+part of the path (`x[1].rs#9[a]` is a path). When it is a symbol and the suffix is not exactly one well-formed `[kind]` on a member (`A::b[]`, `A::b[f.n]`,
+`A::b[fn]x`, `A::b[fn][field]`, `A[fn]`), the locator is malformed and `embodiment.locator-exists`
+reports a malformed kind suffix naming the grammar, never a path missing from the tree.
+
+**2. Config.** Each entry of a resolver's `member` may declare `kind:`, a name matching the `kind`
+production. It is optional, and an entry without one behaves exactly as before. Within one resolver a
+kind names one entry: two entries declaring the same kind, or a kind that does not match the
+production, is a config-load error naming the resolver (`ADR-64` clause 5), never skipped. The engine
+knows no kind names. `fn` and `field` are this repository's choice, and another resolver may declare
+`method`, `const` or anything else.
+
+**3. Resolution.** With a suffix, only the member entries that declare that kind are tried, inside the
+same container or `trait_container` spans and counted by the earlier amendment's rule: no match is
+"member not found", naming the kind; more than one (the same name in two `impl` blocks, say) is still
+ambiguous, reported with the line of each candidate; exactly one is the item, ended by that entry's end
+kind, with `leading` applied. A suffix naming a kind no entry of the resolver declares is reported
+unresolved by `embodiment.locator-exists`, naming the kind, the resolver and the kinds it does declare.
+It is never ignored or read as unsuffixed, because that would silently widen the pin to whichever entry
+happened to match. An entry without a `kind` is never selected by a suffix.
+
+**4. Unsuffixed behaviour is unchanged.** Without a suffix every entry is tried, whether or not entries
+declare kinds, so `Type::known` stays ambiguous between the field and the method. Declaring kinds on a
+resolver changes no span and no hash, so it stales no existing pin. A kind is part of the scope's
+spelling, kept as written by every re-pin (point 7). The pinned bytes of point 3 do not depend on the
+suffix: `Type::name[fn]` hashes the same lines that an unambiguous `Type::name` would.
+
+**5. What is not decided.** One container level only, as before. No kind on a plain symbol or on a
+whole trait impl. Exact key names and test vectors are `SPEC-3`'s.
+
 ## References
 
 - `ADR-67`: file-level pins, the grace window and the claim age; this ADR extends its pin syntax.
@@ -371,3 +429,5 @@ end kinds and the counting rule serve any language whose items nest, and none of
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by source back-pointers` -- stated `` disagreed with the computed value `Implemented`. | **structural** |
 > | 2026-11-05 | Amendment added: a resolver's `member` may be a list of entries, each with its own `start` and `end`; matches are counted across entries as well as spans, and a line two entries match is ambiguous; a container may match a struct or type declaration, so a field is addressable (`indent` end kind, known limit stated). **Why:** `#319` (`MILE-185`) extends point 5's grammar and the independent review asked for a recorded decision; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
 > | 2026-11-05 | Amendment accepted. Folded in the review's wording points: `trait_container` spans also take the member entries, a one-line struct's fields are not addressable, and point 5 is read with the amendment. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-22 | Amendment added and accepted: a resolver's member entry may declare a `kind`, unique within the resolver and validated at load, and a member scope may end in `[kind]` to try only the entries of that kind; an undeclared kind is reported, and an unsuffixed scope resolves as before. **Why:** `MILE-352`: a field and a method of one name could be pinned only by line range. Maintainer decision, 2026-11-22 (AskUserQuestion answer to the orchestrating agent): question "MILE-352: ... How should a locator tell them apart? Any grammar change is an ADR-74 amendment you'd accept.", answer "Declared kind suffix (Recommended)". `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-22 | Amendment point 1 corrected before merge: it said no locator that parsed before reads differently, but a path whose last `#` part is a symbol followed by `[` (`src/a#b[c]`) parsed as a path and now reads as a kind suffix; the text states that narrow change and that no locator in this corpus has the shape. **Why:** independent review of `#623`. | **substantive** |
