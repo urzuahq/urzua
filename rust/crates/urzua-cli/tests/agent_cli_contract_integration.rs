@@ -431,3 +431,22 @@ fn the_check_rejects_what_the_schemas_forbid() {
     not_run["blocking"] = serde_json::json!(true);
     assert!(validate("gate-report.schema.json", &not_run).is_err());
 }
+
+#[test]
+fn a_not_run_report_that_started_counts_zero_and_one_that_could_not_start_counts_nothing() {
+    let dir = fixture_corpus();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/lib.rs"), "").unwrap();
+    let (started, _) = run(&dir, &["check", "src/"]);
+    assert_eq!(started["status"], "not-run");
+    assert!(started.get("error").is_none());
+    assert_eq!(started["files_examined"], 0);
+    assert_eq!(started["examined"], serde_json::json!({"files": 0}));
+    validate("gate-report.schema.json", &started)
+        .unwrap_or_else(|e| panic!("started not-run report fails the gate profile: {e}"));
+
+    let (failed, _) = run(&dir, &["check", "--rules", "nope.nope"]);
+    assert!(failed.get("error").is_some());
+    assert!(failed.get("files_examined").is_none());
+    assert!(failed.get("examined").is_none());
+}

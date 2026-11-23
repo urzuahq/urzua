@@ -44,7 +44,7 @@ now), beside `files_examined`, which stays with no removal date, to achieve a na
 no consumer broken, accepting that two keys carry the same number.
 
 - `examined.files` equals `files_examined` over the same corpus, in every report that prints `files_examined`.
-- A report with `status: "not-run"` prints neither key; `examined` is not invented there.
+- A report with `status: "not-run"` that could not start (it carries `error`) prints neither key; `examined` is not invented there. A `not-run` run that started and selected nothing prints both, at `0`.
 - A unit `check` does not count is absent from the object, not `0`; a new unit is a later addition under this
   decision. The units a gate shares are `files`, `tests` and `packages`; `check` counts only `files`.
 - This is the maintainer's addition-only rule (2026-11-23, "the shared contract is urzua's existing shape, and
