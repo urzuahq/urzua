@@ -99,10 +99,12 @@ that `stable_id` is the key the engine stores. The display id is what a person r
   a vendored copy holds exact bytes until someone commits a new one, and a consumer may use both.
 - A reference resolves to a record, not to a section in it. A first reader cites sections in prose
   ("RFC-27 §2") and reports that record-level resolution is enough.
-- A qualified reference may carry a pin, `<repo>:<id>@sha256:<hash>`, written by `urzua fix --pin`
-  from the record's content hash in the snapshot. After a refresh, a pinned reference whose target's
-  hash changed is reported as a stale pin is today, "cited record changed since it was pinned", and
-  is re-pinned with `urzua fix --rebaseline` and a reason. An unpinned reference reads only the
+- A qualified reference may carry a pin, `<repo>:<id>@sha256:<hash>`, taken from the record's
+  content hash in the snapshot. Writing it extends `urzua fix --pin`, which today pins only `code:`
+  and `test:` locators in `Realized-by` (`SPEC-8`). After a refresh, a pinned reference whose
+  target's hash changed is reported the way a stale evidence pin is today, with a message such as
+  "cited record changed since it was pinned" (proposed wording), and is re-pinned with
+  `urzua fix --rebaseline` and a reason. An unpinned reference reads only the
   target's current status. Open question 9 asks whether a reference from a decided record must be
   pinned.
 
@@ -265,7 +267,8 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 ## Open questions
 1. **A shared vocabulary without a merged config.** (A first reader is already copying this
    repository's `rfc` status block into its own config and asks whether the org wants one shared
-   block; this question answers it. Two sibling repositories have since copied that block by hand.) Taking part in an org view may need one carve-out
+   block; this question answers it. The coordination thread reports that two sibling repositories
+   have since copied that block by hand.) Taking part in an org view may need one carve-out
    from "configs never merge". Options: (a) none, and the view shows each repository's `open` and
    `none` as they are (section 5); (b) a versioned vocabulary file the engine publishes, such as what
    a parking status means or that `progress` is required to take part, which a repository opts into
@@ -293,8 +296,8 @@ ULIDs make that unlikely but not impossible, since records can be copied between
    direction allows it); outside the engine; or outside first, moved in once a second organisation
    asks.
 9. **Must a reference from a decided record be pinned?** Options: (a) pins optional everywhere;
-   (b) a reference from an Accepted ADR or RFC to a sibling record that is not terminal must be
-   pinned, so a decision cannot rest on a sibling Draft that changes silently; (c) every qualified
+   (b) a reference from a record whose status is in its type's declared `success` list to a sibling
+   record that is not terminal must be pinned, so a decision cannot rest on a sibling Draft that changes silently; (c) every qualified
    reference is pinned. (b) is the author's recommendation.
 
 ## Non-goals
@@ -306,7 +309,7 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 - Drift trends and large-corpus performance, which stay in `MILE-24`.
 - Deciding `RFC-27`, `ADR-103` or any status. This RFC proposes.
 - Section anchors in a cross-repository reference: a reference names a record.
-- Gate receipts. A planned `gate:` locator cites a receipt, which is not a record and is not
+- Gate receipts. A `gate:` locator a first reader plans (no record here plans one) cites a receipt, which is not a record and is not
   committed (ignored locally, a build artifact in CI); the committed-snapshot model does not reach
   it, and nothing here resolves one.
 
@@ -326,4 +329,4 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 > | 2026-11-23 | Review fixes: the scope test admits the generated dashboard, stated plainly with the choice put to the maintainer; the version-bump policy stated as this RFC's own; reproducibility limited to snapshot sources; open questions 7 and 8 added; motivation bullets marked as paraphrase; SPEC-3 line corrected; sibling-repository facts labelled as survey reports. | **structural** |
 > | 2026-11-23 | Corrected the survey's count for the third sibling repository: 7 `open` records, 3 rfc and 4 spec, not most or all of its records. The point it supports is unchanged. | **structural** |
 > | 2026-11-23 | First-reader input: the snapshot records the sibling `commit` and a per-record content hash; a qualified reference may be pinned and is reported when its target changed (open question 9); file citation marked lowest priority, since a vendored, pinned local copy already serves schemas; non-goals add section anchors and gate receipts. | **structural** |
-> | 2026-11-23 | Second first reader: a `<repo>:path` citation is stated not to stand in for vendoring, and open question 1 notes two siblings copied this repository's `rfc` status block by hand. | **structural** |
+> | 2026-11-23 | A second first reader: a `<repo>:path` citation is stated not to stand in for vendoring, and open question 1 notes two siblings copied this repository's `rfc` status block by hand. | **structural** |
