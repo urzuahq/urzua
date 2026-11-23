@@ -63,8 +63,9 @@ qualifier used in references), the forge identity (`owner/name`, for the snapsho
 one source:
 
 - **snapshot** (proposed default): a committed file holding that sibling's `urzua export --format
-  json` output plus an envelope `{schema_version, repository, generated_at, urzua_version,
-  records}`. This mirrors the issue snapshot `citation.issue-exists` already uses (`SPEC-3`,
+  json` output plus an envelope `{schema_version, repository, commit, generated_at, urzua_version,
+  records}`, where `commit` is the sibling commit the export was taken from and each record carries a
+  content hash. This mirrors the issue snapshot `citation.issue-exists` already uses (`SPEC-3`,
   "Cited issues and pull requests", lines 782-835): it is written by a refresh command, committed,
   checked for `schema_version` and repository, and its `generated_at` appears on every finding. CI
   then never needs the network or a second checkout.
@@ -89,7 +90,18 @@ that `stable_id` is the key the engine stores. The display id is what a person r
 - `narrative-field.stale` fires once the target reaches a terminal state in its own repository's
   vocabulary (`finished` or `dropped`, section 5).
 - A file in a sibling is cited `<repo>:path` and checked by `citation.path-exists` against the
-  snapshot's list of paths, or against the checkout.
+  snapshot's list of paths, or against the checkout. A first reader reports it does not need this for
+  schemas: it vendors a sibling's schemas at a tag with checksums and a version file, and cites the
+  local copy with an ordinary pinned `code:` locator, which already works and is stronger than a
+  citation. This form is therefore the lowest-priority part of the proposal and may be deferred.
+- A reference resolves to a record, not to a section in it. A first reader cites sections in prose
+  ("RFC-27 §2") and reports that record-level resolution is enough.
+- A qualified reference may carry a pin, `<repo>:<id>@sha256:<hash>`, written by `urzua fix --pin`
+  from the record's content hash in the snapshot. After a refresh, a pinned reference whose target's
+  hash changed is reported as a stale pin is today, "cited record changed since it was pinned", and
+  is re-pinned with `urzua fix --rebaseline` and a reason. An unpinned reference reads only the
+  target's current status. Open question 9 asks whether a reference from a decided record must be
+  pinned.
 
 A reference is unexamined, and counted as eligible and unexamined, when the sibling is undeclared,
 its snapshot is absent, unparsable, of another `schema_version` or of another repository, or the
@@ -218,7 +230,10 @@ section 7; and whether its embodiment is evidenced by the shipped command's test
 - **A target whose status changes after the citing record was accepted.** The citing check reports
   the target's current status from the snapshot, exactly as `pointer.resolution` does for a local
   target. `narrative-field.stale` fires on a terminal one. A change is only seen after a refresh,
-  which is why `generated_at` is shown.
+  which is why `generated_at` is shown. A change to the target's content, not only its status, is
+  seen only through a pinned reference (section 3): a first reader asks for exactly this, because a
+  record can build on a sibling's Draft that keeps changing, and without a pin it changes under the
+  citation silently.
 
 ### 10. Finding 6: `stable_id` uniqueness across repositories
 
@@ -245,7 +260,9 @@ ULIDs make that unlikely but not impossible, since records can be copied between
   linter `SPEC-1` exists to replace.
 
 ## Open questions
-1. **A shared vocabulary without a merged config.** Taking part in an org view may need one carve-out
+1. **A shared vocabulary without a merged config.** (A first reader is already copying this
+   repository's `rfc` status block into its own config and asks whether the org wants one shared
+   block; this question answers it.) Taking part in an org view may need one carve-out
    from "configs never merge". Options: (a) none, and the view shows each repository's `open` and
    `none` as they are (section 5); (b) a versioned vocabulary file the engine publishes, such as what
    a parking status means or that `progress` is required to take part, which a repository opts into
@@ -272,6 +289,10 @@ ULIDs make that unlikely but not impossible, since records can be copied between
    intact and needs no ADR narrowing it. Options: in `urzua board` (the maintainer's relayed
    direction allows it); outside the engine; or outside first, moved in once a second organisation
    asks.
+9. **Must a reference from a decided record be pinned?** Options: (a) pins optional everywhere;
+   (b) a reference from an Accepted ADR or RFC to a sibling record that is not terminal must be
+   pinned, so a decision cannot rest on a sibling Draft that changes silently; (c) every qualified
+   reference is pinned. (b) is the author's recommendation.
 
 ## Non-goals
 - Merging, inheriting or overlaying configuration across repositories.
@@ -281,6 +302,10 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 - Sequencing `roadmap` across repositories.
 - Drift trends and large-corpus performance, which stay in `MILE-24`.
 - Deciding `RFC-27`, `ADR-103` or any status. This RFC proposes.
+- Section anchors in a cross-repository reference: a reference names a record.
+- Gate receipts. A planned `gate:` locator cites a receipt, which is not a record and is not
+  committed (ignored locally, a build artifact in CI); the committed-snapshot model does not reach
+  it, and nothing here resolves one.
 
 ## References
 - `RFC-27` §3 and its amendment of 2026-11-08 (line 169), the part this proposes to narrow.
@@ -297,3 +322,4 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 > | 2026-11-23 | Initial RFC, `Status: Draft`. Filed from the maintainer's polyrepo direction of 2026-11-23, relayed from the organisation's coordination thread. | **structural** |
 > | 2026-11-23 | Review fixes: the scope test admits the generated dashboard, stated plainly with the choice put to the maintainer; the version-bump policy stated as this RFC's own; reproducibility limited to snapshot sources; open questions 7 and 8 added; motivation bullets marked as paraphrase; SPEC-3 line corrected; sibling-repository facts labelled as survey reports. | **structural** |
 > | 2026-11-23 | Corrected the survey's count for the third sibling repository: 7 `open` records, 3 rfc and 4 spec, not most or all of its records. The point it supports is unchanged. | **structural** |
+> | 2026-11-23 | First-reader input: the snapshot records the sibling `commit` and a per-record content hash; a qualified reference may be pinned and is reported when its target changed (open question 9); file citation marked lowest priority, since a vendored, pinned local copy already serves schemas; non-goals add section anchors and gate receipts. | **structural** |
