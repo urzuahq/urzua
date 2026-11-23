@@ -180,3 +180,14 @@ Changing the help text and the README to that sentence reword the description of
 > |---|---|---|
 > | 2026-09-11 | Initial RFC, `Status: Draft`. Filed after the README's `Where this is going` section asserted this position with no record behind it. | **structural** |
 > | 2026-11-08 | Status changed from Draft to Accepted; added the amendment of 2026-11-08 stating that `urzua roadmap` is engine scope and fixing the one-line description. **Why:** Maintainer decision, 2026-11-08. | **substantive** |
+> | 2026-11-23 | Added the amendment of 2026-11-23 replacing the one-line description, which no longer says the engine "never judges". **Why:** Maintainer decision, 2026-11-23, quoted in the amendment. | **substantive** |
+
+## Amendment (2026-11-23): the one-line description no longer says the engine "never judges"
+
+The maintainer, 2026-11-23, asked whether to change the description's closing sentence, "It never judges the change.", and chose "Change it (Recommended)", whose text was: "'...it checks every change against the rules you declared for the records it traces back to, gives the same answer every time, and orders work from their declared dependencies. It has no opinion on the code itself.' Via an RFC-27 amendment, help, README and the test, one PR." Their reason, earlier the same day: "what does judge? That's literally what it does. It judges based on the rules you give."
+
+This replaces the one-line description fixed by the amendment of 2026-11-08. The thesis is unchanged: the engine governs the record a change traces back to. Only the wording moves off "judge", because the tool's own messages use that word for what a check does. The description, used verbatim by `urzua --help` and the first paragraph of `README.md`, is now:
+
+> The verifiable specification layer for agent-authored change: it checks every change against the rules you declared for the records it traces back to, gives the same answer every time, and orders work from their declared dependencies. It has no opinion on the code itself.
+
+No command is added, renamed or rescoped, so the non-goal above stands.

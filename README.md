@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/urzuahq/urzua?utm_source=oss&utm_medium=github&utm_campaign=urzuahq%2Furzua&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
-The verifiable specification layer for agent-authored change: it checks the records a change traces back to and orders work from their declared dependencies. It never judges the change.
+The verifiable specification layer for agent-authored change: it checks every change against the rules you declared for the records it traces back to, gives the same answer every time, and orders work from their declared dependencies. It has no opinion on the code itself.
 
 The mission and the principles every decision is judged against are recorded in [`ADR-101`](docs/adr/ADR-101-urzua-s-mission-and-the-principles-every-decision-is-judged-against.md).
 
@@ -273,7 +273,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs
 ## Where this is going
 
 Destination: **the checkable specification layer for agent-authored change.** The engine governs
-the record a change traces back to. It never judges the change.
+the record a change traces back to. It checks that record, not the quality of the change.
 
 | | Diff-level review | Urzua |
 |---|---|---|
