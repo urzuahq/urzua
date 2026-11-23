@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/urzuahq/agent-cli-kit/main/schemas/gate-report.schema.json",
+  "title": "Report (gate profile)",
+  "allOf": [
+    {"$ref": "report.schema.json"},
+    {
+      "type": "object",
+      "properties": {
+        "blocking": {"type": "boolean"},
+        "findings": {"type": "array", "items": {"$ref": "finding.schema.json"}},
+        "examined": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      },
+      "if": {"properties": {"status": {"const": "not-run"}}, "required": ["status"]},
+      "then": {"properties": {"blocking": {"const": false}}},
+      "else": {"required": ["blocking", "findings", "examined"]}
+    }
+  ]
+}

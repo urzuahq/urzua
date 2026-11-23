@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/urzuahq/agent-cli-kit/main/schemas/finding.schema.json",
+  "title": "Finding",
+  "type": "object",
+  "required": ["rule", "severity", "message"],
+  "properties": {
+    "rule": {"type": "string", "minLength": 1},
+    "severity": {"enum": ["error", "warning", "info"]},
+    "message": {"type": "string"},
+    "file": {"type": ["string", "null"]},
+    "line": {"type": ["integer", "null"], "minimum": 1},
+    "column": {"type": ["integer", "null"], "minimum": 1},
+    "fix": {"type": "string"},
+    "fingerprint": {"type": "string"}
+  }
+}

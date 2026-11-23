@@ -90,6 +90,7 @@ change that did not touch it.
   "status": "findings-present",
   "as_of": {"date": "2026-11-13", "source": "clock"},
   "files_examined": 2,
+  "examined": {"files": 2},
   "records_read_by_any_rule": 2,
   "rules_executed": [
     {
@@ -131,6 +132,7 @@ change that did not touch it.
 | `error` | Present when `status` is `not-run` because the run could not start: why. A run that started and established nothing has no `error`; its reason is a warning notice (subject `scope` for a path argument that matched no record, `not-run` for the rest). |
 | `as_of` | The date comparisons were made against: `date`, and `source` (`clock`, or the `--as-of` flag). |
 | `files_examined` | How many record files the run loaded. |
+| `examined` | What the run examined as one count per unit, added beside `files_examined`, which stays (`ADR-106`). `check` counts `files`, and `examined.files` always equals `files_examined`. A `not-run` report has neither key. |
 | `records_read_by_any_rule` | How many distinct records at least one rule examined. |
 | `rules_executed` | One entry per rule this build ships (a rule that judges a second population, such as `citation.resolution` with `non_reference_field`, has a second entry, so the list can be longer than the rule count), each with its `status`, so a check that found nothing is distinguishable from a check that ran on nothing. |
 | `rules_executed[].status` | `ran`; `not-enabled` (the rule is off or not declared); `not-applicable` (enabled but the run cannot supply what it judges, for example a diff rule without `--base`). |

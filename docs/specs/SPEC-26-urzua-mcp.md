@@ -3,7 +3,7 @@ Stable-Id: 01M7A8QGWXMR8WYFDC36XW8XEF
 Status: Shipped
 Embodiment: Verified
 Date: 2026-11-13
-Version: '0.10'
+Version: '0.11'
 Author: beauwilliams
 Subject: '`urzua mcp` -- a read-only MCP server over stdio that serves the reports urzua already builds.'
 Implements: ADR-99
@@ -87,7 +87,7 @@ repository is clean is the report's answer, as for the CLI.
 A failure the command line reports as a could-not-run (an unreadable corpus, an unknown id, an unknown rule) is a result with
 `isError: true`, the `CouldNotRun` shape of `ADR-46` as `structuredContent` and as the text block. A report whose `status` is `not-run` is an error result too, whatever built it (a `urzua_check` whose `paths` name no record, as the command exits 2): `isError` is `true` exactly when `status` is `not-run`. A report with findings is `isError: false`; its `blocking` is true exactly when the command line would exit 1, `fail_on` included, because a client has no exit code to read. An unknown tool name is the
 JSON-RPC error `-32602` and is never forwarded. A result that examined no records says so in the report's `population` or
-`files_examined`; a tool never returns an empty report for a corpus it could not read.
+`files_examined` (and `examined.files`, which equals it); a tool never returns an empty report for a corpus it could not read.
 
 ## Read-only guarantee
 
@@ -158,3 +158,4 @@ The server is registered by a person in a user-owned file, with the snippet docu
 > | 2026-11-21 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-mcp/src/lib.rs@sha256:baa08ff5de273544a2450d6d95e6bf68ca51ecff1f5815a6af5bbee9623a5b5f, code:rust/crates/urzua-cli/src/commands/mcp.rs@sha256:b33cd6408522cf5d9338b8ddd15c514687d04364e02babb15b3398f4311fc2b7, test:rust/crates/urzua-cli/tests/mcp_integration.rs@sha256:f13f98c92a50774ca435d123716086e37b47694dd814737ae4d9ff819c8b9c52` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-21 | Bumped to `0.9`. Status changed from Draft to Accepted, with `Realized-by` pinning the server, the `mcp` command and the integration tests and `Embodiment` computed from it. References no longer say `ADR-99` awaits acceptance (it is Accepted) or that `MILE-29` tracks what is built (it is Done); the design is unchanged. Maintainer decision, 2026-11-21: asked "How should the enabling PR clear it?" and answered "Accept and ship both" ("Accepted, then Shipped with pinned Realized-by evidence and Embodiment from urzua fix --apply"); the move to Shipped is a later change, because `status.transition-allowed` judges against the merge base and refuses Draft to Shipped in one pull request. **Why:** the parent `SPEC-1` is Shipped while `SPEC-26` was Draft, which `status.children-agreement` reports. | **substantive** |
 > | 2026-11-23 | Bumped to `0.10`. Status changed from Accepted to Shipped; `Realized-by` and `Embodiment: Verified` are unchanged from `#627`, and the text is unchanged. **Why:** Maintainer decision, 2026-11-21: asked "How should the enabling PR clear it?" and answered "Accept and ship both" ("Accepted, then Shipped with pinned Realized-by evidence and Embodiment from urzua fix --apply"); #627 made the Accepted move and left Shipped to a later change, because `status.transition-allowed` refuses Draft to Shipped in one pull request. | **substantive** |
+> | 2026-11-23 | Bumped to `0.11`. The `urzua_check` report a tool returns carries `examined` beside `files_examined`, as `SPEC-2` now describes; the tool contract is unchanged. **Why:** `MILE-358` and `ADR-106`. | **substantive** |

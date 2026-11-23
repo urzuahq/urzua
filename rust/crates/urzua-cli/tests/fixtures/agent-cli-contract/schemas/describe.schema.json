@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/urzuahq/agent-cli-kit/main/schemas/describe.schema.json",
+  "title": "describe output",
+  "type": "object",
+  "required": ["name", "version", "contract_version", "system", "commands"],
+  "properties": {
+    "name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "contract_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+    "system": {"enum": [0, 1, 2]},
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "profile", "safe", "scopes", "metrics"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "profile": {"enum": ["base", "gate", "exempt"]},
+          "kind": {"enum": ["lint", "format", "types", "test", "build", "records", "other"]},
+          "safe": {"type": "boolean"},
+          "scopes": {"type": "array", "items": {"type": "string"}},
+          "metrics": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

@@ -91,6 +91,7 @@ $ urzua check docs/
 {
   "status": "findings-present",
   "files_examined": 322,
+  "examined": { "files": 322 },
   "rules_executed": [
     {
       "rule": "header.required-fields",
