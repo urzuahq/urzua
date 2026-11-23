@@ -33,8 +33,8 @@ fn help_readme_and_rfc_27_carry_the_same_one_line_description() {
     let description = help_description();
     assert!(description.len() > 40, "{description}");
     assert!(
-        description.ends_with("It has no opinion on the code itself."),
-        "the RFC-27 amendment of 2026-11-23 ends the description with its no-opinion-on-the-code sentence: {description}"
+        description.ends_with("not that the code is right."),
+        "the second RFC-27 amendment of 2026-11-23 ends the description with its evidence-exists-not-that-the-code-is-right sentence: {description}"
     );
 
     let readme = std::fs::read_to_string(repo_root().join("README.md")).unwrap();
