@@ -6,7 +6,6 @@
 
 mod common;
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -62,12 +61,7 @@ fn run_with_stdin(c: &mut Command, stdin: &str) -> Output {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = c.spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    common::write_stdin(&mut child, stdin);
     child.wait_with_output().unwrap()
 }
 
@@ -626,6 +620,20 @@ fn without_the_engine_the_adapter_states_that_the_command_was_not_judged() {
     let m = v["systemMessage"].as_str().unwrap();
     assert!(m.contains("could NOT run"), "{m}");
     assert!(v.get("hookSpecificOutput").is_none(), "{v}");
+}
+
+/// A hook may exit without reading its input; a payload larger than the pipe
+/// buffer makes the write fail with a broken pipe on every run, not just a race.
+#[test]
+fn a_hook_that_exits_without_reading_a_large_payload_is_not_a_failure() {
+    let dir = fixture("adapter-unread-large", CONFIG, GOOD);
+    install(&dir);
+    let cmd = hook_command(&dir, "Bash");
+    let only_python = path_with(&["python3", "git", "sh"]);
+    let mut p: serde_json::Value = serde_json::from_str(&payload(&dir, "Bash")).unwrap();
+    p["pad"] = "x".repeat(1 << 20).into();
+    let out = run_hook(&dir, &cmd, &p.to_string(), Some(&only_python));
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
 }
 
 // ------------------------------------------- MILE-278: once, and only its own
