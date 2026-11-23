@@ -233,6 +233,9 @@ const RUNS: &[(&str, &[&str], i32)] = &[
 /// - `scope.include_untracked` and `scope.untracked_included`: added by #386
 ///   (MILE-206, `discovery.include_untracked`), `false` and `0` when undeclared.
 ///
+/// - `examined`: per-unit counts of what the run examined (MILE-358, ADR-106), beside
+///   `files_examined`; `files` equals it whatever the options.
+///
 /// - `read`: the stamp the export carries (MILE-330): the commit, the branch git
 ///   started on and the moment it was read. The view model's keys (`title`,
 ///   `state` and the rest) are part of `export.json`'s golden: they are a

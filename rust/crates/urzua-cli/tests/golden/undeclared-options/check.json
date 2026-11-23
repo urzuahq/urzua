@@ -1,6 +1,9 @@
 {
   "status": "findings-present",
   "files_examined": 13,
+  "examined": {
+    "files": 13
+  },
   "records_read_by_any_rule": 13,
   "rules_executed": [
     {
