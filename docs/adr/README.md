@@ -107,7 +107,7 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A source comment citing a record is checked against the corpus: declared comment leaders, existence only, opt-in](ADR-100-a-source-comment-citing-a-record-is-checked-against-the-corpus-declared-comment-leaders-existence-only-opt-in.md)
 - [Urzua's mission and the principles every decision is judged against](ADR-101-urzua-s-mission-and-the-principles-every-decision-is-judged-against.md)
 - [A person accepts a record in chat: the harness asks, records the answer and allows that one edit](ADR-102-a-person-accepts-a-record-in-chat-the-harness-asks-records-the-answer-and-allows-that-one-edit.md)
-- [urzua board is the one command whose product is a page for a person while stdout stays JSON](ADR-103-urzua-board-is-the-one-command-whose-product-is-a-page-for-a-person-while-stdout-stays-json.md)
+- [The board leaves the engine: it is the first ecosystem client, a binary in this repository that reads only published JSON](ADR-103-the-board-leaves-the-engine-it-is-the-first-ecosystem-client-a-binary-in-this-repository-that-reads-only-published-json.md)
 - [A rule entry lists the record types it judges](ADR-104-a-rule-entry-lists-the-record-types-it-judges.md)
 - [Where the host shows no prompt, the person approves a gated move by answering urzua's question](ADR-105-where-the-host-shows-no-prompt-the-person-approves-a-gated-move-by-answering-urzua-s-question.md)
 - [The check report's examined is an object of per-unit counts added beside files_examined](ADR-106-the-check-report-s-examined-is-an-object-of-per-unit-counts-added-beside-files-examined.md)

@@ -91,6 +91,18 @@ adopter can change these without changing the code (`SPEC-1`), and a reviewer ha
 hard-coded one. The existing hard-coded values are moved into configuration by later changes, each keeping its current value as
 the default; until `SPEC-3` lists an exception with its reason, a hard-coded value of this kind is treated as a defect.
 
+## Amendment (2026-11-23): the mission says what urzua checks, not that it never judges
+
+The maintainer, asked on 2026-11-23 whether to amend this record after `RFC-27`'s one-line description changed: "Amend it yeah".
+The Decision is unchanged; this restates one sentence of the mission in the description's vocabulary.
+
+The mission's sentence "It checks the records a change traces to, and never judges the change itself" is now read as: it checks
+every change against the rules declared for the records it traces back to, gives the same answer every time, and has no opinion
+on the code itself (`SPEC-1`, the permanent content-scope ceiling). The ceiling is the same. The word "judge" is dropped because
+the tool's own messages use it for a check (a hook reports that urzua "judged" an edit), so "never judges" read as the opposite
+of what urzua does; the maintainer: "what does judge? That's literally what it does. It judges based on the rules you give."
+`RFC-27`'s amendment of 2026-11-23 changed the one-line description in `urzua --help` and the README the same way.
+
 ## Reversibility
 
 Easy to walk back, because it adds no code and no rule: it records a standard and cites the records that carry the behaviour. A
@@ -120,3 +132,4 @@ holding a proposal to a principle that has since moved, which the amendment requ
 > | 2026-11-14 | Drafted as Proposed. **Why:** Approved by the maintainer in conversation on 2026-11-14; Status moves to Accepted in a follow-up the maintainer approves. | **substantive** |
 > | 2026-11-14 | Status changed from Proposed to Accepted. **Why:** Accepted by the maintainer on 2026-11-14. | **substantive** |
 > | 2026-11-15 | Amendment added: "Configuration owns behaviour" is a standing principle. **Why:** Accepted by the maintainer on 2026-11-15; hard-coded values and vocabularies had no principle a review could cite. | **substantive** |
+> | 2026-11-23 | Amendment added: the mission says what urzua checks, not that it never judges. **Why:** the maintainer, 2026-11-23, "Amend it yeah", after `RFC-27`'s one-line description dropped "never judges the change"; the Decision is unchanged. | **substantive** |
