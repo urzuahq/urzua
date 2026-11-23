@@ -181,6 +181,7 @@ Changing the help text and the README to that sentence reword the description of
 > | 2026-09-11 | Initial RFC, `Status: Draft`. Filed after the README's `Where this is going` section asserted this position with no record behind it. | **structural** |
 > | 2026-11-08 | Status changed from Draft to Accepted; added the amendment of 2026-11-08 stating that `urzua roadmap` is engine scope and fixing the one-line description. **Why:** Maintainer decision, 2026-11-08. | **substantive** |
 > | 2026-11-23 | Added the amendment of 2026-11-23 replacing the one-line description, which no longer says the engine "never judges". **Why:** Maintainer decision, 2026-11-23, quoted in the amendment. | **substantive** |
+> | 2026-11-23 | Added a second amendment of 2026-11-23 replacing the one-line description in the governance-plane terms. **Why:** Maintainer decision, 2026-11-23, quoted in the amendment. | **substantive** |
 
 ## Amendment (2026-11-23): the one-line description no longer says the engine "never judges"
 
@@ -189,5 +190,17 @@ The maintainer, 2026-11-23, asked whether to change the description's closing se
 This replaces the one-line description fixed by the amendment of 2026-11-08. The thesis is unchanged: the engine governs the record a change traces back to. Only the wording moves off "judge", because the tool's own messages use that word for what a check does. The description, used verbatim by `urzua --help` and the first paragraph of `README.md`, is now:
 
 > The verifiable specification layer for agent-authored change: it checks every change against the rules you declared for the records it traces back to, gives the same answer every time, and orders work from their declared dependencies. It has no opinion on the code itself.
+
+No command is added, renamed or rescoped, so the non-goal above stands.
+
+## Amendment (2026-11-23): the one-line description states urzua in governance-plane terms
+
+The maintainer, 2026-11-23, asked "Keep the line merged today, or restate it in the governance-plane terms", and chose "Governance engine (Recommended)". The context they accepted the same day: urzua is first the engine of the governance plane (the records: what was decided, who accepted it, what counts as evidence); it checks that evidence exists and is linked, not that it is the right evidence; and no wording may say people no longer need to read code.
+
+This replaces the description the amendment above fixed. The thesis is unchanged: the engine governs the record a change traces back to. The description, used verbatim by `urzua --help` and the first paragraph of `README.md`, is now:
+
+> The governance engine for coding agents: decisions, who accepted them and their evidence are records in your repository, checked against the rules you declared, with the same answer for the same records. It checks that a change's evidence exists and is linked, not that the code is right.
+
+"The same answer for the same records" answers a review point that waivers and claims expire by date: the same records on the same evaluation date (`--as-of`) give the same answer, and the date is an input like any other.
 
 No command is added, renamed or rescoped, so the non-goal above stands.
