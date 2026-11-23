@@ -8,7 +8,7 @@ Realized-by: test:rust/crates/urzua-cli/tests/harness_post_command_integration.r
 
 ## What was wrong
 
-The test helpers that run an installed hook command wrote its payload to stdin and unwrapped the result. With no engine on `PATH` the hook's fallback exits without reading its input, so the write could fail with `EPIPE` (a race for a small payload, certain for one larger than the pipe buffer) and the test panicked. A hook is allowed to exit without reading its input. The helpers in `harness_post_command_integration.rs`, `block_on_integration.rs` and `record_edit_hook_integration.rs` now use `common::write_stdin`, which treats a broken pipe as "not read" and still panics on any other write error.
+The test helpers that run an installed hook command wrote its payload to stdin and unwrapped the result. With no engine on `PATH` the hook's fallback exits without reading its input, so the write could fail with `EPIPE` (a race for a small payload, certain for one larger than the pipe buffer) and the test panicked. A hook is allowed to exit without reading its input. The helpers in `harness_post_command_integration.rs` and `block_on_integration.rs` now use `common::write_stdin`, which treats a broken pipe as "not read" and still panics on any other write error.
 
 ## Why nothing caught it
 
