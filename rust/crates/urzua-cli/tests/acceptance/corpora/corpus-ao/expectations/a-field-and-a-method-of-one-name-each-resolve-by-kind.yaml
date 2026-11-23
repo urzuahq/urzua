@@ -1,0 +1,11 @@
+id: a-field-and-a-method-of-one-name-each-resolve-by-kind
+corpus: corpus-ao
+# `Cfg::known` names both a field and a method; the `[fn]` and `[field]` suffixes
+# select one member entry each, so both pins resolve and hold.
+invocation: [check]
+expect_exit: 0
+expect_rules_ran:
+  - embodiment.locator-exists
+expect_no_findings:
+  - {rule: embodiment.locator-exists}
+  - {rule: embodiment.pin-stale}

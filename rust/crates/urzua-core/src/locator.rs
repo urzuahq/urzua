@@ -13,10 +13,12 @@ pub const PIN_MARKER: &str = "@sha256:";
 /// locator := path [ "#" scope ] [ "@" anchor ]
 /// scope   := range | symbol
 /// range   := "L" N [ "-L" M ]      N and M decimal, no leading zero, 1 <= N <= M
-/// symbol  := seg ( "::" ( seg | "<" seg ">" ) )*     seg := [A-Za-z_] [A-Za-z0-9_.-]*
+/// symbol  := seg ( "::" ( seg | "<" seg ">" ) )* [ "[" kind "]" ]
+///                                          seg := [A-Za-z_] [A-Za-z0-9_.-]*
+/// kind    := [A-Za-z_] [A-Za-z0-9_-]*  only after a member: at least one `::` and a last `seg`
 /// anchor  := "sha256:" 64 lowercase hex  |  7 to 64 lowercase hex (a commit)
 /// ```
-pub const GRAMMAR: &str = "path[#scope][@anchor]: scope is a symbol (`Name`, `Type::member`, `Type::<Trait>::member`) or a range (`L<n>` or `L<n>-L<m>`); anchor is `sha256:` and 64 lowercase hex, or a 7 to 64 digit lowercase hex commit";
+pub const GRAMMAR: &str = "path[#scope][@anchor]: scope is a symbol (`Name`, `Type::member`, `Type::<Trait>::member`, optionally `Type::member[kind]` to select a member entry of that declared kind) or a range (`L<n>` or `L<n>-L<m>`); anchor is `sha256:` and 64 lowercase hex, or a 7 to 64 digit lowercase hex commit";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Locator {
@@ -42,11 +44,12 @@ impl Locator {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scope {
     /// 1-based inclusive lines.
-    Range {
-        start: usize,
-        end: usize,
+    Range { start: usize, end: usize },
+    Symbol {
+        segments: Vec<Segment>,
+        /// `[kind]`: only the member entries declaring this kind are tried.
+        kind: Option<String>,
     },
-    Symbol(Vec<Segment>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +77,8 @@ pub enum LocatorError {
     BothAnchors,
     #[error("'{0}' is a glob, and a glob cannot carry a scope")]
     GlobWithScope(String),
+    #[error("malformed kind suffix '#{0}': a kind is `[name]` at the end of a member (`Type::member[name]`), name matching [A-Za-z_][A-Za-z0-9_-]*")]
+    MalformedKind(String),
 }
 
 impl std::fmt::Display for Scope {
@@ -81,7 +86,7 @@ impl std::fmt::Display for Scope {
         match self {
             Scope::Range { start, end } if start == end => write!(f, "L{start}"),
             Scope::Range { start, end } => write!(f, "L{start}-L{end}"),
-            Scope::Symbol(segments) => {
+            Scope::Symbol { segments, kind } => {
                 for (i, seg) in segments.iter().enumerate() {
                     if i > 0 {
                         f.write_str("::")?;
@@ -90,6 +95,9 @@ impl std::fmt::Display for Scope {
                         Segment::Name(n) => f.write_str(n)?,
                         Segment::Trait(t) => write!(f, "<{t}>")?,
                     }
+                }
+                if let Some(k) = kind {
+                    write!(f, "[{k}]")?;
                 }
                 Ok(())
             }
@@ -142,6 +150,40 @@ fn parse_symbol(text: &str) -> Option<Vec<Segment>> {
         }
     }
     Some(segments)
+}
+
+/// A declared member kind: a `seg` without `.`.
+pub fn is_kind(s: &str) -> bool {
+    let mut chars = s.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+}
+
+/// A symbol scope with an optional trailing `[kind]`. `None` when the text is
+/// not a symbol at all (it is then part of the path, as before `[` was in the
+/// grammar); an error when a symbol carries a suffix that is not well formed.
+fn parse_symbol_scope(tail: &str) -> Result<Option<Scope>, LocatorError> {
+    let Some((base, suffix)) = tail.split_once('[') else {
+        return Ok(parse_symbol(tail).map(|segments| Scope::Symbol {
+            segments,
+            kind: None,
+        }));
+    };
+    let Some(segments) = parse_symbol(base) else {
+        return Ok(None);
+    };
+    let bad = || LocatorError::MalformedKind(tail.to_string());
+    let kind = suffix.strip_suffix(']').ok_or_else(bad)?;
+    let names_member = segments.len() > 1 && matches!(segments.last(), Some(Segment::Name(_)));
+    if !is_kind(kind) || !names_member {
+        return Err(bad());
+    }
+    Ok(Some(Scope::Symbol {
+        segments,
+        kind: Some(kind.to_string()),
+    }))
 }
 
 fn parse_number(s: &str) -> Option<usize> {
@@ -198,8 +240,8 @@ pub fn parse_locator(raw: &str) -> Result<Locator, LocatorError> {
         if range_like {
             scope = Some(parse_range(tail)?);
             path = before;
-        } else if let Some(segments) = parse_symbol(tail) {
-            scope = Some(Scope::Symbol(segments));
+        } else if let Some(symbol) = parse_symbol_scope(tail)? {
+            scope = Some(symbol);
             path = before;
         }
     }
@@ -412,6 +454,12 @@ pub enum ScopeError {
     RangeBeyondEnd { lines: usize },
     #[error("unsupported: {0}")]
     Unsupported(String),
+    #[error("member kind '{kind}' is declared by no member entry of resolver '{resolver}' (declared: {declared})")]
+    UnknownKind {
+        kind: String,
+        resolver: String,
+        declared: String,
+    },
     #[error("commit anchor not yet supported")]
     CommitAnchor,
 }
@@ -454,6 +502,10 @@ pub struct ContainerDecl {
 pub struct MemberDecl {
     pub start: String,
     pub end: EndKind,
+    /// The name a locator's `[kind]` suffix selects this entry by. The engine
+    /// knows no kind names; each is unique within its resolver.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
 }
 
 /// A repository-declared symbol resolver (`ADR-74` point 5; `SPEC-3`
@@ -610,8 +662,20 @@ pub fn validate_resolvers(resolvers: &[LocatorResolver]) -> Result<(), String> {
                 true,
             )?;
         }
-        for m in &r.members {
+        for (j, m) in r.members.iter().enumerate() {
             check(&format!("resolver '{n}' member start"), &m.start, false)?;
+            if let Some(k) = &m.kind {
+                if !is_kind(k) {
+                    return Err(format!(
+                        "resolver '{n}' member kind '{k}' is malformed: a kind matches [A-Za-z_][A-Za-z0-9_-]*"
+                    ));
+                }
+                if r.members[..j].iter().any(|o| o.kind.as_ref() == Some(k)) {
+                    return Err(format!(
+                        "resolver '{n}' declares member kind '{k}' twice: a kind names one entry"
+                    ));
+                }
+            }
         }
         for (what, c) in [
             ("container", &r.container),
@@ -877,6 +941,7 @@ impl Resolution<'_> {
         container_kind: EndKind,
         spans: &[Raw],
         name: &str,
+        kind: Option<&str>,
     ) -> Result<Span, ScopeError> {
         if resolver.members.is_empty() {
             return Err(ScopeError::Unsupported(format!(
@@ -884,25 +949,46 @@ impl Resolution<'_> {
                 resolver.name
             )));
         }
-        let patterns: Vec<regex::Regex> = resolver
-            .members
-            .iter()
-            .map(|m| compile(&m.start, name, None))
+        let selected: Vec<usize> = (0..resolver.members.len())
+            .filter(|k| kind.is_none() || resolver.members[*k].kind.as_deref() == kind)
+            .collect();
+        if let (Some(kind), true) = (kind, selected.is_empty()) {
+            let declared: Vec<&str> = resolver
+                .members
+                .iter()
+                .filter_map(|m| m.kind.as_deref())
+                .collect();
+            return Err(ScopeError::UnknownKind {
+                kind: kind.to_string(),
+                resolver: resolver.name.clone(),
+                declared: if declared.is_empty() {
+                    "none".to_string()
+                } else {
+                    declared.join(", ")
+                },
+            });
+        }
+        let patterns: Vec<(usize, regex::Regex)> = selected
+            .into_iter()
+            .map(|k| compile(&resolver.members[k].start, name, None).map(|re| (k, re)))
             .collect::<Result<_, _>>()?;
         // (line, container span, which member pattern matched it). A line two
         // patterns both match is two candidates, never first-pattern-wins.
         let mut found: Vec<(usize, Raw, usize)> = Vec::new();
         for span in spans {
             for line in self.direct_children(container_kind, *span) {
-                for (k, re) in patterns.iter().enumerate() {
+                for (k, re) in &patterns {
                     if re.is_match(self.lines[line]) {
-                        found.push((line, *span, k));
+                        found.push((line, *span, *k));
                     }
                 }
             }
         }
         match found.as_slice() {
-            [] => Err(ScopeError::NotFound(format!("member '{name}' not found"))),
+            [] => Err(ScopeError::NotFound(match kind {
+                Some(k) => format!("member '{name}' of kind '{k}' not found"),
+                None => format!("member '{name}' not found"),
+            })),
             [(line, container, k)] => {
                 end_of(resolver.members[*k].end, self.lines, *line, container.1)
                     .map(|e| self.finish((*line, e)))
@@ -971,7 +1057,7 @@ fn resolve_scope_uncached(
     scope: &Scope,
 ) -> Result<Span, ScopeError> {
     let lines = lines_of(text);
-    let segments = match scope {
+    let (segments, kind) = match scope {
         Scope::Range { start, end } => {
             if *end > lines.len() {
                 return Err(ScopeError::RangeBeyondEnd { lines: lines.len() });
@@ -981,7 +1067,7 @@ fn resolve_scope_uncached(
                 end: *end,
             });
         }
-        Scope::Symbol(segments) => segments,
+        Scope::Symbol { segments, kind } => (segments, kind.as_deref()),
     };
     let resolver = resolver.ok_or(ScopeError::NoResolver)?;
     let cx = Resolution {
@@ -1027,7 +1113,7 @@ fn resolve_scope_uncached(
             };
             let spans =
                 cx.container_spans(decl, container, None, &format!("container '{container}'"))?;
-            cx.member_in(resolver, decl.end, &spans, member)
+            cx.member_in(resolver, decl.end, &spans, member, kind)
         }
         [Segment::Name(container), Segment::Trait(trait_name)]
         | [Segment::Name(container), Segment::Trait(trait_name), Segment::Name(_)] => {
@@ -1047,7 +1133,7 @@ fn resolve_scope_uncached(
                         lines: many.iter().map(|(s, _)| s + 1).collect(),
                     }),
                 },
-                Some(m) => cx.member_in(resolver, decl.end, &spans, &name(m)),
+                Some(m) => cx.member_in(resolver, decl.end, &spans, &name(m), kind),
             }
         }
         _ => unsupported("only one container level is supported; a member of a member is not"),

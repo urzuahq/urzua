@@ -1,0 +1,33 @@
+schema_version: 2
+rules:
+  embodiment.locator-exists: error
+  embodiment.pin-stale: error
+record_types:
+  adr:
+    dir: docs/adr
+    prefix: ADR
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Status, Embodiment, Realized-by]
+    pointer_fields: []
+    narrative_fields: []
+    statuses:
+      values: [Proposed, Accepted]
+      success: [Accepted]
+locator_resolvers:
+  - name: rust
+    glob: "**/*.rs"
+    start: '^\s*(pub\s+)?(fn|struct)\s+{symbol}\b'
+    end: brace_balanced
+    leading: '^\s*(#\[|///)'
+    container:
+      start: '^\s*(impl\s+|(pub\s+)?struct\s+){symbol}\s*\{'
+      end: brace_balanced
+      spans: all
+    member:
+      - start: '^\s*(pub\s+)?fn\s+{symbol}\b'
+        end: brace_balanced
+        kind: fn
+      - start: '^\s*(pub\s+)?{symbol}\s*:([^:]|$)'
+        end: indent
+        kind: field
