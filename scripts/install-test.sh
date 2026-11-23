@@ -310,7 +310,7 @@ done
 
 # A piped install exits 0 with nothing installed when the download fails (sh reads empty input).
 repo="$(cd "$here/.." && pwd)"
-piped="$(grep -rnE '\|[[:space:]]*(ba)?sh([[:space:]]|$)' "$repo/README.md" "$repo/docs/reference" "$repo/scripts/install.sh" "$repo/.github/actions" 2>/dev/null)"
+piped="$(grep -rnE '\|[[:space:]]*(sudo([[:space:]]+-[^[:space:]]+)*[[:space:]]+)?([^[:space:]|]*/)?(ba|da|z)?sh([[:space:]]|$)' "$repo/README.md" "$repo/docs/reference" "$repo/scripts/install.sh" "$repo/.github/actions" 2>/dev/null)"
 [ -z "$piped" ]
 expect "docs: no documented command pipes a download into a shell" $?
 [ -z "$piped" ] || printf '%s\n' "$piped" >&2
