@@ -143,7 +143,7 @@ impl From<FailOnArg> for urzua_core::config::FailOn {
 #[derive(Parser)]
 #[command(
     name = "urzua",
-    about = "The verifiable specification layer for agent-authored change: it checks the records a change traces back to and orders work from their declared dependencies. It never judges the change.",
+    about = "The verifiable specification layer for agent-authored change: it checks every change against the rules you declared for the records it traces back to, gives the same answer every time, and orders work from their declared dependencies. It has no opinion on the code itself.",
     version
 )]
 struct Cli {
