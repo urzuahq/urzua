@@ -9,14 +9,14 @@ Supersedes / Superseded-by:
 
 ## Summary
 Support organisations that keep their decision records in several repositories, without merging
-their configurations. Each repository keeps its own `.urzua/config.yaml` and rules. Two
-capabilities follow. First, a record can cite a record in another repository by a qualified
-reference (`<repo>:<id>` or a `stable_id`), resolved offline against a committed snapshot of that
-repository's `urzua export`, and counted eligible and unexamined when the snapshot is missing or
-unusable. Second, an organisation view is built from several repositories' exports, each read in
-the vocabulary its own engine produced and labelled by repository; `urzua board` may show it. The
-second capability reverses part of `RFC-27`'s amendment of 2026-11-08. This RFC says so and
-proposes how to record it. It decides nothing. Several choices are left to the maintainer below.
+their configurations. Each repository keeps its own `.urzua/config.yaml` and rules. The engine takes
+the data side: a versioned `urzua export`, committed snapshots of sibling repositories' exports, and
+qualified references (`<repo>:<id>`) to a sibling's records, which `check` resolves offline against
+those snapshots and counts eligible and unexamined when a snapshot is missing or unusable. The
+cross-repository org view is built outside the engine, in the board as the first ecosystem client,
+reading the same snapshots. `RFC-27` stands as accepted: citing a sibling's record makes a record
+more verifiable, which is engine scope by its §2 test, and the org view is ecosystem by its §3. The
+maintainer's answers of 2026-11-23 are folded in below; one question stays open.
 
 ## Motivation
 The maintainer's direction, given 2026-11-23 and relayed from the organisation's coordination
@@ -31,6 +31,10 @@ thread. The first point quotes the relayed words; the rest paraphrase the relaye
 - A record citing a record or schema in another repository is the one new engine capability.
 - `RFC-27` is settled explicitly.
 
+The maintainer then changed direction on where the view lives, quoted as relayed: "maybe somehow we
+should pull the board out of urzua? Like basically the 'client' for the ecosystem?" The relayed
+answers to this RFC's open questions, paraphrased, are listed under "Answered" below.
+
 This repository's own records show the gap:
 
 - `MILE-358` (line 19) has to say "a gate tool", and `MILE-359` (line 38) "the published gate-report
@@ -41,7 +45,7 @@ This repository's own records show the gap:
   `SPEC-3` defers it as well. Its open question on back-pointer patterns (line 2018) says fixing them
   "is what makes cross-repo resolution possible". No record has taken this up since.
 - `MILE-24` (Planned, Phase 4) holds "a cross-repo decision graph" and "an org rollup". `RFC-27`
-  §3 and its 2026-11-08 amendment class both as ecosystem.
+  §3 and its 2026-11-08 amendment class both as ecosystem, and this RFC leaves them there.
 - Outside this repository, three sibling repositories this organisation runs carry urzua records,
   each governed by its own configuration and release. As reported by the organisation coordination
   thread's survey of 2026-11-23 (not checkable from this repository), all four repositories give
@@ -56,32 +60,52 @@ No configuration is merged, inherited or overlaid. A repository's `check` reads 
 `.urzua/config.yaml`. Another repository's records enter only as data, in the shape its own
 release's `urzua export` wrote, and never as rules.
 
-### 2. A declared list of sibling repositories
+### 2. Sibling snapshots, and a workspace file that is local tooling only
 
-The repository's configuration declares a list of siblings it may cite. Each entry has a name (the
-qualifier used in references), the forge identity (`owner/name`, for the snapshot check below), and
-one source:
+The maintainer chose committed snapshots for CI and a workspace file for the sibling list (Q2,
+Q3). The file layout, the envelope and the workspace file's form below are the author's proposal.
 
-- **snapshot** (proposed default): a committed file holding that sibling's `urzua export --format
-  json` output plus an envelope `{schema_version, repository, commit, generated_at, urzua_version,
-  records}`, where `commit` is the sibling commit the export was taken from and each record carries a
-  content hash. This mirrors the issue snapshot `citation.issue-exists` already uses (`SPEC-3`,
-  "Cited issues and pull requests", lines 782-835): it is written by a refresh command, committed,
-  checked for `schema_version` and repository, and its `generated_at` appears on every finding. CI
-  then never needs the network or a second checkout.
-- **checkout**: a local path to a sibling working tree, whose export is computed by running that
-  sibling's configuration. It suits a developer with sibling repositories checked out side by side.
-  CI has no such tree unless it clones one, and cloning needs the network and a token (see open
-  question 3).
+`check` in CI reads siblings only from snapshots committed in the citing repository, one file per
+sibling at `.urzua/siblings/<name>.json`. Each snapshot is self-describing: `{name, repository,
+commit, generated_at, schema_version, urzua_version, records}`. `name` is the qualifier used in
+references and must equal the filename; `check` reports a file whose envelope `name` differs from
+its filename. `repository` is the sibling's forge identity (`owner/name`), `commit` is the sibling
+commit the export was taken from, and each record carries a content hash. This follows the issue
+snapshot `citation.issue-exists` already uses (`SPEC-3`, "Cited issues and pull requests", lines
+782-835): written by a refresh command, committed, checked for `schema_version`, with `generated_at`
+on every finding. CI never needs the network, a second checkout or any file outside the
+repository.
+
+**The committed snapshot files are the repository's declaration of its siblings** (author's
+proposal; open question 10 asks whether config should also name them). A sibling a repository may
+cite is one it has a snapshot file for. A `<repo>:<id>` whose `<repo>` has no snapshot file is
+reported, at `warn`, as "not declared". A sibling whose records must not be copied in (section 9) is
+declared by committing a stub snapshot: the envelope with no records.
+
+A **workspace file** (author's proposal for the form the maintainer's Q2 answer takes) maps sibling
+names to local checkout paths and holds nothing else: no rule, no level, no vocabulary. It is local
+tooling. The snapshot refresh command reads it to find each sibling's checkout, and the client's org
+view reads it to find the repositories to show. A person keeps it wherever suits them, in a home
+repository or outside any repository, and it is never committed into each repository. `check` in CI
+never reads it.
+
+Locally, following the Q3 answer (a local checkout is used when present), a `check` run outside CI
+resolves a sibling against its checkout when the workspace file names one that is present, and
+against the committed snapshot otherwise. The report names the source it read for each sibling, so
+a local result that differs from CI's is visible as a different source, not a silent disagreement.
+
+This is how a workspace file squares with "configs never merge": it governs nothing. Each
+repository's own config declares the maximum snapshot age and the levels its references are held to
+(section 9).
 
 Nothing reaches a forge or a service. `RFC-14` already judged (line 128) that "a cross-repo graph has
-no natural forge surface". A declared sibling whose source is absent is reported as "declared, not
-read". It is never skipped silently.
+no natural forge surface". A reference to a sibling with no snapshot is reported as "not declared",
+and one whose snapshot is a stub is counted eligible and unexamined. Neither is skipped silently.
 
 ### 3. Qualified references
 
-A reference to another repository's record is written `<repo>:<id>` (for example `<repo>:RFC-2`) or
-as a bare `stable_id`. Display ids collide across repositories: several of the four repositories each
+A reference to another repository's record is written `<repo>:<id>` (for example `<repo>:RFC-2`), the
+syntax the maintainer chose, or as a bare `stable_id`. Display ids collide across repositories: several of the four repositories each
 have an `RFC-1` (as reported by the 2026-11-23 survey). An unqualified display id therefore always means a record in this repository,
 as it does today. In the snapshot, a qualified reference resolves to the target's `stable_id`, and
 that `stable_id` is the key the engine stores. The display id is what a person reads. Once resolved:
@@ -90,7 +114,7 @@ that `stable_id` is the key the engine stores. The display id is what a person r
 - `narrative-field.stale` fires once the target reaches a terminal state in its own repository's
   vocabulary (`finished` or `dropped`, section 5).
 - A file in a sibling is cited `<repo>:path` and checked by `citation.path-exists` against the
-  snapshot's list of paths, or against the checkout. A first reader reports it does not need this for
+  snapshot's list of paths. A first reader reports it does not need this for
   schemas: it vendors a sibling's schemas at a tag with checksums and a version file, and cites the
   local copy with an ordinary pinned `code:` locator, which already works and is stronger than a
   citation. This form is therefore the lowest-priority part of the proposal and may be deferred. A
@@ -106,10 +130,10 @@ that `stable_id` is the key the engine stores. The display id is what a person r
   "cited record changed since it was pinned" (proposed wording), and is re-pinned with
   `urzua fix --rebaseline` and a reason. An unpinned reference reads only the
   target's current status. Open question 9 asks whether a reference from a decided record must be
-  pinned.
+  pinned; it is still open.
 
-A reference is unexamined, and counted as eligible and unexamined, when the sibling is undeclared,
-its snapshot is absent, unparsable, of another `schema_version` or of another repository, or the
+A reference is unexamined, and counted as eligible and unexamined, when the sibling has a stub snapshot,
+its snapshot is unparsable, of another `schema_version`, or named differently from its file, or the
 target is not in the snapshot. In each case one finding names the reason. The report keeps the
 existing split of examined against found (`SPEC-1`: no silent no-op), so a check whose snapshot
 never loaded cannot pass as one that found nothing.
@@ -119,14 +143,15 @@ anywhere urzua reads (an IETF RFC number, for example), which neither resolve no
 reference is the opposite case: an id that is a record and should resolve. A repository moving an
 id from `external_ids` to a qualified reference gains a check and loses nothing.
 
-### 4. The org view
+### 4. The org view is an ecosystem client
 
-An org view reads N exports. Each export comes from its own repository, under its own config and
-release. The view labels every record with its repository, keys it on `(repository, stable_id)`,
-and shows the qualified references between records as edges. It computes no state of its own. It
-shows `state` as each export gives it, grouped by repository and then by state. It never
-recomputes `state` from raw statuses with a merged vocabulary. `urzua board` may render this view
-(the maintainer's direction). Section 7 gives the scope test that admits it.
+The org view is built outside the engine, in the board as the first ecosystem client (the
+maintainer's change of direction, section 7). It reads the committed snapshots, or the exports of
+the checkouts the workspace file names. It labels every record with its repository, keys it on
+`(repository, stable_id)`, and shows the qualified references between records as edges. It shows
+`state` as each export gives it, grouped by repository and then by state, and never recomputes
+`state` from raw statuses with a merged vocabulary. Nothing in `check`, `fix` or the record schema
+depends on it (`RFC-27` §3).
 
 ### 5. Finding 1: `state` is not comparable across repositories as-is
 
@@ -140,10 +165,16 @@ In the view, `finished`, `dropped`, `under-way` and `not-started` mean the same 
 repository, because each export derived them from that repository's declared lists. `open` means
 "nothing declared says whether work began", and that is not `not-started`.
 
-The proposal: an org view shows `open` and `none` as their own columns, labelled with what they
+The proposal: the org view shows `open` and `none` as their own columns, labelled with what they
 mean, and never folds them into `not-started` or merges them across repositories. A repository whose
-records are mostly `open` takes part, with that fact visible. Whether taking part should instead
-require a type to declare `progress` is the vocabulary question left open (open question 1).
+records are mostly `open` takes part, with that fact visible.
+
+A repository can do better by opting in to a shared vocabulary (the maintainer's answer to the
+vocabulary question). The engine publishes a versioned vocabulary file, for example what a parking
+status means and which statuses are `progress`. A repository adopts it by name and version in its
+own config. No rule is imported, and the adopting repository's statuses remain its own declaration.
+The org view can then say which repositories share a vocabulary and at which version. A repository
+that adopts none still takes part, with its `open` and `none` shown as they are.
 
 ### 6. Finding 2: the export carries no format version
 
@@ -164,70 +195,52 @@ bump. That conflict is for the ADR on `MILE-359` to settle. Under this proposal 
 a newer export rather than misreading `paused`. A newer reader shows that an older export cannot
 express `paused`, and does not claim the repository has nothing paused.
 
-### 7. Finding 3: this reverses part of RFC-27, and how that is recorded
+### 7. Finding 3: RFC-27 stands as accepted
 
-`RFC-27`'s amendment of 2026-11-08 (line 169) says: "A generated presentation of the records, such
-as the dashboard (`ADR-37`), and the org rollup (`MILE-24`) stay ecosystem: they are artifacts built
-around the engine's output for an audience, not a reading the engine computes inside `check` or
-`roadmap`, and a function of the records alone is not enough to make one engine scope." An org view
-inside `urzua board` is a generated presentation and an org rollup. Putting it in the engine reverses
-that sentence for this case. Calling it a clarification would be wrong.
+An earlier draft put the org view inside `urzua board` and proposed an ADR narrowing `RFC-27`'s
+amendment of 2026-11-08 (line 169), which keeps "a generated presentation of the records" and "the
+org rollup (`MILE-24`)" in the ecosystem. The maintainer's change of direction drops that: the board
+moves out as the ecosystem's client. So `RFC-27` is not amended or narrowed, no ADR narrows it, and
+no scope test is proposed. The split, by `RFC-27`'s own tests:
 
-Proposed record of the reversal, not made here because `RFC-27` is Accepted and its text is never
-rewritten:
+- **Engine scope:** the versioned export, sibling snapshots, and cross-repository citations in
+  `check`. Resolving a citation against a snapshot is relationship resolution, which `RFC-27` §2
+  names as engine scope; it makes the citing record more verifiable. `MILE-24`'s graph spanning
+  repositories would read these citations as its edges, but resolving them is not the graph, so
+  nothing moves out of `MILE-24`, which stays ecosystem as a whole.
+- **The snapshot refresh:** engine scope by §2, not by the 2026-11-08 amendment. The amendment's
+  class is readings computed "from the records and the configuration alone, with no state of its
+  own, no service and no model call"; a refresh is not a reading of that kind but the writer of an
+  input, so it is not in that class. It passes §2's test the way `urzua refs refresh` does for `citation.issue-exists`: it
+  produces the committed input that makes citations verifiable. It also stays clear of what the
+  amendment keeps out: it holds no state about the work, reads only records (through each sibling's
+  own `urzua export`) plus the workspace file, which like the configuration is local input and no
+  state about the work, and needs no service, since it reads local checkouts. In that it differs
+  from `urzua refs refresh`, which needs the forge's API.
+- **Ecosystem:** the cross-repository org view and the org rollup, built in the client from the
+  engine's output (§3).
 
-- A new ADR, deriving from this RFC, that narrows `RFC-27`'s 2026-11-08 amendment for one class.
-  It states the test below, names what moves out of `MILE-24`, and says `RFC-27` §3 otherwise
-  stands.
-- A dated `## Amendment` on `RFC-27`, added only once that ADR is accepted, that points at the ADR
-  and changes none of `RFC-27`'s existing text.
-- `MILE-24` split. The cross-repository decision graph and the org rollup move to a new milestone
-  that implements the ADR. Drift trends from collected events and large-corpus performance stay in
-  `MILE-24` and stay ecosystem.
+### 8. Finding 4: ADR-103
 
-The narrower test, proposed for that ADR: **a cross-repository reading is engine scope when it is
-computed only from exports the engine itself wrote, keeps each record in its own repository's
-vocabulary, holds no state between runs, and, for a snapshot source, is reproducible from the
-committed snapshots alone.** A checkout source (section 2) gives the same reading of whatever tree is
-checked out, which is reproducible only as far as that tree is; `check` in CI would read snapshots
-only (open question 3).
-
-This test also admits `ADR-37`'s generated dashboard. `scripts/generate-dashboard.py` builds its data
-only from `urzua check`, `explain`, `graph` and `export --format json` through `run_urzua`
-(lines 176-186), and holds no state between runs. Nothing in the code distinguishes it from a board
-reading the same output. What remains is where each ships and who chooses the layout: `urzua board`
-is a command of the engine binary with one fixed layout (`ADR-103`), and the dashboard is a script
-in this repository with a layout curated for this project. That is a packaging difference, not a
-property of the reading. Two consequences follow, and the maintainer chooses between them (open
-question 7): either the ADR accepts that this class covers both, and the dashboard is engine-scope
-eligible while staying a script; or the ADR adds a criterion that the reading ships in the engine
-binary with no audience-specific layout, which excludes the dashboard by packaging and should say
-so. The test stays true once the board reads other repositories' exports, because those exports are
-the engine's own versioned output (section 6). Trend analytics over time fail the test, because they
-hold state between runs, so they stay in `MILE-24`.
-
-### 8. Finding 4: ADR-103 should be settled in the same pass
-
-`ADR-103` (`urzua board`) is `Proposed` with `Embodiment: Not started` and does not cite `RFC-27`,
-yet the command ships. Before the board takes on a cross-repository view, the maintainer would need
-to decide: whether to accept `ADR-103` as written, or amend it first to cite `RFC-27` and the test in
-section 7; and whether its embodiment is evidenced by the shipped command's tests, so that
-`urzua fix --apply` can derive `Embodiment`. This RFC changes neither status.
+`ADR-103` (`urzua board`) is being reworked separately to treat the board as the client and deprecate
+the command. This RFC defers to it and changes no status.
 
 ### 9. Finding 5: failure modes of a cross-repository reference
 
 - **A stale snapshot that passes.** Every finding and the info notice name the snapshot's
-  `generated_at`, as `citation.issue-exists` does. Open question 5 asks whether a declared maximum
-  age should make an expired snapshot unexamined.
+  `generated_at`, as `citation.issue-exists` does. An unread or stale sibling is a `warn`, and an
+  `error` once its snapshot is older than a maximum age declared in the citing repository's own
+  config (the maintainer's answer).
 - **A private target.** The snapshot is committed into the citing repository, so it copies the
   target's titles and statuses there. A refresh writes only what the sibling's export would show to
   whoever runs it, and a repository that must not hold a private sibling's records declares that
-  sibling with no source. Its references are then eligible and unexamined, never resolved against
+  sibling with a stub snapshot, envelope only (section 2). Its references are then eligible and unexamined, never resolved against
   data the reader cannot see. `RFC-11`'s declared boundaries apply to the snapshot file like any
   other path.
-- **A renamed repository.** The qualifier is the local declared name, not the forge name. A rename
-  changes one declaration and the snapshot's `repository`. The mismatch with the declared identity
-  produces one finding, and references re-resolve on `stable_id` without edits.
+- **A renamed repository.** The qualifier is the snapshot's `name`, not the forge name, so a rename
+  changes no reference. It changes the snapshot's `repository` at the next refresh, and
+  `check --base` reports a snapshot whose `repository` differs from the merge base's copy, as one
+  finding (author's proposal). References keep resolving on `stable_id`.
 - **Circular references.** Resolution reads one level, the snapshot of the target. It never follows
   the target's own qualified references, so a cycle across repositories cannot loop. `roadmap`
   ordering stays within one repository, and a cross-repository `Depends-on` is shown, not
@@ -245,7 +258,7 @@ section 7; and whether its embodiment is evidenced by the shipped command's test
 The design keys on `(repository, stable_id)`. It never needs global uniqueness to resolve a
 qualified reference. A bare-`stable_id` reference does need it: the proposal resolves a bare ULID
 by searching every loaded snapshot, and reports a collision as an ambiguous reference rather than
-picking one. The org view reports two repositories sharing a `stable_id`, with an `info` finding.
+picking one. The org view, in the client, shows two repositories sharing a `stable_id`.
 ULIDs make that unlikely but not impossible, since records can be copied between repositories.
 
 ## Alternatives considered
@@ -255,50 +268,57 @@ ULIDs make that unlikely but not impossible, since records can be copied between
   different shapes. A merged config would make one repository's rules depend on another's, and the
   resolution order would become a second config format (the same worry as `SPEC-3`'s open question
   on scoped overrides, line 2013).
-- **A separate ecosystem tool on `urzua export` only.** It would keep `RFC-27` intact. But a
-  reference from one record to another repository's record is a property of the record, and
-  checking it is what `pointer.resolution` does locally. Done outside, a citing repository's `check`
-  would pass references nothing examined, the silent no-op `SPEC-1` forbids. The org view alone
-  could live outside; open question 8 asks the maintainer to choose.
+- **Everything in an ecosystem tool on `urzua export`, citations included.** A reference from one
+  record to another repository's record is a property of the record, and checking it is what
+  `pointer.resolution` does locally. Done outside, a citing repository's `check` would pass
+  references nothing examined, the silent no-op `SPEC-1` forbids. The org view does live outside
+  (section 4); the citations do not.
+- **The org view inside `urzua board`.** The earlier draft's proposal. It reversed part of
+  `RFC-27`'s 2026-11-08 amendment and needed a scope test that also admitted the generated dashboard
+  (`ADR-37`). Dropped by the maintainer's change of direction.
+- **The sibling list in each repository's config.** Declined in favour of a workspace file that is
+  local tooling only, with the governing parts (maximum age, levels) in each repository's config.
 - **Doing nothing.** `MILE-358` and `MILE-359` keep naming another repository's work in prose that
   nothing checks. Each organisation then writes its own cross-repository script, the hand-written
   linter `SPEC-1` exists to replace.
 
 ## Open questions
-1. **A shared vocabulary without a merged config.** (A first reader is already copying this
-   repository's `rfc` status block into its own config and asks whether the org wants one shared
-   block; this question answers it. The coordination thread reports that two sibling repositories
-   have since copied that block by hand.) Taking part in an org view may need one carve-out
-   from "configs never merge". Options: (a) none, and the view shows each repository's `open` and
-   `none` as they are (section 5); (b) a versioned vocabulary file the engine publishes, such as what
-   a parking status means or that `progress` is required to take part, which a repository opts into
-   by name and version without importing any rule; (c) a per-sibling declaration in the reading
-   repository mapping that sibling's statuses, which is rejected here as a merged config by another
-   name. The maintainer decides.
-2. **Where the list of siblings lives.** Options: each repository's `.urzua/config.yaml` (the
-   citations a repository can make are part of its governance); a workspace file outside any one
-   repository, for the org view only (which comes close to an org-level config); or both, with the
-   workspace file reading only and never governing.
-3. **Snapshot or checkout.** The snapshot is reproducible and offline, and suits CI. The checkout is
-   current, and suits local work. Options: snapshot only; both, with `check` in CI reading only
-   snapshots; checkout only (rejected here for CI).
-4. **ADR-103.** Accept it as written, or amend it to cite `RFC-27` and section 7's test first
-   (section 8).
-5. **The level when a sibling is unread.** Options: `info` (declared, not read), or `warn`, or
-   `error` past a declared maximum snapshot age.
-6. **Prefix syntax.** `<repo>:<id>` collides with nothing in today's id grammar (`ADR-64`'s
-   structured parsing), but `<repo>/<id>` or a URL form are alternatives. The maintainer chooses.
-7. **Does the scope test admit the dashboard?** Accept that section 7's test admits `ADR-37`'s
-   dashboard as well, or add a packaging criterion that excludes it, stated as packaging.
-8. **Engine or ecosystem for the org view.** Qualified references belong in `check` either way. The
-   org view could instead be an ecosystem tool reading the same snapshots, which leaves `RFC-27`
-   intact and needs no ADR narrowing it. Options: in `urzua board` (the maintainer's relayed
-   direction allows it); outside the engine; or outside first, moved in once a second organisation
-   asks.
 9. **Must a reference from a decided record be pinned?** Options: (a) pins optional everywhere;
    (b) a reference from a record whose status is in its type's declared `success` list to a sibling
-   record that is not terminal must be pinned, so a decision cannot rest on a sibling Draft that changes silently; (c) every qualified
-   reference is pinned. (b) is the author's recommendation.
+   record that is not terminal must be pinned, so a decision cannot rest on a sibling Draft that
+   changes silently; (c) every qualified reference is pinned. (b) is the author's recommendation.
+   Not answered on 2026-11-23.
+10. **Is the committed snapshot set enough as each repository's declaration of its siblings?**
+    Options: (a) yes, the set of `.urzua/siblings/*.json` files is the declaration (section 2),
+    which keeps Q2's answer that the sibling list is not in each repository's config; (b) each
+    repository's own config also names its siblings, by name and `owner/name` with no path, which
+    is closer to how `citation.issue-exists` checks `issue_refs.repository` (`SPEC-3`) and would let
+    `check` compare a snapshot's `repository` with a declared one rather than only with the merge
+    base's copy. (a) is the author's proposal. The maintainer decides.
+
+### Answered
+
+The maintainer answered the rest on 2026-11-23 in the organisation's coordination thread. The
+answers are relayed and paraphrased here, apart from the quotation in Motivation, and folded into
+the Proposal.
+
+1. **Shared vocabulary:** yes, opt-in. The engine publishes a versioned vocabulary file, and a
+   repository adopts it by name and version; no rules are imported (section 5). A first reader had been
+   copying this repository's `rfc` status block into its own config, and the coordination thread
+   reports two sibling repositories have since copied it by hand; this answers both.
+2. **Where the sibling list lives:** a workspace file, chosen over each repository's config. The
+   form this RFC gives it is the author's: local tooling only, never read by `check` in CI, never
+   committed into each repository, and carrying no rule (section 2).
+3. **Snapshot or checkout:** both. `check` in CI reads only committed snapshots; a local checkout is
+   used when present, locally (section 2).
+4. **ADR-103:** being reworked separately, with the board as client and the command deprecated
+   (section 8).
+5. **Level for an unread sibling:** `warn`, and `error` past a maximum snapshot age declared in the
+   repository's own config (section 9).
+6. **Prefix syntax:** `<repo>:<id>` (section 3).
+7. **Does the scope test admit the dashboard:** moot. `RFC-27` is untouched and no scope test is
+   proposed (section 7).
+8. **Engine or ecosystem for the org view:** outside the engine, in the client (section 4).
 
 ## Non-goals
 - Merging, inheriting or overlaying configuration across repositories.
@@ -307,14 +327,16 @@ ULIDs make that unlikely but not impossible, since records can be copied between
   repository. Deferred to a follow-up milestone once qualified references exist.
 - Sequencing `roadmap` across repositories.
 - Drift trends and large-corpus performance, which stay in `MILE-24`.
-- Deciding `RFC-27`, `ADR-103` or any status. This RFC proposes.
+- Amending or narrowing `RFC-27`.
+- The org view and org rollup in the engine: they are the client's.
+- Deciding `ADR-103` or any status. This RFC proposes.
 - Section anchors in a cross-repository reference: a reference names a record.
 - Gate receipts. A `gate:` locator a first reader plans (no record here plans one) cites a receipt, which is not a record and is not
   committed (ignored locally, a build artifact in CI); the committed-snapshot model does not reach
   it, and nothing here resolves one.
 
 ## References
-- `RFC-27` §3 and its amendment of 2026-11-08 (line 169), the part this proposes to narrow.
+- `RFC-27` §2, §3 and its amendment of 2026-11-08 (line 169), which this RFC leaves as accepted.
 - `RFC-11` (line 381) and `SPEC-3` (lines 782-835, 644, 2018): the deferred non-goal, the snapshot
   model, `external_ids`, the back-pointer obstacle.
 - `RFC-14` (line 128): no forge surface for a cross-repository graph.
@@ -329,4 +351,7 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 > | 2026-11-23 | Review fixes: the scope test admits the generated dashboard, stated plainly with the choice put to the maintainer; the version-bump policy stated as this RFC's own; reproducibility limited to snapshot sources; open questions 7 and 8 added; motivation bullets marked as paraphrase; SPEC-3 line corrected; sibling-repository facts labelled as survey reports. | **structural** |
 > | 2026-11-23 | Corrected the survey's count for the third sibling repository: 7 `open` records, 3 rfc and 4 spec, not most or all of its records. The point it supports is unchanged. | **structural** |
 > | 2026-11-23 | First-reader input: the snapshot records the sibling `commit` and a per-record content hash; a qualified reference may be pinned and is reported when its target changed (open question 9); file citation marked lowest priority, since a vendored, pinned local copy already serves schemas; non-goals add section anchors and gate receipts. | **structural** |
-> | 2026-11-23 | A second first reader: a `<repo>:path` citation is stated not to stand in for vendoring, and open question 1 notes two siblings copied this repository's `rfc` status block by hand. | **structural** |
+> | 2026-11-23 | A second reader: a `<repo>:path` citation is stated not to stand in for vendoring, and open question 1 notes two siblings copied this repository's `rfc` status block by hand. | **structural** |
+> | 2026-11-23 | Folded in the maintainer's answers of 2026-11-23, relayed from the coordination thread: the board moves out as the ecosystem client, so the reversal of `RFC-27`, the ADR narrowing it, its amendment pointer and the scope test are dropped; the org view is ecosystem and cross-repository citations stay engine scope; sibling snapshots committed per repository with a local-only workspace file; opt-in versioned vocabulary; `warn`, then `error` past a declared maximum age; `<repo>:<id>`; `ADR-103` deferred to its own rework. Open questions 1-8 moved to Answered; 9 stays open. | **structural** |
+> | 2026-11-23 | Review fixes, labelled as the author's proposal: the snapshot envelope gains `name`, checked against its filename; the committed snapshot set is the sibling declaration, an undeclared qualifier is a `warn`, a private sibling is a stub snapshot, a rename is caught by `check --base`; open question 10 added. A local `check` reads a present checkout, as the Q3 answer says. Refresh justified under `RFC-27` §2; `MILE-24` stays ecosystem as a whole. Two typos fixed. | **structural** |
+> | 2026-11-23 | Review wording: the amendment's class quoted from its definition, a paraphrased answer no longer in quotation marks, the refresh argument names the workspace file and the service `refs refresh` needs, and the `MILE-24` sentence states the edge relation instead of "never its work". | **structural** |
