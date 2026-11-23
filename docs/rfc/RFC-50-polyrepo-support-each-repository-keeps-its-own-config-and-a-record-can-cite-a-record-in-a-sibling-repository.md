@@ -116,7 +116,9 @@ recomputes `state` from raw statuses with a merged vocabulary. `urzua board` may
 `StateCategory` (`rust/crates/urzua-core/src/view_model.rs:25-46`, `state_of` at 218-259) gives
 `open` to a type that declares no `progress` list and `none` to a type with no statuses. In this
 repository's export of 2026-11-23, 28 of 762 records are `open` (20 rfc, 4 condition, 3 bug, 1 adr)
-and 16 are `none` (all waivers). The 2026-11-23 survey reports that in the three sibling repositories most or all records are `open`.
+and 16 are `none` (all waivers). The 2026-11-23 survey reports that in two sibling repositories every record is `open` (3 of 3 and
+1 of 1), and that in the third 7 records are `open` (3 rfc records at `Discussion` and 4 spec records at
+`Draft`, types with no `progress` list) while its other types sort properly.
 In the view, `finished`, `dropped`, `under-way` and `not-started` mean the same thing in every
 repository, because each export derived them from that repository's declared lists. `open` means
 "nothing declared says whether work began", and that is not `not-started`.
@@ -294,3 +296,4 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 > |---|---|---|
 > | 2026-11-23 | Initial RFC, `Status: Draft`. Filed from the maintainer's polyrepo direction of 2026-11-23, relayed from the organisation's coordination thread. | **structural** |
 > | 2026-11-23 | Review fixes: the scope test admits the generated dashboard, stated plainly with the choice put to the maintainer; the version-bump policy stated as this RFC's own; reproducibility limited to snapshot sources; open questions 7 and 8 added; motivation bullets marked as paraphrase; SPEC-3 line corrected; sibling-repository facts labelled as survey reports. | **structural** |
+> | 2026-11-23 | Corrected the survey's count for the third sibling repository: 7 `open` records, 3 rfc and 4 spec, not most or all of its records. The point it supports is unchanged. | **structural** |
