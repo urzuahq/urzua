@@ -94,3 +94,5 @@
   reason: "the installed hook command's shell fallback running the configuration validator on events that never read its verdict; it is shell and awk in the agent harness's hook entry, which no urzua command run over a corpus executes, and harness_fallback_integration records which events invoke awk"
 - bug: BUG-215
   reason: "session-start judging an installed harness whose settings file is gone and whose lock lists no entries; it needs a harness install and a deleted settings file in a scratch repository, which no urzua command run over a fixed corpus executes, and harness_integration plants the lock and runs session-start over it"
+- bug: BUG-216
+  reason: "integration-test helpers panicking when a hook exits without reading its stdin; it is test scaffolding, which no urzua command run over a corpus executes, and harness_post_command_integration holds the large-payload case"

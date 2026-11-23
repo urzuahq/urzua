@@ -5,7 +5,6 @@
 
 mod common;
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -61,12 +60,7 @@ fn run(cmd: &mut Command, root: &Path, stdin: &str) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("bash/python3 must be installed");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    common::write_stdin(&mut child, stdin);
     child.wait_with_output().unwrap()
 }
 
