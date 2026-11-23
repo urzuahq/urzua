@@ -35,12 +35,14 @@ as one more declared role, read from configuration, not a status name in Rust.
 
 - `statuses.paused` is validated at load: a subset of `values`, disjoint from `success`, `failure`, `progress` and `blocked`, with each violation a load error that names the status.
 - A record in a declared paused status exports `state: paused` and `ready: false`, shown by a test with the same record reported `not-started` and `ready: true` when the role is not declared.
-- `urzua roadmap` leaves a paused record off its ready list and the board shows it outside Ready, each shown by a test.
+- `urzua roadmap`, whose readiness is computed apart from the export, leaves a paused record off its ready list, and a record that depends on a paused one is still waiting, each shown by a test.
+- The board shows a paused record outside Ready, under its own label and count, shown by a test.
 - A paused parent with a finished or started child sets neither `state_disagrees_with_children` nor a `status.children-agreement` finding, while a paused child under a finished parent is still counted open, each shown by a test.
-- `SPEC-3` documents `statuses.paused` and states that the export's state and `ready` do not read `statuses.blocked`; the export reference lists the `paused` state; each spec carries a revision row.
+- `urzua explain --types` lists the `paused` role beside the other status roles.
+- `SPEC-3` documents `statuses.paused` and states that the export's state and `ready` do not read `statuses.blocked`; the export reference lists the `paused` state and the `paused` key of `children_by_state`; each spec carries a revision row.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-11-23 | Filed as planned work from a consuming repository's report against urzua 0.4.13, relayed by the org coordination thread; nothing built, no evidence yet. | **structural** |
+> | 2026-11-23 | Filed as planned work from a consuming repository's report against urzua 0.4.13; nothing built, no evidence yet. | **structural** |
