@@ -16,7 +16,7 @@ those snapshots and counts eligible and unexamined when a snapshot is missing or
 cross-repository org view is built outside the engine, in the board as the first ecosystem client,
 reading the same snapshots. `RFC-27` stands as accepted: citing a sibling's record makes a record
 more verifiable, which is engine scope by its §2 test, and the org view is ecosystem by its §3. The
-maintainer's answers of 2026-11-23 are folded in below; one question stays open.
+maintainer's answers of 2026-11-23 are folded in below; no question stays open.
 
 ## Motivation
 The maintainer's direction, given 2026-11-23 and relayed from the organisation's coordination
@@ -76,8 +76,8 @@ snapshot `citation.issue-exists` already uses (`SPEC-3`, "Cited issues and pull 
 on every finding. CI never needs the network, a second checkout or any file outside the
 repository.
 
-**The committed snapshot files are the repository's declaration of its siblings** (author's
-proposal; open question 10 asks whether config should also name them). A sibling a repository may
+**The committed snapshot files are the repository's declaration of its siblings** (Q10: "Snapshot
+files only (Recommended)"; nothing in config names them). A sibling a repository may
 cite is one it has a snapshot file for. A `<repo>:<id>` whose `<repo>` has no snapshot file is
 reported, at `warn`, as "not declared". A sibling whose records must not be copied in (section 9) is
 declared by committing a stub snapshot: the envelope with no records.
@@ -129,8 +129,8 @@ that `stable_id` is the key the engine stores. The display id is what a person r
   target's hash changed is reported the way a stale evidence pin is today, with a message such as
   "cited record changed since it was pinned" (proposed wording), and is re-pinned with
   `urzua fix --rebaseline` and a reason. An unpinned reference reads only the
-  target's current status. Open question 9 asks whether a reference from a decided record must be
-  pinned; it is still open.
+  target's current status. Whether a reference must be pinned is a policy each repository declares
+  in its own config (Q9, below), not a rule the engine fixes.
 
 A reference is unexamined, and counted as eligible and unexamined, when the sibling has a stub snapshot,
 its snapshot is unparsable, of another `schema_version`, or named differently from its file, or the
@@ -222,8 +222,11 @@ no scope test is proposed. The split, by `RFC-27`'s own tests:
 
 ### 8. Finding 4: ADR-103
 
-`ADR-103` (`urzua board`) is being reworked separately to treat the board as the client and deprecate
-the command. This RFC defers to it and changes no status.
+`ADR-103` (`urzua board`) is reworked separately (it stays `Proposed`) to treat the board as the
+first ecosystem client, a Rust binary in this repository that reads only published JSON, with the
+command removed when the client ships and no alias (the maintainer: "Break it, we are only users").
+The export gains its format version and the config-declared data before the client is built
+("Export first, then client (Recommended)"). This RFC defers to it and changes no status.
 
 ### 9. Finding 5: failure modes of a cross-repository reference
 
@@ -253,6 +256,19 @@ the command. This RFC defers to it and changes no status.
   record can build on a sibling's Draft that keeps changing, and without a pin it changes under the
   citation silently.
 
+### 9a. Pinning policy is declared in each repository's config
+
+The maintainer's answer to Q9 is "Maybe as a principle it's better to default to decisions being
+configurable". So the engine does not fix whether a qualified reference from a decided record must
+be pinned. A rule option in the citing repository's own `.urzua/config.yaml` declares it, with
+values such as `none` (pins optional everywhere), `from-decided` (a reference from a record whose
+status is in its type's declared `success` list to a sibling record that is not terminal must be
+pinned, so a decision cannot rest on a sibling Draft that changes silently) and `always` (every
+qualified reference is pinned). The option's name and its default are the author's to propose in the
+ADR that decides the rule; this RFC names the shape, not the default. It is per repository, so it
+leaves "configs never merge" whole. It also follows the thesis in `SPEC-1`: the same binary serves
+repositories that hold their references to different standards.
+
 ### 10. Finding 6: `stable_id` uniqueness across repositories
 
 The design keys on `(repository, stable_id)`. It never needs global uniqueness to resolve a
@@ -278,23 +294,13 @@ ULIDs make that unlikely but not impossible, since records can be copied between
   (`ADR-37`). Dropped by the maintainer's change of direction.
 - **The sibling list in each repository's config.** Declined in favour of a workspace file that is
   local tooling only, with the governing parts (maximum age, levels) in each repository's config.
+  Q10 confirmed it: the committed snapshot files alone are the declaration.
 - **Doing nothing.** `MILE-358` and `MILE-359` keep naming another repository's work in prose that
   nothing checks. Each organisation then writes its own cross-repository script, the hand-written
   linter `SPEC-1` exists to replace.
 
 ## Open questions
-9. **Must a reference from a decided record be pinned?** Options: (a) pins optional everywhere;
-   (b) a reference from a record whose status is in its type's declared `success` list to a sibling
-   record that is not terminal must be pinned, so a decision cannot rest on a sibling Draft that
-   changes silently; (c) every qualified reference is pinned. (b) is the author's recommendation.
-   Not answered on 2026-11-23.
-10. **Is the committed snapshot set enough as each repository's declaration of its siblings?**
-    Options: (a) yes, the set of `.urzua/siblings/*.json` files is the declaration (section 2),
-    which keeps Q2's answer that the sibling list is not in each repository's config; (b) each
-    repository's own config also names its siblings, by name and `owner/name` with no path, which
-    is closer to how `citation.issue-exists` checks `issue_refs.repository` (`SPEC-3`) and would let
-    `check` compare a snapshot's `repository` with a declared one rather than only with the merge
-    base's copy. (a) is the author's proposal. The maintainer decides.
+None open. Questions 9 and 10 were answered on 2026-11-23 (below).
 
 ### Answered
 
@@ -319,6 +325,15 @@ the Proposal.
 7. **Does the scope test admit the dashboard:** moot. `RFC-27` is untouched and no scope test is
    proposed (section 7).
 8. **Engine or ecosystem for the org view:** outside the engine, in the client (section 4).
+9. **Must a decided record's citation of a non-terminal sibling record be pinned?** The maintainer
+   answered: "Maybe as a principle it's better to default to decisions being configurable". It is
+   declared in each repository's own config, as a rule option with values such as `none`,
+   `from-decided` and `always`, not fixed by the engine; the author proposes the default in the
+   deciding ADR (section 9a).
+10. **Is the committed snapshot set enough as each repository's declaration of its siblings?** The
+    maintainer answered: "Snapshot files only (Recommended)". The committed
+    `.urzua/siblings/<name>.json` files are the declaration and nothing in config names siblings
+    (section 2).
 
 ## Non-goals
 - Merging, inheriting or overlaying configuration across repositories.
@@ -355,3 +370,4 @@ the Proposal.
 > | 2026-11-23 | Folded in the maintainer's answers of 2026-11-23, relayed from the coordination thread: the board moves out as the ecosystem client, so the reversal of `RFC-27`, the ADR narrowing it, its amendment pointer and the scope test are dropped; the org view is ecosystem and cross-repository citations stay engine scope; sibling snapshots committed per repository with a local-only workspace file; opt-in versioned vocabulary; `warn`, then `error` past a declared maximum age; `<repo>:<id>`; `ADR-103` deferred to its own rework. Open questions 1-8 moved to Answered; 9 stays open. | **structural** |
 > | 2026-11-23 | Review fixes, labelled as the author's proposal: the snapshot envelope gains `name`, checked against its filename; the committed snapshot set is the sibling declaration, an undeclared qualifier is a `warn`, a private sibling is a stub snapshot, a rename is caught by `check --base`; open question 10 added. A local `check` reads a present checkout, as the Q3 answer says. Refresh justified under `RFC-27` §2; `MILE-24` stays ecosystem as a whole. Two typos fixed. | **structural** |
 > | 2026-11-23 | Review wording: the amendment's class quoted from its definition, a paraphrased answer no longer in quotation marks, the refresh argument names the workspace file and the service `refs refresh` needs, and the `MILE-24` sentence states the edge relation instead of "never its work". | **structural** |
+> | 2026-11-23 | Folded in the maintainer's answers to the last two questions, quoted: Q9, "Maybe as a principle it's better to default to decisions being configurable", so the pinning policy is a per-repository config option (new section 9a) and not fixed by the engine; Q10, "Snapshot files only (Recommended)", so the committed snapshot set is the whole declaration. Questions 9 and 10 move to Answered, none stays open, and section 8 records the board client's shape and the export-first order. The deciding ADRs are not written; no status changes. | **structural** |
