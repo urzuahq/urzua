@@ -43,3 +43,4 @@ the agent's hook format; `harness run` prints a verdict with no `status`. All th
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-23 | Filed as planned work: nothing built, no evidence yet. The addition-only rule is the maintainer's plan, accepted on 2026-11-23 and relayed from the gate tool's design thread: "the shared contract is urzua's existing shape, and urzua conforms by addition only". | **structural** |
+> | 2026-11-23 | Recorded two directions the maintainer gave on 2026-11-23 ("Yes, we need to get product surface unified"), relayed from the org coordination thread: the published agent CLI contract owns the `describe` field list, so the ADR in Done means item 1 records adopting that list rather than deciding its own; and the schema in item 4 is a copy vendored from a contract release tag with a version file and a checksum compared in CI, so that item waits for the first tag. The items themselves are unchanged. | **structural** |
