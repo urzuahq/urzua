@@ -51,8 +51,8 @@ regenerates the list below from the records.
   The condition record type
 - [SPEC-24](SPEC-24-the-harness-request-verdict-and-adapter-layout.md) — Shipped, 2026-11-06
   The harness request, verdict and adapter layout
-- [SPEC-25](SPEC-25-urzua-waive-from-report.md) — Accepted, 2026-11-13
+- [SPEC-25](SPEC-25-urzua-waive-from-report.md) — Shipped, 2026-11-13
   urzua waive --from-report
-- [SPEC-26](SPEC-26-urzua-mcp.md) — Accepted, 2026-11-13
+- [SPEC-26](SPEC-26-urzua-mcp.md) — Shipped, 2026-11-13
   urzua mcp
 <!-- urzua:index:end -->
