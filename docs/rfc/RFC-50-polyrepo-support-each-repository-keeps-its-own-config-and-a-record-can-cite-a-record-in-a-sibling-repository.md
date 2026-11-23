@@ -89,7 +89,7 @@ view reads it to find the repositories to show. A person keeps it wherever suits
 repository or outside any repository, and it is never committed into each repository. `check` in CI
 never reads it.
 
-Locally, following the Q3 answer ("a local checkout is used when present"), a `check` run outside CI
+Locally, following the Q3 answer (a local checkout is used when present), a `check` run outside CI
 resolves a sibling against its checkout when the workspace file names one that is present, and
 against the committed snapshot otherwise. The report names the source it read for each sibling, so
 a local result that differs from CI's is visible as a different source, not a silent disagreement.
@@ -205,14 +205,18 @@ no scope test is proposed. The split, by `RFC-27`'s own tests:
 
 - **Engine scope:** the versioned export, sibling snapshots, and cross-repository citations in
   `check`. Resolving a citation against a snapshot is relationship resolution, which `RFC-27` §2
-  names as engine scope; it makes the citing record more verifiable. It was never `MILE-24`'s
-  work, so nothing moves out of `MILE-24`, which stays ecosystem as a whole.
+  names as engine scope; it makes the citing record more verifiable. `MILE-24`'s graph spanning
+  repositories would read these citations as its edges, but resolving them is not the graph, so
+  nothing moves out of `MILE-24`, which stays ecosystem as a whole.
 - **The snapshot refresh:** engine scope by §2, not by the 2026-11-08 amendment. The amendment's
-  class of derived readings "writes nothing", and a refresh writes a file, so it is not in that
-  class. It passes §2's test the way `urzua refs refresh` does for `citation.issue-exists`: it
+  class is readings computed "from the records and the configuration alone, with no state of its
+  own, no service and no model call"; a refresh is not a reading of that kind but the writer of an
+  input, so it is not in that class. It passes §2's test the way `urzua refs refresh` does for `citation.issue-exists`: it
   produces the committed input that makes citations verifiable. It also stays clear of what the
   amendment keeps out: it holds no state about the work, reads only records (through each sibling's
-  own `urzua export`), and needs no service, since it reads local checkouts.
+  own `urzua export`) plus the workspace file, which like the configuration is local input and no
+  state about the work, and needs no service, since it reads local checkouts. In that it differs
+  from `urzua refs refresh`, which needs the forge's API.
 - **Ecosystem:** the cross-repository org view and the org rollup, built in the client from the
   engine's output (§3).
 
@@ -350,3 +354,4 @@ the Proposal.
 > | 2026-11-23 | A second reader: a `<repo>:path` citation is stated not to stand in for vendoring, and open question 1 notes two siblings copied this repository's `rfc` status block by hand. | **structural** |
 > | 2026-11-23 | Folded in the maintainer's answers of 2026-11-23, relayed from the coordination thread: the board moves out as the ecosystem client, so the reversal of `RFC-27`, the ADR narrowing it, its amendment pointer and the scope test are dropped; the org view is ecosystem and cross-repository citations stay engine scope; sibling snapshots committed per repository with a local-only workspace file; opt-in versioned vocabulary; `warn`, then `error` past a declared maximum age; `<repo>:<id>`; `ADR-103` deferred to its own rework. Open questions 1-8 moved to Answered; 9 stays open. | **structural** |
 > | 2026-11-23 | Review fixes, labelled as the author's proposal: the snapshot envelope gains `name`, checked against its filename; the committed snapshot set is the sibling declaration, an undeclared qualifier is a `warn`, a private sibling is a stub snapshot, a rename is caught by `check --base`; open question 10 added. A local `check` reads a present checkout, as the Q3 answer says. Refresh justified under `RFC-27` §2; `MILE-24` stays ecosystem as a whole. Two typos fixed. | **structural** |
+> | 2026-11-23 | Review wording: the amendment's class quoted from its definition, a paraphrased answer no longer in quotation marks, the refresh argument names the workspace file and the service `refs refresh` needs, and the `MILE-24` sentence states the edge relation instead of "never its work". | **structural** |
