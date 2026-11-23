@@ -3,6 +3,7 @@ Stable-Id: 01M83NHABRKR1X1ZZ25RA3CZYM
 Status: Planned
 Phase: '1'
 Track: integrations
+Implements: ADR-103
 Blocked-on: MILE-361
 ---
 # 362 — The board is a Rust client in this repository that reads only published JSON, and urzua board is removed

@@ -49,7 +49,7 @@ Moderate. The removal is a break by decision, so a script that calls `urzua boar
 - Stdout is JSON on every command with no exception, and the engine has no listener; `ADR-23` holds without the second product kind.
 - The client is the first consumer of the published export, so the contract is exercised by a real one; a change to the export's shape needs a version change.
 - The release carries two binaries.
-- Until the client ships, `urzua board` stays as built (`MILE-344`, `MILE-349`), and its earlier amendment of 2026-11-18 describes it. The earlier amendment of 2026-11-18 is dropped from this record, since it described the command being removed; it stays in git history.
+- Until the client ships, `urzua board` stays as built (`MILE-344`, `MILE-349`). The earlier amendment of 2026-11-18, which described that command, is dropped from this record and stays in git history.
 - `docs/reference/board.md` and the README demo describe the client once it exists (`MILE-362`).
 
 ## References

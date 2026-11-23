@@ -3,6 +3,7 @@ Stable-Id: 01M83NH9B10G0ZA0XXVPFGJT20
 Status: Planned
 Phase: '1'
 Track: integrations
+Implements: ADR-103, RFC-50
 Blocked-on: 
 ---
 # 361 — The export carries a format version and the config-declared data a client needs, with a published schema

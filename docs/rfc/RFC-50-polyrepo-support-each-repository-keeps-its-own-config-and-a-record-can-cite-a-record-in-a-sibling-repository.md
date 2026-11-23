@@ -32,8 +32,9 @@ thread. The first point quotes the relayed words; the rest paraphrase the relaye
 - `RFC-27` is settled explicitly.
 
 The maintainer then changed direction on where the view lives, quoted as relayed: "maybe somehow we
-should pull the board out of urzua? Like basically the 'client' for the ecosystem?" The relayed
-answers to this RFC's open questions, paraphrased, are listed under "Answered" below.
+should pull the board out of urzua? Like basically the 'client' for the ecosystem?" The answers
+to this RFC's open questions are listed under "Answered" below: questions 1 to 8 as relayed and
+paraphrased, questions 9 and 10 quoted from the maintainer's own answers.
 
 This repository's own records show the gap:
 
