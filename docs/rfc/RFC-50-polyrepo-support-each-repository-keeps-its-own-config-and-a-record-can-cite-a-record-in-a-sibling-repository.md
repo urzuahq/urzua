@@ -93,7 +93,10 @@ that `stable_id` is the key the engine stores. The display id is what a person r
   snapshot's list of paths, or against the checkout. A first reader reports it does not need this for
   schemas: it vendors a sibling's schemas at a tag with checksums and a version file, and cites the
   local copy with an ordinary pinned `code:` locator, which already works and is stronger than a
-  citation. This form is therefore the lowest-priority part of the proposal and may be deferred.
+  citation. This form is therefore the lowest-priority part of the proposal and may be deferred. A
+  `<repo>:path` citation is not a stand-in for vendoring: it proves a path existed when the snapshot
+  was taken, not what the file contains or at which tag. A citation follows the sibling as it moves;
+  a vendored copy holds exact bytes until someone commits a new one, and a consumer may use both.
 - A reference resolves to a record, not to a section in it. A first reader cites sections in prose
   ("RFC-27 §2") and reports that record-level resolution is enough.
 - A qualified reference may carry a pin, `<repo>:<id>@sha256:<hash>`, written by `urzua fix --pin`
@@ -262,7 +265,7 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 ## Open questions
 1. **A shared vocabulary without a merged config.** (A first reader is already copying this
    repository's `rfc` status block into its own config and asks whether the org wants one shared
-   block; this question answers it.) Taking part in an org view may need one carve-out
+   block; this question answers it. Two sibling repositories have since copied that block by hand.) Taking part in an org view may need one carve-out
    from "configs never merge". Options: (a) none, and the view shows each repository's `open` and
    `none` as they are (section 5); (b) a versioned vocabulary file the engine publishes, such as what
    a parking status means or that `progress` is required to take part, which a repository opts into
@@ -323,3 +326,4 @@ ULIDs make that unlikely but not impossible, since records can be copied between
 > | 2026-11-23 | Review fixes: the scope test admits the generated dashboard, stated plainly with the choice put to the maintainer; the version-bump policy stated as this RFC's own; reproducibility limited to snapshot sources; open questions 7 and 8 added; motivation bullets marked as paraphrase; SPEC-3 line corrected; sibling-repository facts labelled as survey reports. | **structural** |
 > | 2026-11-23 | Corrected the survey's count for the third sibling repository: 7 `open` records, 3 rfc and 4 spec, not most or all of its records. The point it supports is unchanged. | **structural** |
 > | 2026-11-23 | First-reader input: the snapshot records the sibling `commit` and a per-record content hash; a qualified reference may be pinned and is reported when its target changed (open question 9); file citation marked lowest priority, since a vendored, pinned local copy already serves schemas; non-goals add section anchors and gate receipts. | **structural** |
+> | 2026-11-23 | Second first reader: a `<repo>:path` citation is stated not to stand in for vendoring, and open question 1 notes two siblings copied this repository's `rfc` status block by hand. | **structural** |
