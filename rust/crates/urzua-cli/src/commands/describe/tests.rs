@@ -234,8 +234,9 @@ const NOT_DECLARED: &[(&str, &str)] = &[
 const DYNAMIC_READS: [(&str, &str, Option<&[&str]>); 5] = [
     ("harness/record.rs", "v", Some(&["URZUA_BIN", "URZUA"])),
     ("commands/refs.rs", "k", Some(&["GITHUB_TOKEN", "GH_TOKEN"])),
-    // The variables an embedded adapter's manifest requires: its host's.
-    ("harness/run.rs", "var", Some(&["CLAUDE_PROJECT_DIR"])),
+    // The variables an embedded adapter\'s manifest requires, which
+    // `harness::ADAPTER_ENV` declares and `env` lists.
+    ("harness/run.rs", "var", Some(&[])),
     ("harness/hook/mod.rs", "name", None),
     ("commands/board_server.rs", "variable", None),
 ];
@@ -334,4 +335,44 @@ fn env_drift_catches_a_planted_read() {
     assert_eq!(problems.len(), 2, "{problems:#?}");
     assert!(problems.iter().any(|p| p.contains("PLANTED_TOKEN")));
     assert!(problems.iter().any(|p| p.contains("env::var(who)")));
+}
+
+/// A conflict appears on both arguments, whether clap or the code declares it.
+#[test]
+fn every_conflict_is_declared_on_both_arguments() {
+    let d = describe(urzua()).unwrap();
+    let mut one_sided = Vec::new();
+    for c in &d.commands {
+        for a in &c.args {
+            for other in &a.conflicts_with {
+                let back = c.args.iter().find(|b| &b.name == other).unwrap();
+                if !back.conflicts_with.contains(&a.name) {
+                    one_sided.push(format!("{}: {} lists {other}", c.name, a.name));
+                }
+            }
+        }
+    }
+    assert!(one_sided.is_empty(), "{one_sided:#?}");
+    let serve = find(&d, "board")
+        .args
+        .iter()
+        .find(|a| a.name == "--serve")
+        .unwrap();
+    assert_eq!(serve.conflicts_with, ["--out", "--prompt"]);
+    assert!(
+        serve.requires.is_empty(),
+        "--port and --allowed-host require it"
+    );
+}
+
+#[test]
+fn migrate_schema_declares_both_arguments_it_needs() {
+    let d = describe(urzua()).unwrap();
+    let c = find(&d, "migrate schema");
+    for name in ["--report", "--field"] {
+        assert!(
+            c.args.iter().find(|a| a.name == name).unwrap().required,
+            "{name}"
+        );
+    }
 }

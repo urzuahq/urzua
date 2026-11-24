@@ -647,6 +647,26 @@ fn arg_of<'a>(command: &'a Value, name: &str) -> &'a Value {
         .unwrap()
 }
 
+/// Whether `text` names `name` as a whole word: `--types` does not name `--type`.
+fn names_whole(text: &str, name: &str) -> bool {
+    let word = format!(
+        r"(?:^|[^a-z0-9_-]){}(?:$|[^a-z0-9_-])",
+        regex::escape(&name.to_lowercase())
+    );
+    regex::Regex::new(&word).unwrap().is_match(text)
+}
+
+#[test]
+fn a_longer_name_does_not_name_a_shorter_one() {
+    assert!(!names_whole("--full goes with --types", "--type"));
+    assert!(names_whole(
+        "cannot be combined with paths or --base",
+        "--base"
+    ));
+    assert!(names_whole("with paths or", "paths"));
+    assert!(!names_whole("--stdin-path", "--stdin"));
+}
+
 /// A refusal whose error names both arguments (`paths` is written `PATHS`), so
 /// it refuses the pair and not some other mistake in the probe.
 fn refused_naming(dir: &Path, argv: &[String], names: [&str; 2]) -> Result<(), String> {
@@ -658,7 +678,7 @@ fn refused_naming(dir: &Path, argv: &[String], names: [&str; 2]) -> Result<(), S
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&[out.stdout, out.stderr].concat()).to_lowercase();
-    if names.iter().all(|n| text.contains(&n.to_lowercase())) {
+    if names.iter().all(|n| names_whole(&text, n)) {
         Ok(())
     } else {
         Err(format!("{argv:?} was refused for another reason: {text}"))
@@ -839,4 +859,29 @@ fn config_is_declared_where_it_is_read() {
         let changed = stdout_of(&dir, &plain) != stdout_of(&dir, &argv);
         assert_eq!(changed, declared, "{argv:?}");
     }
+}
+
+/// Every argument declared `required` is refused when left out, by an error
+/// that names it.
+#[test]
+fn every_required_argument_is_refused_when_missing() {
+    let dir = fixture_corpus();
+    let d = describe();
+    let mut accepted = Vec::new();
+    for command in d["commands"].as_array().unwrap() {
+        for arg in command["args"].as_array().unwrap() {
+            if arg["required"] != true {
+                continue;
+            }
+            let name = arg["name"].as_str().unwrap();
+            let argv = invocation(command, &[name], &[]);
+            let shown = if arg["kind"] == "positional" {
+                name.to_uppercase()
+            } else {
+                name.to_string()
+            };
+            accepted.extend(refused_naming(&dir, &argv, [shown.as_str(), shown.as_str()]).err());
+        }
+    }
+    assert!(accepted.is_empty(), "{}", accepted.join("\n"));
 }

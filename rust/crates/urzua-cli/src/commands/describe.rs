@@ -494,7 +494,8 @@ fn is_builtin(arg: &Arg) -> bool {
 
 /// The declaration of each of `args`, all of them arguments of `command`.
 fn args_of(command: &Command, args: &[&Arg]) -> Vec<ArgDecl> {
-    args.iter()
+    let mut decls: Vec<ArgDecl> = args
+        .iter()
         .filter(|a| !is_builtin(a))
         .map(|arg| ArgDecl {
             name: name_of(arg),
@@ -522,7 +523,17 @@ fn args_of(command: &Command, args: &[&Arg]) -> Vec<ArgDecl> {
             requires: requires_of(command, arg, args),
             after_separator: arg.is_last_set(),
         })
-        .collect()
+        .collect();
+    // clap reports a conflict on the side that declared it; the contract reads it from both.
+    for i in 0..decls.len() {
+        for other in decls[i].conflicts_with.clone() {
+            let name = decls[i].name.clone();
+            if let Some(back) = decls.iter_mut().find(|d| d.name == other) {
+                add(&mut back.conflicts_with, &name);
+            }
+        }
+    }
+    decls
 }
 
 pub(crate) fn name_of(arg: &Arg) -> String {

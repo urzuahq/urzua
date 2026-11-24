@@ -747,10 +747,10 @@ enum MigrateTarget {
     Schema {
         /// Preview which records lack a real value for --field, without
         /// requiring it in config first.
-        #[arg(long)]
+        #[arg(long, required = true)]
         report: bool,
         /// The field to preview, as a record header names it.
-        #[arg(long)]
+        #[arg(long, required = true)]
         field: Option<String>,
     },
 }
