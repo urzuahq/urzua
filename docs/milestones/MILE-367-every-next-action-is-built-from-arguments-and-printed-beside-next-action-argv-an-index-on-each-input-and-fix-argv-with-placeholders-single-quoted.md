@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M85PWATEYZV2X9G3W58M1Q0N
-Status: InProgress
+Status: Done
 Phase: '1'
 Track: integrations
-Depends-on: MILE-359
 Blocked-on: —
 ---
 # 367 — Every next_action is built from arguments and printed beside next_action_argv, an index on each input and fix_argv, with placeholders single-quoted
@@ -33,3 +32,5 @@ Contract 1.1 (the published agent CLI contract's RFC-4) is taken whole: urzua pr
 > | 2026-11-24 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 9 locators pinned, 1 file-level, 8 scoped. Evidence: rust/crates/urzua-core/src/report.rs@sha256:70257bfa2d52, rust/crates/urzua-cli/tests/runnable_actions_integration.rs#a_placeholder_is_a_single_quoted_word_at_its_index@sha256:e24c1455272e, rust/crates/urzua-cli/tests/runnable_actions_integration.rs#every_suggested_action_and_every_next_action_runs_as_printed@sha256:14b71d1e1166, rust/crates/urzua-cli/tests/golden_output_integration.rs#every_command_prints_the_output_it_always_printed@sha256:fe2fc218b312, rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs#a_hand_added_first_pin_is_reported_and_fix_pin_writes_the_row_that_clears_it@sha256:1882efd14d35, rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs#fix_pin_lists_a_log_it_would_create_and_refuses_a_record_with_no_body@sha256:a88af3acfea0, rust/crates/urzua-cli/tests/runnable_actions_integration.rs#a_hook_fix_is_one_command_whose_words_are_printed_beside_it@sha256:f4765fba35f0, rust/crates/urzua-cli/tests/hooks_reach_integration.rs#the_chmod_fix_quotes_the_path@sha256:a3f443493913, rust/crates/urzua-cli/tests/agent_cli_contract_integration.rs#a_report_with_placeholders_validates_against_the_base_schema@sha256:27fbd4d7f15c Reason: Pins the evidence the Done means items cite: the argv-built NextAction in report.rs and the tests that fail without it. **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |
 > | 2026-11-24 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: rust/crates/urzua-core/src/report.rs@sha256:70257bfa2d52 Reason: Pins the report.rs the documentation item cites beside the specs; no other locator changed. **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |
 > | 2026-11-24 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (6 of 6 items resolved) computes to Implemented` -- stated `Planned` disagreed with the computed value `InProgress`. | **structural** |
+> | 2026-11-24 | `Depends-on: MILE-359` removed: this milestone needs nothing `describe` delivers, and the dependency was a planning error in the plan that filed it; it is still part of contract 1.1, which `MILE-370` declares. **Why:** it capped the computed status at `InProgress` with every item delivered. | **structural** |
+> | 2026-11-24 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (6 of 6 items resolved) computes to Implemented` -- stated `InProgress` disagreed with the computed value `Done`. | **structural** |
