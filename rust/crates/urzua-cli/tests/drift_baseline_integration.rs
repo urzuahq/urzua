@@ -259,7 +259,7 @@ fn a_baseline_ref_that_is_a_tag_or_a_commit_sha_is_accepted() {
         };
         std::fs::write(
             dir.join(".urzua/config.yaml"),
-            config(&format!("    drift_baseline: {{ref: {good}}}")),
+            config(&format!("    drift_baseline: {{ref: '{good}'}}")),
         )
         .unwrap();
         let out = run(&dir, &["check"]);
