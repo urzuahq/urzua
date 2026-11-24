@@ -8,17 +8,18 @@ Supersedes / Superseded-by:
 # 51 — A waiver is local, an amendment is global, and a Done item points to the record that governs it
 
 ## Summary
-A Done item's scope can be narrowed today by an agent writing a sentence into the milestone's
-revision log, and nothing reports it. The route `AGENTS.md` prescribes for a scope change, an item
-waiver, cannot be followed once the item's evidence resolves, because the engine then calls the
-waiver stale. This RFC proposes the maintainer's direction of 2026-11-24 as six points: a waiver is
-local and visible where the excused record is read; an amendment is a separate record that changes
-the rule everywhere and is named back by `Amended-by`; a Done-means item points to the record that
-governs it instead of restating it; a stop reports a hand-written scope note on a Done record; the
-`AGENTS.md` paragraph on scope changes is reconciled with the engine; and, as an option only, urzua
-states a decision only a person can make as one yes-or-no line naming the prescribed route. Each
-point gives options with their costs, the narrowest buildable reading, the migration impact and
-open questions. Nothing here is decided.
+A Done item's scope can be narrowed by an agent without any rule noticing: by a sentence in the
+milestone's revision log, or by editing the spec the item points at. This RFC carries the
+maintainer's direction of 2026-11-24 in six points and tests each against this repository's own
+records. The evidence qualifies most of them. The lead proposal for points 3 and 4 is to anchor a
+Done item to its governing record with a **pinned, section-scoped `spec:` locator**, so that an
+in-place edit of the governing section makes the item's pin stale and the existing re-pin loop
+(`diff.pin-changed-unattested` and a re-pin reason a reviewer reads) puts the change in front of a
+person. Pointing at a spec without pinning it would only move the universal claim to a place
+nothing checks. The route `AGENTS.md:250-251` prescribes, an item waiver of category
+`scope-changed-by-decision`, exists and is used 6 times on Done milestones; its gap is that it
+accepts an unquoted, agent-attributed decision. Each point gives options with costs, the narrowest
+buildable reading, migration impact and open questions. Nothing here is decided.
 
 ## Motivation
 
@@ -26,56 +27,68 @@ open questions. Nothing here is decided.
 
 1. `MILE-72` is `Done`. Its first Done-means item says "Every command's JSON output carries a
    top-level `next_action`"
-   (`docs/milestones/MILE-72-add-a-top-level-next-action-to-every-command-s-output.md:33`).
-   `SPEC-2` §"Next action (`MILE-72`)" says the same: "Every command's JSON, not only `check`'s,
-   carries two top-level keys" (`docs/specs/SPEC-2-urzua-check.md:866-868`).
-2. Commands were added after it with no `next_action`. `harness hook`, `harness record` and the
-   `harness run` events dispatch straight to their own printers and never reach `emit`, which adds
-   the keys (`rust/crates/urzua-cli/src/main.rs:1047-1062`; `harness/record.rs` and
-   `harness/hook/mod.rs` contain no `next_action`). `urzua describe` (pull request #647, open, not
-   merged) prints the agent CLI contract's `describe` object, which carries no `next_action`. The
-   published agent CLI contract, RFC-4 §6 at `v1.1.0-rc.4` (the version #647 vendors at
+   (`docs/milestones/MILE-72-add-a-top-level-next-action-to-every-command-s-output.md:33`). On
+   `main`, `SPEC-2` §"Next action (`MILE-72`)" says "Every command's JSON, not only `check`'s,
+   carries two top-level keys" (`docs/specs/SPEC-2-urzua-check.md:866-868`). That paragraph opens
+   "Maintainer decision, 2026-11-14." with no quote, the form `AGENTS.md:247-250` says cannot be
+   checked later.
+2. Which commands carry it. `harness run` reaches `emit`, which adds the keys
+   (`rust/crates/urzua-cli/src/harness/run.rs:367`, `1686-1691`;
+   `harness/run/question.rs:378`, `415`). `harness hook` and `harness record` do not
+   (`rust/crates/urzua-cli/src/main.rs:1047-1048`); `record` relays the reports of the commands it
+   runs. `urzua describe` (pull request #647, open) prints the agent CLI contract's `describe`
+   object. The published agent CLI contract, RFC-4 §6 at `v1.1.0-rc.4` (vendored by #647 at
    `rust/crates/urzua-cli/tests/fixtures/agent-cli-contract/VERSION`), says: "`describe` does not
    list itself. Its answer is not a report, so it fits no profile."
-3. Agents wrote the notes that narrowed the item. On `main`, `MILE-72`'s revision log records the
-   harness commands only inside re-pin reasons: "adds the `harness hook <adapter> <event>` and
-   `harness record <step>` subcommands; no existing command changed" (line 85) and "adds the harness
-   run question and harness run answer subcommands and their dispatch; nothing else" (line 99), both
-   `actor: agent`. Neither says the item no longer holds for them. On #647's branch an agent adds a
-   `structural` row: "The Done means items are unchanged. "Every command" in the first item reads as
-   every command that prints a report: `urzua describe` ... carries no `next_action` keys; the
-   pinned test does not run it" (that branch's MILE-72 line 104). That is an explicit narrowing of a
-   Done item's scope, in prose, by an agent, with no quoted maintainer decision.
-4. No rule flagged any of it. The item's pinned test,
-   `next_action_integration.rs#every_other_command_and_a_could_not_run_emit_both_keys_as_null`,
-   runs a fixed list of six commands plus `doctor` and a no-config `check`
-   (`rust/crates/urzua-cli/tests/next_action_integration.rs:137-165`); the exactly-once guard runs a
-   fixed list of sixteen (lines 172-191). Neither enumerates the command set, so a new command is
-   skipped, the evidence still resolves, and the gate passes.
-5. The prescribed route does not work for a delivered item. `AGENTS.md:250-251`: "When the
-   maintainer changes an item's scope, keep the item's original text and waive it with the decision
-   quoted (`ADR-96`, item waivers ...)". An item waiver on an item whose evidence resolves is
-   reported "its evidence now resolves: remove the waiver"
-   (`rust/crates/urzua-core/src/rules/delivery_items.rs:824-834`, `status.waived-item-stale`, `warn`
-   at `.urzua/config.yaml:841`). `ADR-96` §1 rule 4 and §3 designed it so: a waiver excuses an item
-   until it resolves, then is stale. A waiver means "not yet delivered", not "the requirement
-   changed".
-6. The other route, `Amends`/`Amended-by`, exists only between RFCs: the fields are declared for the
-   `rfc` type (`.urzua/config.yaml:178-180`, `214`) and the relation pair is limited to it
-   (`.urzua/config.yaml:598-604`: "Only RFCs carry the pair (`MILE-155`): an RFC that amends an ADR
-   claims something the ADR cannot echo, since an ADR is amended by a dated section"). A milestone or
-   spec cannot be amended by a separate record the engine checks.
-7. The question reached the maintainer as a menu of three options, framed by the orchestrating
-   agent; urzua printed nothing about it. `SPEC-2` sets `next_action` to `null` "when the only blocker
-   needs a human" (`docs/specs/SPEC-2-urzua-check.md:892`), so urzua had no way to say which decision
-   was needed.
+3. How the scope was narrowed. On `main`, `MILE-72`'s revision log mentions `harness hook`/`record`
+   and `harness run question`/`answer` only in agent re-pin reasons ("no existing command changed",
+   line 85; "nothing else", line 99). At #647's head `17dd218e`, `SPEC-2` is narrowed in place to
+   version `0.196` ("`next_action` and `next_action_reason` apply to every command that prints a
+   report, not to every command: `describe`, `harness hook`, `harness record`, `hooks run` and
+   `mcp`'s own stream print none", that branch's `SPEC-2` line 1748; line 868 now reads "Every
+   command that prints a report"), and `MILE-72` gains a row: "The first Done means item is
+   unchanged. Which commands carry `next_action` is specified in `SPEC-2` section Next action
+   (version `0.196`)" (that branch's `MILE-72` line 105). The milestone's item text is untouched and
+   still reads "Every command"; its meaning moved into the spec, which was edited in place.
+4. Why nothing fired. `spec:` locators are unpinned by policy: "A `spec:` locator cites a record
+   that has its own lifecycle and is left unpinned" (`.urzua/config.yaml:826-830`;
+   `require_pin: [code, test]` at 824). Across `docs/`, 385 `spec:` locator occurrences (65
+   distinct) carry 1 pin and no section scope (`grep -ohE "spec:[^ ,)]+" docs/*/*.md`). Specs are
+   edited in place (`AGENTS.md:51-53`). The item's pinned tests run fixed lists of commands
+   (`rust/crates/urzua-cli/tests/next_action_integration.rs:137-165`, `172-191`), so a new command
+   is never examined. `ADR-101` rejected recording its principles as a spec for this same reason:
+   "a change to a principle would be an edit rather than a decision" (its option B, line 31).
+5. How the question reached the maintainer. #647's row quotes the question an agent asked and the
+   answer "Yes". The question joined two propositions ("`next_action` applies to commands that print
+   a report, and ... `describe` and the three harness commands (hook, record, run) don't print one")
+   and the second carried a false premise: `harness run` prints through `emit` (item 2). The
+   resulting spec text then reaches `hooks run` and `mcp`, which the question did not name. The
+   framing was the orchestrating agent's, in chat; urzua printed nothing about it. `SPEC-2:892`
+   makes `next_action` `null` "when the only blocker needs a human". Asking the maintainer a
+   multiple-choice question is normal practice here (`ADR-105`; `MILE-49` line 26 quotes a chosen
+   option "Fixture only (Recommended)"), so the form was not the failure; the content was.
 
-### Why it matters
+### What already exists for a scope change
 
-`ADR-101` principle 2, "Claims are backed by evidence", is the mission's own test. Here a Done claim
-stopped being true of the code, an agent rewrote what the claim means in a sentence no rule reads,
-and the gate stayed green. `AGENTS.md`'s own sentence (lines 248-250) names the failure: "a scope
-change recorded that way narrows a Done means without evidence".
+`ADR-96` §3 declares item-waiver categories `not-applicable` and `superseded-by-decision` (cite
+required) (lines 136-145), and its amendment of 2026-11-14, accepted 2026-11-16 (lines 280-282,
+308), adds `scope-changed-by-decision`: "Its reason quotes the maintainer's instruction or cites the
+pull request or review where they gave it, says the item is unmet as written, and the item keeps its
+original text." "A waiver without an evidence clause is valid" (line 60). On Done milestones these
+three categories waive 16 items (5, 6 and 5), across `MILE-9`, 47, 49, 66, 75, 143, 145, 165, 169,
+175, 182, 190 and 278. So `AGENTS.md:250-251` can be followed: an item unmet as written keeps its
+text, drops or never has a resolving evidence clause, and is waived. It cannot be combined with
+resolving evidence on the same item, because `status.waived-item-stale` then reports "its evidence
+now resolves: remove the waiver" (`rust/crates/urzua-core/src/rules/delivery_items.rs:824-834`), by
+`ADR-96`'s design. `MILE-72`'s item is the partial case: true of most commands, false of a few.
+
+The gap is the quote. `MILE-145` line 29 waives "by decision of the orchestrator on 2026-11-14,
+pending maintainer review", and `MILE-278` lines 21-24 do the same; nothing distinguishes these from
+a quoted maintainer decision such as `MILE-165` line 26 ("MILE-165: exercise it, then amend the
+item"), because the category has "no machine-checkable staleness" (`ADR-96` line 282).
+
+`AGENTS.md:226-229` offers a second route for an accepted record: a dated `## Amendment` section,
+or "a new record that narrows/supersedes it and say so explicitly in both places".
 
 ### The maintainer's direction (2026-11-24, this session, relayed)
 
@@ -97,257 +110,235 @@ change recorded that way narrows a Done means without evidence".
    urzua's output should state the decision in one line they can answer yes or no, and name the
    route the repo's rules prescribe. An option this RFC weighs, not a commitment.
 
-The six points are the maintainer's words as relayed in the session; the wording above is the brief
-given to the drafting agent, not a transcript.
+The wording above is the brief given to the drafting agent, not a transcript.
+
+### Where the corpus does not split into local and global
+
+- `MILE-66` line 25 waives an item `superseded-by-decision (ADR-31)`, and the reason names "the
+  ADR-31 amendment of 2026-09-10": a local waiver pointing at a global change written as a section
+  inside the amended ADR. `MILE-145`'s waiver reason likewise rests on a decision recorded elsewhere
+  (`ADR-87`).
+- `ADR-96`'s own 2026-11-14 amendment changed the rule for every milestone in the repository (a new
+  category) and is a section inside `ADR-96`: a global change written locally.
+- `deferred-to` (cite and expiry) and `process-outcome` (25 uses on Done milestones) are neither: one
+  says the item moves to another record, the other that no file can evidence it.
+- `MILE-49` and `MILE-165` are local scope changes with no governing record: the maintainer decided
+  what that one milestone needed.
+- Milestones are amended in place too: `MILE-329` has six `## Amendment` sections, and `MILE-278`,
+  `MILE-322`, `MILE-324` and `MILE-330` one each.
 
 ## Proposal
 
 ### 1. A waiver is local
 
-What exists. Two waiver forms. An item waiver is a clause on the item's own line (`ADR-96` §1, rule
-6: `waived: <category> (<cite>, <date>) -- <reason>`), so it is already read where the item is read.
-A `waiver` record (`SPEC-10`, 16 files in `docs/waiver`) excuses a rule finding from another file;
-an agent reading the excused record does not see it.
+What exists. An item waiver is a clause on the item's own line (`ADR-96` §1 rule 6), so it is read
+where the item is read; `ADR-96` §3 chose inline over a separate record for exactly that reason. A
+`waiver` record (`SPEC-10`) excuses a rule finding from another file. All 16 in `docs/waiver` have a
+`Scope` naming a bug file; none targets a milestone.
+
+Qualification from the evidence: the direction already holds for Done items. The separate-file
+problem is real only for record-level waivers, today only on bugs.
 
 Options:
 
-- **1a. Keep both forms; `explain` and `check` show a record's waivers when it is read.** `urzua
-  explain <path>` and the MCP `urzua_show_record` list every waiver record that targets the record.
-  Cost: small; the file still says nothing to a reader with only a text editor.
-- **1b. A waiver record is named back on the excused record.** A declared field (`Waived-by`) on the
-  excused record, kept in step by a `relation_pairs` entry with `reciprocity: required`, the same
-  mechanism the `amendment` pair uses. Cost: a config change on every type a waiver can target, a
-  back-pointer to write on 16 existing waivers' targets, and `urzua fix` would want to write it.
-  Benefit: the excused file itself shows the exception; the engine checks the pair already.
-- **1c. Only inline waivers for record-scoped findings.** A finding on one record is waived by a
-  clause in that record; waiver records remain for findings with no single home (a config or
-  corpus-level finding). Cost: a second waiver syntax for non-milestone types and a migration of
-  record-scoped waiver records.
+- **1a. `explain` and the MCP `urzua_show_record` list the waiver records whose `Scope` is the
+  record.** Cost: small, read-side only; a text editor still shows nothing.
+- **1b. A `Waived-by` back-pointer on the excused record.** Cost: needs rule code, not only config:
+  relation pairs read record ids, and a waiver's `Scope` is a path or `*` (`SPEC-10` line 59), so
+  reciprocity would need a path-to-record mapping and a rule for `*`. 16 targets to update.
+- **1c. Record-scoped findings waived inline in the record.** Cost: a waiver syntax for every type,
+  and a reversal of `SPEC-10`'s separate-record model for bugs.
 
-Narrowest buildable reading: 1b, using the existing relation-pair engine, no new rule code. 1a is
-a cheap complement.
+Narrowest buildable reading: 1a. Migration: none.
 
-Migration: 16 waiver records; each target gains one field. Item waivers (inline) are untouched.
-
-Open questions: does a waiver whose target is a rule over many records (no single record) stay a
-separate file with no back-pointer? Does `Waived-by` belong in `pointer_fields` (clean) for every
-type, which needs a config change only the maintainer can make (`.urzua/config.yaml` is a protected
-path)?
+Open questions: is the separate waiver record on a bug a problem in practice, given none targets a
+milestone? Does a `*`-scoped waiver have any record to be visible on?
 
 ### 2. Amends is a global override
 
-What exists. `Amends`/`Amended-by` on RFCs only (`.urzua/config.yaml:598-610`, with a provisional
-claim while the amending RFC is a draft, `MILE-154`, and `Amended-by-pending`, `MILE-163`). ADRs are
-amended by a dated `## Amendment` section inside the ADR (`AGENTS.md:226-229`, `SPEC-16`, `ADR-14`):
-101 such sections across 48 ADRs, and 5 in specs and RFCs (`grep -c '^## Amendment'`). Two records
-carry `Amends:` today. The maintainer's point 2 says an amendment is not a section inside the
-amended record, which runs against this convention.
+What exists. `Amends`/`Amended-by` on RFCs only (`.urzua/config.yaml:178-180`, `214`, `598-610`).
+Amendment sections are written inside records: 101 `## Amendment` sections across 48 ADRs; outside
+ADRs, 7 in 5 RFCs and specs (9 in 6 counting `SPEC-2`'s two `#### Amendment` headings at lines 908
+and 922); and 10 in 5 milestones (above). `appendable_sections` declares the dated section as an
+allowed append (`.urzua/config.yaml:721`).
+
+Qualification: `ADR-14` does not stand in the way of 2a. Its model freezes the decision text, not the
+header, and superseded ADRs gained `Superseded-by` after acceptance. The real conflicts are
+`MILE-155`'s config comment ("an ADR cannot echo, since an ADR is amended by a dated section",
+`.urzua/config.yaml:602-603`), `SPEC-16:76` and `88-93` (the ADR's "Why amendments, not revisions"),
+and `appendable_sections`, which keeps the in-record route valid. With both routes valid, no rule
+says which one a given change must take.
 
 Options:
 
-- **2a. Extend the `amendment` pair to every decision type (rfc, adr, spec, bug).** Config only: add
-  the fields to `known_fields`/`pointer_fields` and widen `types`. An amending record is an ADR (or a
-  spec revision) that names `Amends: SPEC-2` and the amended record carries `Amended-by`. The
-  existing provisional handling covers a proposed amendment. Cost: the `MILE-155` reason ("an ADR
-  cannot echo") goes away only if an accepted ADR may gain an `Amended-by` header field, which is a
-  header edit to a frozen record; `ADR-14` and `SPEC-16` would need amending to allow it (a
-  tool-written, structural change, the same class as a re-pin row). `relation_pairs` may need a
-  cross-type pair (an ADR amends a spec), which the config already expresses via `types`.
-- **2b. 2a, and dated `## Amendment` sections are retired for new amendments.** Existing sections
-  stay as history (frozen records are not rewritten). Cost: two conventions coexist in the corpus
-  for good; `AGENTS.md:226-229`, `SPEC-16` and the `amend` command change.
-- **2c. Keep sections; add `Amended-by` pointing at the section's own record.** Rejected by the
-  direction itself: the section is not a separate record.
+- **2a. Widen the `amendment` pair to `adr` and `spec` targets.** Config, plus the `MILE-155`
+  comment and `SPEC-16` text. Cost: two routes coexist and nothing chooses between them.
+- **2b. 2a, and the in-record section is no longer appendable for new amendments** (existing ones
+  stay as history). Cost: `SPEC-16`, the `amend` command and `appendable_sections` change; every
+  future ADR clarification becomes a record.
+- **2c. Keep sections, but require an `Amended-by` header naming the section's date.** Rejected by
+  the direction: the section is not a separate record.
 
-For a milestone: a milestone is never amended. Under point 3 its items point at the governing
-record, so the amendment lands there.
+Narrowest buildable reading: 2a, with 2b as its own later decision. Migration: none forced.
 
-For a spec: `SPEC-*` is living and edited in place with a version bump (`AGENTS.md:51-53`). Two
-readings: (i) a spec's scope change is still an in-place edit plus a revision row, and `Amends`
-applies to ADRs and RFCs; or (ii) a scope change that narrows a requirement a Done item points at is
-an amending ADR that names the spec section, and the spec is edited to match and carries
-`Amended-by`. Reading (ii) keeps a decision record for every narrowing; (i) is cheaper.
-
-Narrowest buildable reading: 2a for `adr` and `spec` targets, amended by an `adr`, with no rule
-change (the pair, reciprocity and provisional claim already exist). 2b is a separate, later decision.
-
-Migration: none required (additive); the 101 existing sections stay.
-
-Open questions: may an accepted ADR's header gain `Amended-by` without an `ADR-14` amendment, and is
-that amendment itself the first use of the new route? Does an amendment of a spec bump its version
-(it should, under `revision-log.version-bump-required`)? Should `urzua explain` print the amended
-record's current rule by following `Amended-by` to its end?
+Open questions: should a section remain right for a clarification that changes no rule, and a
+separate record required only for a change that alters what other records rely on (the global case)?
+Is a spec amended by a separate record at all, or is a pinned pointer (point 3) enough to make its
+in-place edits visible?
 
 ### 3. Done-means items point to their governing record
 
-What exists. `ADR-96`'s item grammar has item text, an evidence clause and a waiver clause. The
-evidence clause already takes `spec:` locators, and `Specified` is in `resolving_tiers` (`ADR-96`
-§2). Nothing distinguishes "the record this item delivers" from evidence.
+Qualification: as written, pointing an item at a spec moves the universal claim into a record that
+is edited in place and whose locators are unpinned (Motivation, item 4). "The milestone stays true"
+then holds by definition, which is what #647 did. The pointer has to be anchored.
 
-Count. Over the 174 milestones with `Status: Done`, 1,043 top-level Done-means items. 131 name a
-`SPEC-`, `ADR-`, `BUG-` or `RFC-` id in the item text; 115 carry a `spec:`/`adr:`/`bug:`/`rfc:`
-locator in the evidence clause; 164 do either. About 879 (84%) do neither and restate their
-requirement in prose. Counted with a script over `docs/milestones/*.md`: the `## Done means` section
-of each `Done` milestone, lines starting with `- ` or `N. ` at column zero, item text taken as the
-text before ` — `. It is an upper bound on "points": naming an id is not the same as pointing at the
-governing record, and some named ids are context, not the governor. 135 Done milestones carry an
-`Implements` header, so a governing record is usually one hop away.
+Count. Over 174 milestones with `Status: Done`, 1,043 top-level Done-means items; 131 name a
+`SPEC-`, `ADR-`, `BUG-` or `RFC-` id in the item text, 115 carry a `spec:` or `record:` locator, 164
+do either, about 879 (84%) neither. Method: a script over `docs/milestones/*.md`, the `## Done means`
+section of each `Done` milestone, lines starting `- ` or `N. ` at column zero, item text taken before
+` — `. Upper bound on "points": a named id may be context, not the governor. 131 Done milestones
+carry `Implements`, 148 values, 36 of them `SPEC-1`, so `Implements` is too coarse to stand in for a
+per-item governor. Locator kinds are `spec`, `code`, `test` and `record`
+(`rust/crates/urzua-core/src/locator.rs:215`).
 
 Options:
 
-- **3a. A convention, no engine change.** New items read "as `SPEC-2` §Next action specifies" with a
-  `spec:` locator. Cost: unchecked; drifts back to restating.
-- **3b. A declared governing clause.** Extend the `ADR-96` grammar with a third declared marker
-  (`governed:`, in configuration like the other two), holding one record id and an optional section
-  anchor. The engine resolves it (`pointer.resolution`) and reports the governing record's status;
-  an item governed by a `Superseded` record, or by one that has gained `Amended-by` since the item
-  resolved, is a finding that points the reader to the current rule. Cost: a grammar change to a
-  shipped ADR (an `ADR-96` amendment), parser and rule work, and a `SPEC-6` update.
-- **3c. Reuse the evidence clause.** A `spec:`/`adr:` locator as the first evidence locator is read as
-  the governing record. Cost: overloads evidence with "which rule"; a `spec:` locator already means
-  "the spec documents it" (`MILE-72` line 35), which is a different claim.
+- **3a (lead). The governing pointer is a pinned, section-scoped `spec:` locator.** For example
+  `spec:docs/specs/SPEC-2-urzua-check.md#Next action (MILE-72)@sha256:<pin>`. Needs: a `markdown`
+  entry in `locator_resolvers` (the resolver engine already has an `end: heading` kind,
+  `locator.rs:807-815`, so this may be configuration; whether `{symbol}` can match a heading with
+  spaces is open); and `spec` pinned on Done items (today `require_pin` is `[code, test]` and the
+  `spec` drift policy is `acknowledge`, `.urzua/config.yaml:824-830`, an `ADR-97` amendment). An
+  in-place edit of that section then makes the item's pin stale, CI fails on a stale pin, and the
+  re-pin needs a reason a reviewer reads (`diff.pin-changed-unattested`, `SPEC-8`). This anchors
+  the claim instead of moving it, and is also point 4's stop. Cost: every governing-section edit
+  forces a re-pin on every item that points at it; an `ADR-97` amendment; 1 of 385 `spec:` locators
+  pinned today, so pinning is opt-in per item, not a migration.
+- **3b. A declared `governed:` clause in the `ADR-96` grammar.** Cost: a grammar amendment and a
+  parser, and without a pin it has 3c's weakness.
+- **3c. Convention only ("as `SPEC-2` §Next action specifies").** Cost: moves the claim without
+  anchoring it. Not recommended on its own.
 
-Narrowest buildable reading: 3a now for new items, with 3b as a milestone once point 4 shows how often
-it matters.
+Narrowest buildable reading: 3a for new items that name a governing section, starting with the
+resolver. Migration: none forced; the maintainer said items with no governing record stay as they
+are, and rewriting Done item text is forbidden by `AGENTS.md:250-251`.
 
-Migration: none forced. The maintainer said items with no governing record stay as they are. A
-voluntary rewrite of the ~879 restating items would edit Done records' item text, which
-`AGENTS.md:250-251` forbids today ("never rewrite the item to fit what was built"); any rewrite would
-need that sentence changed first and should be limited to items where a governing record exists.
-
-Open questions: is a section anchor (`SPEC-2#next-action`) resolvable today, or is the id enough?
-Does an item that points to a governing record still need code and test locators to resolve (yes,
-under `ADR-101` principle 2, as the maintainer's wording says)?
+Open questions: does the item still restate the requirement briefly, so a reader without the spec
+knows what was promised? Is a stale pin on a governing section a blocking finding or a warning?
 
 ### 4. A stop on silent narrowing
 
-The engine already knows which revision rows a tool wrote: `diff.pin-changed-unattested`
-(`MILE-288`) accepts a pin change only with a row of the tool's shape
-(`rust/crates/urzua-core/src/rules/pin_attestation.rs:598-613`), and each type declares a
-`tool_class` (`.urzua/config.yaml:422-425`). A `--base` run already compares a record with its
-merge-base copy (`revision-log.version-bump-required`, `BUG-51`).
+Qualification: the engine does not know which revision rows a tool wrote. It recognises a re-pin
+row by its text prefix (`REBASELINE_ROW_PREFIX`, `rust/crates/urzua-core/src/fix.rs:935`; read by
+`rebaseline_row_pins`, `rules/pin_attestation.rs:122`), which anyone can type, and narrowing written
+inside a re-pin `--reason` passes as a tool row.
 
 Options:
 
-- **4a. `diff.done-record-annotated` (smallest).** On a `--base` run, a record whose status is in the
-  type's delivered set (`Done`), unchanged in status, that gains a revision row the tooling did not
-  write, is reported (`warn`, or `error` in this repository), naming the row. The finding's message
-  names the prescribed route ("a scope change amends the governing record"). Cost: one rule over data
-  the engine already parses; it fires on every hand-written row on a Done record, including honest
-  ones (a typo fix, a link), so a reviewer reads each. It judges presence, not meaning, which is the
-  most `AGENTS.md:28-31` allows. It would have fired on #647's row; it would not have fired on the
-  harness re-pins, whose rows the tool wrote.
-- **4b. Re-pin reasons are read too.** The re-pin reason is an agent's prose inside a tool row
-  (lines 85, 99). A rule cannot judge whether "no existing command changed" is a scope statement.
-  Not proposed as a rule; the review loop reads re-pin reasons already (`AGENTS.md:318-328`).
-- **4c. Evidence that enumerates.** The narrowing went unseen because the pinned test runs a fixed
-  list. urzua's own test can enumerate the clap command tree (#647 generates `describe` from it) and
-  require each subcommand to carry the keys or appear in a declared, reviewed exemption list. Cost:
-  a test change in this repository only; it catches the next command, not the next narrowing in
-  general. It is the honest fix for `MILE-72`'s evidence either way.
-- **4d. Freeze Done-means text.** A `--base` diff that edits a Done item's text is an error. Cost:
-  covers rewriting, not annotating, so it misses this case; `AGENTS.md` already forbids rewriting.
+- **4a (lead). 3a's pinned governing locator.** An in-place narrowing of the governing section turns
+  red at the pin, and the re-pin reason is reviewed. Covers the #647 case; does not cover a
+  narrowing written only in a milestone row.
+- **4b. `diff.done-item-touched`.** On a `--base` run, report a change to a Done item's line or its
+  waiver clause (added, edited or removed). Cheap, and aimed at the place a scope lives. Cost: misses
+  narrowing written in a revision row, as on #647; `AGENTS.md` already forbids rewriting item text.
+- **4c. `diff.done-record-annotated`.** Report any non-tool row added to a Done record. The review
+  found it would have fired on 318 rows in 37 of 703 commits over all history, 32 rows since
+  2026-11-10, about 4 of them scope-relevant (the reviewer's probe; not reproduced for this
+  revision). Noisy, and gameable through the row prefix. Demoted.
+- **4d. Evidence that enumerates the command set.** urzua's own test walks the clap tree and
+  requires each subcommand to carry the keys or appear in a reviewed exemption list. Fixes
+  `MILE-72`'s evidence; not a general stop.
 
-Narrowest buildable reading: 4a, config-driven (the delivered set and `tool_class` are declared), plus
-4c for `MILE-72` itself.
+Narrowest buildable reading: 4a, with 4b as a cheap complement and 4d for `MILE-72`. Migration:
+none.
 
-Migration: none; a `--base` rule sees only new rows.
-
-Open questions: should 4a exempt rows that cite a quoted maintainer decision? (No rule can tell a
-quote from a fabricated one, so exempting it reopens the hole.) Should 4a also cover `Fixed` bugs
-and `Accepted` ADRs, where `## Amendment` sections are written by hand by design?
+Open question: should a re-pin reason on a governing section be required to cite an amending record
+or a quoted decision?
 
 ### 5. Reconcile `AGENTS.md:250-251`
 
-The sentence prescribes an item waiver for a scope change; the engine calls such a waiver stale
-once the item resolves (Motivation, item 5), and point 1 says a waiver is a local exception, not a
-change of rule. Proposed wording, for the maintainer to adopt, change or reject (not applied here;
-`SPEC-19`'s revision log would record it in the same PR):
-
-> When the maintainer changes the scope of a requirement a Done item delivers, the change is an
-> override, not a waiver: record it on the governing record the item points to (an amending record
-> with `Amends`, which the amended record names back with `Amended-by`), with the maintainer's
-> decision quoted. Never rewrite the item and never narrow it in a revision row. A Done item with no
-> governing record keeps its text; its milestone gains an amending record that names it, or the
-> maintainer decides the item is reopened. An item waiver is only for an item that is not yet
-> delivered, and is removed when its evidence resolves (`ADR-96`).
-
-Options: (5a) the wording above, which depends on point 2's route existing for the governing type;
-(5b) until point 2 is built, say a scope change on a Done item is reopened (status back to
-`InProgress` with an unresolved item) and filed for the maintainer, which works with today's engine;
-(5c) leave the sentence and accept that it cannot be followed for delivered items. 5b is the
-buildable interim.
-
-Migration: the corpus has item waivers on unresolved items only (a resolved one is already a
-`status.waived-item-stale` warning), so none move.
-
-Open question: for `MILE-72` specifically, is the right outcome an amendment of `SPEC-2` §Next action
-("every command that prints a report"), or keys on the harness and `describe` output? The contract
-text in Motivation item 2 bears on `describe` only.
-
-### 6. How the question reaches the maintainer (option)
-
-What exists. `next_action` is `null` when the only blocker needs a human (`SPEC-2:892`). `ADR-105`
-already has urzua write one question for a person to answer in one case (a gated status move under
-`in_session: ask`).
+Correction to this RFC's first draft: the prescribed route can be followed (Motivation, "What already
+exists"); it cannot coexist with resolving evidence on the same item.
 
 Options:
 
-- **6a. A `decision` object beside `next_action`.** When a finding can only be resolved by a person,
-  the report carries `decision: {question, route, records}`: one line answerable yes or no ("Amend
-  `SPEC-2` §Next action so it covers only commands that print a report?"), the route from the repo's
-  rules (the finding's declared route, e.g. "an ADR with `Amends: SPEC-2`"), and the records named.
-  The question text comes from configuration per rule, with the record ids filled in, so it stays
-  structured (`ADR-64`) and the engine never composes judgement prose. Cost: an output-contract
-  change on every report (`ADR-46`, and the agent CLI contract's report schema, which may not allow
-  an extra key); per-rule question templates to maintain.
-- **6b. A `suggested_action` kind `ask-maintainer`.** Per finding, inside the closed set of
-  `ADR-73`. Cost: an `ADR-73` amendment; per finding, not per report, so several findings give
-  several questions.
-- **6c. Documentation only.** `AGENTS.md` tells an orchestrating agent to put one yes-or-no question
-  and the prescribed route to the maintainer. Cost: unchecked, and this case shows an agent framed
-  it as a menu.
+- **5a. Keep the waiver route; require its evidence.** `scope-changed-by-decision` cites a pull
+  request, a review or an `Accepted` ADR (a declared `cite: required` with a cite form that accepts
+  a PR number, or a record id). This rejects the "decided by the orchestrator ... pending maintainer
+  review" form of `MILE-145` and `MILE-278`. Cost: an `ADR-96` amendment (today "no cite ... because
+  the decision is not always a record") and the cite grammar, which today says "A pull request or an
+  issue number is not a cite" (`ADR-96` §1 rule 6).
+- **5b. Route a scope change to the governing record where one exists**, by 3a: amend or edit the
+  governing section, re-pin with a reason quoting the decision. The waiver stays for items with no
+  governing record (`MILE-49`, `MILE-165`). Proposed wording, for the maintainer:
 
-Weighed, not committed. 6c is free; 6b fits the existing structure; 6a is the fullest and the most
-expensive.
+  > When the maintainer changes the scope of a requirement a Done item delivers, record the decision
+  > quoted (or cite the pull request or review where they gave it). Where the item points at a
+  > governing section, change that section and re-pin the item with a reason that quotes the
+  > decision; never narrow it in a revision row. Where it has none, keep the item's text and waive it
+  > `scope-changed-by-decision` (`ADR-96`). Never rewrite the item to fit what was built.
 
-Open questions: which findings are "only a person can resolve" (a declared list per rule, or every
-finding with no `run-command` action)? Does a yes-or-no line hide a real third option the maintainer
-would want to see?
+- **5c. Waivers only for not-yet-delivered items.** Retires `not-applicable`,
+  `superseded-by-decision` and `scope-changed-by-decision` and needs an `ADR-96` amendment. Dropped:
+  the 16 existing uses show they do work the direction wants done.
+
+The first draft's interim, reopening the milestone by hand, does not work: status is computed from
+the items (`ADR-96` §2), so `status.delivery-agreement` writes it back. Narrowest buildable reading:
+5a's cite requirement plus 5b's wording once 3a exists.
+
+### 6. How the question reaches the maintainer (option)
+
+Qualification: a one-line yes-or-no question was asked in this case and went wrong (Motivation, item
+5): two propositions in one line, one false, and an answer later stretched to commands it did not
+name. A menu was not the failure.
+
+Option, weighed and not committed: urzua writes the question, from configuration, only when a
+declared rule's finding can be resolved only by a person. Constraints for it to be safe:
+
+- one proposition per line, each answerable alone;
+- each proposition built from the finding's own data (the commands, the record, the section), never
+  agent prose, so a false premise cannot enter;
+- each line says what "No" does as well as "Yes", and names the route the repository prescribes;
+- the answer binds only to the propositions shown, recorded the way `ADR-105` binds a person's answer
+  to one gated move.
+
+Cost: a report key, which the contract's `report.schema.json` permits (it has no top-level
+`additionalProperties: false`), per-rule question templates, and a binding store. Alternatives:
+`AGENTS.md` wording for orchestrating agents (free, unchecked), or nothing.
+
+Open question: which findings are "only a person can resolve"?
 
 ## Open questions
 
 Per point, above. Across them:
 
-- Order: point 4's rule and the 5b interim need no new record route and can come first; points 2 and
-  3 change shipped ADRs (`ADR-14`, `ADR-96`) and need their own decisions.
-- Whether `MILE-72` is resolved by amending `SPEC-2`, by adding the keys to the harness commands, or
-  by reopening it, is the maintainer's; this RFC records the case, not the answer.
-- Whether point 2's "an amendment is not a section" applies retroactively to how this repository
-  reads its 101 existing ADR amendment sections.
+- Order: 3a/4a (resolver, pinned `spec:` on Done items) and 5a (cite) are independent and can come
+  first; 2b and 6 are larger decisions.
+- Whether `MILE-72` is resolved by #647's spec edit, by keys on the remaining commands, or by a
+  waiver with a quoted decision, is the maintainer's.
+- Whether "local versus global" is the right cut at all, given the cases above, or whether "where
+  is the claim anchored, and does a change to it turn something red" is the operative question.
 
 ## Non-goals
 
 - Judging whether a revision row's prose narrows scope. A rule reports presence and shape, never
   meaning (`AGENTS.md:28-31`).
-- Rewriting existing Done items or ADR amendment sections.
-- Editing `AGENTS.md`, `.urzua/config.yaml` or `MILE-72` in this pull request. All three are the
-  maintainer's call; the first two are protected paths.
+- Rewriting existing Done items or amendment sections.
+- Editing `AGENTS.md`, `.urzua/config.yaml`, `MILE-72` or `SPEC-2` here.
 
 ## References
 
-- `MILE-72`, `SPEC-2` §"Next action (`MILE-72`)", the open `urzua describe` pull request on branch `feat/describe` (`MILE-359`; cited by number in Motivation).
-- `ADR-96` (Done-means items and item waivers), `ADR-101` (mission principles), `ADR-64` (structured
-  in and out), `ADR-14` and `SPEC-16` (amendment sections), `ADR-73` (suggested actions), `ADR-105`
-  (one question to a person), `SPEC-10` (waiver records), `SPEC-19` (governs `AGENTS.md`).
-- `MILE-154`, `MILE-155`, `MILE-163` (the `amendment` relation pair); `MILE-288`
-  (`diff.pin-changed-unattested`).
+- `MILE-72`; `SPEC-2` §"Next action (`MILE-72`)"; the open `urzua describe` pull request, branch
+  `feat/describe` (`MILE-359`; cited by number in Motivation).
+- `ADR-96` (items, item waivers, the 2026-11-14 amendment), `ADR-97` (spec drift policy), `ADR-101`,
+  `ADR-64`, `ADR-14` and `SPEC-16`, `ADR-73`, `ADR-105`, `SPEC-8` (pins and re-pins), `SPEC-10`,
+  `SPEC-19`.
+- `MILE-9`, `MILE-49`, `MILE-66`, `MILE-145`, `MILE-155`, `MILE-165`, `MILE-278`, `MILE-288`,
+  `MILE-329`.
 - The published agent CLI contract, RFC-4 §6, `v1.1.0-rc.4`.
-- `rust/crates/urzua-core/src/rules/delivery_items.rs:824-834`,
-  `rust/crates/urzua-cli/tests/next_action_integration.rs:137-191`,
-  `rust/crates/urzua-cli/src/main.rs:1047-1062`, `.urzua/config.yaml:178-180, 214, 598-610, 841`.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-24 | Revised after an independent review of the first draft: points 3 and 4 lead with a pinned, section-scoped `spec:` locator; the existing `scope-changed-by-decision` waiver route is described and the claim that `AGENTS.md:250-251` cannot be followed is corrected; local and global are tested against `MILE-49`, 66, 145, 165 and `ADR-96`; 4c is demoted; point 6 is restated around the question asked in #647; counts, `harness run`'s output and #647's head (`17dd218e`) are corrected. Status unchanged. **Why:** review findings, each checked against the repository. | **substantive** |
