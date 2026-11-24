@@ -68,16 +68,15 @@ fn emit_as<T: Report>(report: &T, inline: bool) -> ExitCode {
         Ok(text) => (text, report.exit_code()),
         // A report that cannot be written as a JSON object (the two keys are
         // appended to it) is a could-not-run, never a panic.
-        Err(e) => (
-            serde_json::to_string_pretty(&CouldNotRun::from(format!(
-                "could not serialise the report: {e}"
-            )))
-            .unwrap_or_default(),
-            ExitCode::from(2),
-        ),
+        Err(e) => (could_not_serialise(&e), ExitCode::from(2)),
     };
     let _ = writeln!(std::io::stdout().lock(), "{text}");
     code
+}
+
+fn could_not_serialise(e: &serde_json::Error) -> String {
+    let failure = CouldNotRun::from(format!("could not serialise the report: {e}"));
+    serde_json::to_string_pretty(&with_next_action(&failure)).unwrap_or_default()
 }
 
 /// A report with the two `MILE-72` keys after its own, always present and
@@ -90,6 +89,7 @@ struct WithNextAction<'a, T: serde::Serialize> {
     #[serde(flatten)]
     report: &'a T,
     next_action: Option<String>,
+    next_action_argv: Option<Vec<String>>,
     next_action_reason: Option<String>,
     next_action_inputs: Vec<urzua_core::report::ActionInput>,
 }
@@ -98,7 +98,8 @@ fn with_next_action<T: urzua_core::report::Report>(report: &T) -> WithNextAction
     let next = report.next_action();
     WithNextAction {
         report,
-        next_action: next.as_ref().map(|n| n.command.clone()),
+        next_action: next.as_ref().map(urzua_core::report::NextAction::command),
+        next_action_argv: next.as_ref().map(|n| n.argv.clone()),
         next_action_reason: next.as_ref().map(|n| n.reason.clone()),
         next_action_inputs: next.map(|n| n.inputs).unwrap_or_default(),
     }
@@ -784,7 +785,7 @@ enum ExportFormat {
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
-        let out = serde_json::json!({ "status": "not-run", "panic": info.to_string(), "next_action": null, "next_action_reason": null, "next_action_inputs": [] });
+        let out = serde_json::json!({ "status": "not-run", "panic": info.to_string(), "next_action": null, "next_action_argv": null, "next_action_reason": null, "next_action_inputs": [] });
         // write_all + let-ignore, never println!/a panicking macro here -- a
         // broken pipe during the hook itself would double-panic and abort
         // with no output at all, defeating the hook's entire purpose.
@@ -1196,4 +1197,24 @@ fn names_mcp(args: impl Iterator<Item = String>) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod could_not_serialise_tests {
+    use super::*;
+
+    #[test]
+    fn the_serialise_failure_envelope_carries_the_next_action_keys() {
+        let err = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let v: serde_json::Value = serde_json::from_str(&could_not_serialise(&err)).unwrap();
+        for key in [
+            "next_action",
+            "next_action_argv",
+            "next_action_reason",
+            "next_action_inputs",
+        ] {
+            assert!(v.get(key).is_some(), "missing {key}: {v}");
+        }
+        assert_eq!(v["status"], "not-run", "{v}");
+    }
 }

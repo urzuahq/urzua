@@ -19,11 +19,13 @@ something blocking, and 2 means it could not run (the report then has `"status":
 `error`). `urzua --help` lists the commands and `urzua <command> --help` lists the flags; the pages
 below were written from that output.
 
-Every report also carries `next_action`, `next_action_reason` and `next_action_inputs`, on every command and on a `not-run`
-report. `next_action` is one command to run next, as a bare string such as
+Every report also carries `next_action`, `next_action_argv`, `next_action_reason` and `next_action_inputs`, on every command and on a `not-run`
+report. `next_action` is one command to run next, as a string quoted for a POSIX shell such as
 `urzua fix --apply --ids <record> --actor agent`, or `null` when nothing is better than reading the
-findings; `next_action_reason` says why, from counts, and is `null` exactly when `next_action` is;
-`next_action_inputs` lists the `<...>` placeholders the command carries, and is empty when it runs as
+findings; `next_action_argv` is the same command as an array of words with no quoting, `null` exactly
+when `next_action` is; `next_action_reason` says why, from counts, and is `null` exactly when `next_action` is;
+`next_action_inputs` lists the `<...>` placeholders the command carries (each single-quoted in the string, and
+`index` the position of its word in `next_action_argv`), and is empty when it runs as
 printed. `new` names `git add -- :/<path>` when untracked records are not examined; a `not-run` report
 names a command when one removes the cause (the nearest rule id for a mistyped one, `git fetch` for
 a `--base` ref of a configured remote that is not here, `git fetch --unshallow` for a shallow clone) and
@@ -316,7 +318,7 @@ With `--types`: a summary, one compact entry per declared record type in name or
 `prefix`, `dirs`, `cannot_create` when `urzua new` refuses the type, `required` and `optional` field
 names, `states`, `references` with `"any"` for an unconstrained field and `none` when no type
 satisfies every declaration), then `path_gates` as declared; a default keeps its marker object;
-`next_action` is `urzua explain --type <name>` when a type is declared. Each of these keys is printed
+`next_action` is `urzua explain --type '<name>'` when a type is declared. Each of these keys is printed
 for a type only when the type declares it, copied from the same declaration `--type` shows:
 
 - `conditions`: the `declared: when ...` sentence of each `statuses.require` and `statuses.forbid` entry.

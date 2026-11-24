@@ -93,11 +93,18 @@
       }
     }
   ],
-  "next_action": "urzua explain --type <name>",
+  "next_action": "urzua explain --type '<name>'",
+  "next_action_argv": [
+    "urzua",
+    "explain",
+    "--type",
+    "<name>"
+  ],
   "next_action_reason": "one type's full declaration",
   "next_action_inputs": [
     {
       "placeholder": "<name>",
+      "index": 3,
       "flag": "--type",
       "means": "a `name` from `types`"
     }

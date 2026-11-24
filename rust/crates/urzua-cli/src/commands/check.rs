@@ -505,7 +505,7 @@ fn unknown_rule_failure(requested: &[String], id: &str) -> Failure {
             "urzua check --rules: '{id}' is not a rule this build ships; did you mean '{nearest}'? (`urzua rules` lists them)"
         ),
         urzua_core::report::NextAction::runs_as_printed(
-            urzua_core::report::shell_command(&["urzua", "check", "--rules", &corrected.join(",")]),
+            ["urzua", "check", "--rules", &corrected.join(",")],
             format!("re-runs the selection with '{nearest}' for '{id}' (add back any path or flag the run had)"),
         ),
     )
@@ -1292,7 +1292,7 @@ fn permanent_waivers_notice(
 /// not here, or the history a shallow clone lacks. A ref whose first segment is
 /// no remote (a local `feat/x`) gets none: nothing here can create it.
 fn base_failure(repo_root: &Path, e: urzua_io::DiscoveryError) -> Failure {
-    use urzua_core::report::{shell_command, NextAction};
+    use urzua_core::report::NextAction;
     let message = e.to_string();
     match &e {
         urzua_io::DiscoveryError::UnresolvedRef { base } => {
@@ -1304,7 +1304,7 @@ fn base_failure(repo_root: &Path, e: urzua_io::DiscoveryError) -> Failure {
                 Some((remote, branch)) => Failure::with_next(
                     message,
                     NextAction::runs_as_printed(
-                        shell_command(&["git", "fetch", remote, branch]),
+                        ["git", "fetch", remote, branch],
                         format!("fetches {branch} from {remote}, so --base {base} resolves"),
                     ),
                 ),
@@ -1314,7 +1314,7 @@ fn base_failure(repo_root: &Path, e: urzua_io::DiscoveryError) -> Failure {
         urzua_io::DiscoveryError::ShallowClone { .. } => Failure::with_next(
             message,
             NextAction::runs_as_printed(
-                "git fetch --unshallow",
+                ["git", "fetch", "--unshallow"],
                 "fetches the history a shallow clone lacks, so the merge base can be found",
             ),
         ),

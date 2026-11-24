@@ -31,6 +31,9 @@ struct DoctorCheck {
     /// The one command that repairs this check, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     fix: Option<String>,
+    /// `fix` as its words.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fix_argv: Option<Vec<String>>,
 }
 
 /// What is wrong with the local git hook layers, as plain messages: the
@@ -63,6 +66,7 @@ fn hook_checks(
                     state: None,
                     hook_layout: None,
                     fix: None,
+                    fix_argv: None,
                 })
                 .collect();
         }
@@ -95,7 +99,8 @@ fn hook_checks(
                 layer: Some(layer),
                 state,
                 hook_layout: Some(layout.kind()),
-                fix,
+                fix: fix.as_deref().map(urzua_core::report::shell_command),
+                fix_argv: fix,
             }
         })
         .collect()
@@ -141,9 +146,9 @@ impl Report for DoctorReport {
                 .iter()
                 .filter(|c| c.status != DoctorStatus::Ok)
                 .find_map(|c| {
-                    c.fix
+                    c.fix_argv
                         .clone()
-                        .map(|command| NextAction::runs_as_printed(command, c.message.clone()))
+                        .map(|argv| NextAction::runs_as_printed(argv, c.message.clone()))
                 })
         })
     }
@@ -155,20 +160,20 @@ fn missing_config_step(
     repo_root: &std::path::Path,
     config_path: &std::path::Path,
 ) -> (String, Option<NextAction>) {
-    use crate::commands::init::{adopt_outlook, AdoptOutlook, GREENFIELD_COMMAND};
+    use crate::commands::init::{adopt_outlook, AdoptOutlook, GREENFIELD_ARGV, GREENFIELD_COMMAND};
     let missing = format!("{} does not exist", config_path.display());
     match adopt_outlook(repo_root, config_path) {
         Ok(AdoptOutlook::Proposes(n)) => (
             format!("{missing} -- `urzua init` proposes {n} record type(s) for this corpus; run `urzua init --dry-run` to read the proposal, then `urzua init` to write it"),
             Some(NextAction::runs_as_printed(
-                "urzua init".to_string(),
+                ["urzua", "init"],
                 format!("adopt proposes {n} record type(s) for the records found here"),
             )),
         ),
         Ok(AdoptOutlook::NothingToAdopt(why)) => (
             format!("{missing} -- `urzua init` has nothing to adopt here ({why}); run `{GREENFIELD_COMMAND}` to start, or write the config by hand"),
             Some(NextAction::runs_as_printed(
-                GREENFIELD_COMMAND.to_string(),
+                GREENFIELD_ARGV,
                 "no record directory to adopt; greenfield mode writes a config for the types --types names".to_string(),
             )),
         ),
@@ -194,6 +199,7 @@ impl DoctorCheck {
             state: None,
             hook_layout: None,
             fix: None,
+            fix_argv: None,
         }
     }
 }

@@ -12,13 +12,13 @@ const FIXTURE: &str = include_str!("fixtures/explain_types/config.yaml");
 const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 
 /// The summary of the three-type fixture, as printed, stays under this many bytes.
-const MAX_SUMMARY_BYTES: usize = 1_950;
+const MAX_SUMMARY_BYTES: usize = 2_050;
 /// The summary of the fixture declaring every added key stays under this many bytes.
-const MAX_CHECKLIST_SUMMARY_BYTES: usize = 1_700;
+const MAX_CHECKLIST_SUMMARY_BYTES: usize = 1_800;
 /// The full report of the three-type fixture stays under this many bytes.
 const MAX_FULL_BYTES: usize = 10_800;
 /// The summary of this repository's own configuration stays under this many bytes.
-const MAX_OWN_SUMMARY_BYTES: usize = 5_850;
+const MAX_OWN_SUMMARY_BYTES: usize = 5_950;
 
 fn repo(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-explain-types-{name}"));
@@ -224,7 +224,7 @@ fn the_summary_is_compact_and_points_at_the_detail() {
         json!({"value": "TASK", "default": true, "source": "type_name_uppercased"})
     );
     assert!(r.get("rules").is_none(), "the summary names no rule: {r}");
-    assert_eq!(r["next_action"], "urzua explain --type <name>");
+    assert_eq!(r["next_action"], "urzua explain --type '<name>'");
     assert!(r.get("repository").is_none());
 }
 

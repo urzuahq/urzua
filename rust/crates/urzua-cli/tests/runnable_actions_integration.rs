@@ -54,13 +54,15 @@ fn sh(dir: &Path, command: &str) -> Output {
 }
 
 fn json(out: &Output) -> serde_json::Value {
-    serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
         panic!(
             "stdout is not JSON ({e}): {}{}",
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         )
-    })
+    });
+    common::assert_next_action_agrees(&report);
+    report
 }
 
 fn urzua(dir: &Path, args: &str) -> serde_json::Value {
@@ -915,4 +917,53 @@ fn reverify_apply_writes_the_first_row_of_an_empty_revision_log() {
     assert_eq!(out["status"], "applied", "{out}");
     let text = std::fs::read_to_string(dir.join("docs/milestones/MILE-1-m.md")).unwrap();
     assert!(log_rows(&text) >= 1, "{text}");
+}
+
+#[test]
+fn a_placeholder_is_a_single_quoted_word_at_its_index() {
+    let dir = main_fixture("placeholder-index");
+    let report = urzua(&dir, "explain --types");
+    assert_eq!(report["next_action"], "urzua explain --type '<name>'");
+    assert_eq!(
+        report["next_action_argv"],
+        serde_json::json!(["urzua", "explain", "--type", "<name>"])
+    );
+    assert_eq!(report["next_action_inputs"][0]["index"], 3);
+}
+
+#[test]
+fn a_hook_fix_is_one_command_whose_words_are_printed_beside_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = main_fixture("hook-fix");
+    let hook = dir.join(".git/hooks/pre-commit");
+    let check = |report: &serde_json::Value| {
+        report["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["check"] == "hook-wired" && c["layer"] == "pre-commit")
+            .unwrap_or_else(|| panic!("{report}"))
+            .clone()
+    };
+    runs(&dir, "urzua hooks install");
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let broken = check(&urzua(&dir, "doctor"));
+    assert_eq!(
+        broken["fix_argv"],
+        serde_json::json!(["chmod", "+x", hook.to_str().unwrap()])
+    );
+    assert!(sh(&dir, broken["fix"].as_str().unwrap()).status.success());
+    assert!(std::fs::metadata(&hook).unwrap().permissions().mode() & 0o111 != 0);
+
+    let text = std::fs::read_to_string(&hook).unwrap();
+    let block = &text["#!/bin/sh\n".len()..];
+    std::fs::write(&hook, format!("{text}{block}")).unwrap();
+    let doubled = check(&urzua(&dir, "doctor"));
+    assert_eq!(
+        doubled["fix_argv"],
+        serde_json::json!(["urzua", "hooks", "install"])
+    );
+    runs(&dir, doubled["fix"].as_str().unwrap());
+    let healed = check(&urzua(&dir, "doctor"));
+    assert_eq!(healed["status"], "ok", "{healed}");
 }

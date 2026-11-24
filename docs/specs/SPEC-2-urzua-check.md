@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.194'
+Version: '0.195'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:4299b921cd08f47a2f918bfa9888875787e90ca84255d470fccf2a968aa2c34b, code:rust/crates/urzua-core/src/rules.rs@sha256:960c264aaba685079377199b706a84320b0c402c052e6f891303bbb746dd504e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:2dfb5060f1e8bc86c9f8c3354435112c5519203e560609a9619bc83415c4c2d6, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:221dcf5bd041ccba58ff7e9e6131150fd7c80ad872b6445e2b3a2ffa073428b1, code:rust/crates/urzua-core/src/rules.rs@sha256:960c264aaba685079377199b706a84320b0c402c052e6f891303bbb746dd504e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:2dfb5060f1e8bc86c9f8c3354435112c5519203e560609a9619bc83415c4c2d6, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -905,6 +905,20 @@ does not replace them. `urzua mcp` tools return the same reports and so carry th
   `waive`, `reverify`, `migrate`, `roadmap`, `refs`, the harness commands) and every other `not-run`
   report, including a panic, emit both keys as `null` until a later decision gives them a derivation.
 
+#### Amendment (2026-11-24): the command is built from words (`MILE-367`)
+
+Every `next_action` is held as a program and its arguments and printed twice: `next_action_argv`, always
+present, an array of strings with no shell quoting, `null` exactly when `next_action` is `null`; and
+`next_action`, those words joined and quoted for POSIX `sh` (a word is bare only when it has nothing but
+letters, digits and `-_./=:@+,` and does not start with `#`; any other word is single-quoted). The string
+and the array are one value, so a reader of the array never parses quoting, and splitting the string as a
+shell does returns the array. A placeholder is a word like any other, and is single-quoted in the string in
+every report: `urzua explain --type '<name>'`, `... --reason '<what changed in the pinned file>'`. Each
+`next_action_inputs` entry gains `index`, the position in `next_action_argv` of the element that is
+exactly its `placeholder`. A command that needs a shell construct is an argument vector of `sh -c` (the
+heading that `fix` appends to a record with none), so no `next_action` holds an unquoted redirection or `&&`.
+`doctor`'s `fix` is likewise a single command printed beside `fix_argv`.
+
 #### Amendment (2026-11-16): every next action runs as printed (`MILE-266`)
 
 Decided by the builder on 2026-11-16, pending maintainer review. A walkthrough that followed only the
@@ -1710,3 +1724,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-21 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 31ada9b4a0e8 -> c5138779e78f. Reason: BUG-213: load_renamed_paths reads a deleted record's merge-base copy through Record::parse_declared with the governing type's declared document model instead of YAML header::parse, so a prefix-lines rename pairs by Stable-Id; nothing else in check.rs changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-23 | Bumped to `0.194`. `check`'s report gains `examined`, an object of per-unit counts (`files`, equal to `files_examined`), added beside `files_examined`, which stays; a `not-run` report that could not start prints neither, and one that started prints both at `0`. **Why:** `MILE-358` and `ADR-106`: a consuming gate reads `examined` directly, and the maintainer accepted on 2026-11-23 that "the shared contract is urzua's existing shape, and urzua conforms by addition only". | **substantive** |
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c5138779e78f -> 4299b921cd08. Reason: Read the diff of check.rs: run_opened fills CheckReport.examined from files_examined; nothing else in the run path changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.195`. Every `next_action` is built from its words and printed beside `next_action_argv` (always present, `null` exactly when `next_action` is); each `next_action_inputs` entry gains `index`; a placeholder is single-quoted in every report; a command that needed a shell construct is an `sh -c` argument vector. Additive to the report's keys; the placeholder quoting of `fix --pin`'s and `explain --types`' actions changes. **Why:** `MILE-367`, the published agent CLI contract's version 1.1 requires the array, the index and one quoting. | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 4299b921cd08 -> 221dcf5bd041. Reason: Read the diff of each file against origin/main: check.rs passes the rule-name correction, git fetch and git fetch --unshallow remedies as words. The cited behavior is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

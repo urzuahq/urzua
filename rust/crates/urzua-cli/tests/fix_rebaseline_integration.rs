@@ -55,8 +55,10 @@ fn run_urzua_with_gh(dir: &Path, args: &[&str], login: Option<&str>) -> std::pro
 }
 
 fn json(out: &std::process::Output) -> serde_json::Value {
-    serde_json::from_slice(&out.stdout)
-        .unwrap_or_else(|e| panic!("stdout is not JSON ({e}): {out:?}"))
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("stdout is not JSON ({e}): {out:?}"));
+    common::assert_next_action_agrees(&report);
+    report
 }
 
 fn sha256(content: &str) -> String {
@@ -1283,7 +1285,7 @@ fn a_record_with_no_body_section_is_refused_with_a_next_action_that_adds_one() {
         assert!(error.contains("no body section"), "{error}");
         command = parsed["next_action"].as_str().unwrap().to_string();
         assert!(
-            command.starts_with("printf") && command.ends_with(A),
+            command.starts_with("sh -c ") && command.ends_with(A),
             "{parsed}"
         );
         assert_eq!(
@@ -1551,7 +1553,7 @@ fn fix_pin_lists_a_log_it_would_create_and_refuses_a_record_with_no_body() {
             parsed["next_action"]
                 .as_str()
                 .unwrap()
-                .starts_with("printf"),
+                .starts_with("sh -c "),
             "{parsed}"
         );
         assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);

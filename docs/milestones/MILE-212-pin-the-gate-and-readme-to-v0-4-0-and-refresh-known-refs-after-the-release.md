@@ -18,12 +18,12 @@ The gate action and the README pin `v0.3.0`, which cannot read the current confi
 
 ## Done means
 
-- `.github/actions/urzua-gate/action.yml` and its self-test workflow default to `v0.4.2`. — evidence: code:.github/actions/urzua-gate/action.yml@sha256:efb407fc8dfe418e800af79badcb3d0d9db8464c7ecc42e6016eff4772ae1f25, code:.github/workflows/ci.yml@sha256:d967686a97628663a0fcd754ce5da6e83f38a374d9f784fa7f06d9af26f67563
-- The `gate (pinned release)` job passes against `v0.4.2`. — evidence: code:.github/workflows/ci.yml@sha256:d967686a97628663a0fcd754ce5da6e83f38a374d9f784fa7f06d9af26f67563
+- `.github/actions/urzua-gate/action.yml` and its self-test workflow default to `v0.4.2`. — evidence: code:.github/actions/urzua-gate/action.yml@sha256:efb407fc8dfe418e800af79badcb3d0d9db8464c7ecc42e6016eff4772ae1f25, code:.github/workflows/ci.yml@sha256:d7e1bf9840e867dfa7246e3cd261ddf2e4cd1914cb239d63b8f380ac4379d6de
+- The `gate (pinned release)` job passes against `v0.4.2`. — evidence: code:.github/workflows/ci.yml@sha256:d7e1bf9840e867dfa7246e3cd261ddf2e4cd1914cb239d63b8f380ac4379d6de
 - Every `v0.3.0` pin in `README.md` reads `v0.4.2`. — evidence: code:README.md@sha256:b494b8a81eb7c664ea8f5ef87380022c860c1dc9781017630c36c8b92c30a65d
 - The `README.md` config example is fenced `yaml`. — evidence: code:README.md@sha256:b494b8a81eb7c664ea8f5ef87380022c860c1dc9781017630c36c8b92c30a65d
 - `.urzua/known-refs.json` is regenerated and the record count is recorded in the revision row. — evidence: code:.urzua/known-refs.json@sha256:b53b37b30931abf29b29cd97dee278167a3f7238b53a2582de67a75c539d0c96
-- `urzua check` and `check --base origin/main` report 0 unwaived findings. — evidence: code:.github/workflows/ci.yml@sha256:d967686a97628663a0fcd754ce5da6e83f38a374d9f784fa7f06d9af26f67563
+- `urzua check` and `check --base origin/main` report 0 unwaived findings. — evidence: code:.github/workflows/ci.yml@sha256:d7e1bf9840e867dfa7246e3cd261ddf2e4cd1914cb239d63b8f380ac4379d6de
 
 > **Revision log**
 >
@@ -53,3 +53,4 @@ The gate action and the README pin `v0.3.0`, which cannot read the current confi
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `README.md` 4c8b35e007f8 -> 5df4ed0e7b95. Reason: README.md: only line 8 (the one-line description) and the Where this is going sentence changed (RFC-27 amendment of 2026-11-23); no pinned behavior changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `README.md` d7e1cd8d56a1 -> 42718708d1c5. Reason: Read the diff of README.md: the example report gained the examined key; the pinned claim is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-23 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `README.md` (Done means item 3) 42718708d1c5 and 5df4ed0e7b95 -> b494b8a81eb7, `README.md` (Done means item 4) 42718708d1c5 and 5df4ed0e7b95 -> b494b8a81eb7; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` d967686a9762 -> d7e1bf9840e8. Reason: ci.yml: the pull_request types drop edited, workflow_dispatch is removed, and cancel-in-progress is true only for a pull_request synchronize event, with comments updated; no job, step or gate script changed, so the claim about the jobs this record cites still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

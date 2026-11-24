@@ -27,6 +27,15 @@
     }
   ],
   "next_action": "urzua fix --apply --ids docs/milestones/MILE-2-b.md --actor agent",
+  "next_action_argv": [
+    "urzua",
+    "fix",
+    "--apply",
+    "--ids",
+    "docs/milestones/MILE-2-b.md",
+    "--actor",
+    "agent"
+  ],
   "next_action_reason": "writes 1 repair",
   "next_action_inputs": []
 }

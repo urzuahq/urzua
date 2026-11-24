@@ -47,6 +47,7 @@
       }
     ],
     "next_action": null,
+    "next_action_argv": null,
     "next_action_inputs": [],
     "next_action_reason": null,
     "records_read_by_any_rule": 1,
