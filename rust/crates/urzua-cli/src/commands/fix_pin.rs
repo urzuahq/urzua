@@ -415,7 +415,16 @@ fn pinned_entry(record: &Record, config: &Config, name: &str) -> Result<PinnedEn
         .collect();
     match found.first() {
         Some(e) if found.iter().all(|f| f == e) => Ok(e.clone()),
-        Some(e) if found.iter().any(|f| f.category != e.category) => Err(format!("'{name}' is cited in more than one tier: name the one to change as `code:{name}` or `test:{name}`")),
+        Some(e) if found.iter().any(|f| f.category != e.category) => {
+            let mut tiers: Vec<&str> = found.iter().map(|f| f.category.as_str()).collect();
+            tiers.sort_by_key(|t| urzua_core::locator::CATEGORIES.iter().position(|c| c == t));
+            tiers.dedup();
+            let spellings: Vec<String> = tiers.iter().map(|t| format!("`{t}:{name}`")).collect();
+            Err(format!(
+                "'{name}' is cited in more than one tier: name the one to change as {}",
+                spellings.join(" or ")
+            ))
+        }
         Some(_) => Err(format!("'{name}' is pinned at more than one hash: re-pin with `urzua fix --rebaseline` first")),
         None => Err(format!("the record has no pinned locator '{name}' (name it as `path` or `path#scope`, without the pin)")),
     }

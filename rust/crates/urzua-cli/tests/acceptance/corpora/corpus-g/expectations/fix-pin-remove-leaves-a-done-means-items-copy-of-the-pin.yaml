@@ -1,0 +1,16 @@
+id: fix-pin-remove-leaves-a-done-means-items-copy-of-the-pin
+corpus: corpus-g
+bugs: [BUG-232]
+# The Realized-by field holds src/cache.rs as its only locator, and a Done-means item cites it
+# again beside another. `--remove` means the field's copy, which it will not empty, so it refuses;
+# it must not take the item's copy instead and report the pin removed.
+commits:
+  - write:
+      records/ADR-0017-item-copy.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n---\n# ADR-0017 \u2014 Item copy\n\n## Done means\n\n- Criterion \u2014 evidence: test:src/queue.rs, code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+invocation: [--config, .urzua/items.yaml, fix, --pin, --apply, --ids, records/ADR-0017-item-copy.md, --remove, "src/cache.rs", --by, ana, --actor, agent, --reason, "the field no longer cites cache.rs."]
+expect_exit: 1
+expect_stdout_contains:
+  - "remove a record's only locator by hand"
+expect_json:
+  - {at: /status, equals: partial-failure}
+mutation_exempt: fix --pin writes a record and runs no rule, so there is no rule to switch off.

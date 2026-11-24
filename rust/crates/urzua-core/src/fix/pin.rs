@@ -81,8 +81,8 @@ pub fn apply_replace(
     Ok(doc.to_string())
 }
 
-/// Removes the pinned entry `old` (with its separating comma) from the
-/// evidence and appends the attributed row.
+/// Removes the first copy of the pinned entry `old` (with its separating
+/// comma) from the evidence and appends the attributed row.
 pub fn apply_remove(
     content: &str,
     old: &PinnedEntry,
@@ -93,10 +93,18 @@ pub fn apply_remove(
     let end = evidence_end(content);
     let (head, tail) = content.split_at(end);
     let needle = old.text();
-    let removed = [format!(", {needle}"), format!("{needle}, ")]
-        .into_iter()
-        .find(|n| head.contains(n.as_str()))
-        .map(|n| head.replace(&n, ""))
+    // The field precedes the body, so its copy is the first; a copy in a
+    // Done-means item (ADR-96) is the item's own criterion and stays.
+    let removed = head
+        .find(&needle)
+        .and_then(|at| {
+            let (before, after) = (&head[..at], &head[at + needle.len()..]);
+            if let Some(kept) = before.strip_suffix(", ") {
+                Some(format!("{kept}{after}"))
+            } else {
+                after.strip_prefix(", ").map(|rest| format!("{before}{rest}"))
+            }
+        })
         .ok_or_else(|| {
             format!("'{needle}' is not one of several evidence entries; remove a record's only locator by hand")
         })?;
