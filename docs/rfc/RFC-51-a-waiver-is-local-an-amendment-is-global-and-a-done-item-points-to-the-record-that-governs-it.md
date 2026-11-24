@@ -336,7 +336,7 @@ Per point, above. Across them:
 
 ## References
 
-- `MILE-72`, `SPEC-2` §"Next action (`MILE-72`)", pull request #647 (`MILE-359`).
+- `MILE-72`, `SPEC-2` §"Next action (`MILE-72`)", the open `urzua describe` pull request on branch `feat/describe` (`MILE-359`; cited by number in Motivation).
 - `ADR-96` (Done-means items and item waivers), `ADR-101` (mission principles), `ADR-64` (structured
   in and out), `ADR-14` and `SPEC-16` (amendment sections), `ADR-73` (suggested actions), `ADR-105`
   (one question to a person), `SPEC-10` (waiver records), `SPEC-19` (governs `AGENTS.md`).
