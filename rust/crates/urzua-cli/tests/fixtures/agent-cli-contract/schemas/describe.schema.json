@@ -97,6 +97,8 @@
         "format": {"type": "string", "minLength": 1},
         "conflicts_with": {"type": "array", "items": {"type": "string"}},
         "requires": {"type": "array", "items": {"type": "string"}},
+        "requires_any": {"type": "array", "items": {"type": "string"}},
+        "required_unless": {"type": "array", "items": {"type": "string"}},
         "after_separator": {"type": "boolean"}
       },
       "if": {"properties": {"kind": {"const": "flag"}}, "required": ["kind"]},

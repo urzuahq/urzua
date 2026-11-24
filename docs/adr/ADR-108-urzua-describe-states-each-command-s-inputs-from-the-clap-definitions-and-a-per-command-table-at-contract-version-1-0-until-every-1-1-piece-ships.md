@@ -14,7 +14,7 @@ Supersedes / Superseded-by:
 `MILE-359` asks for `urzua describe` and for `schema_version` on every report, and its first Done
 means item asks for their shape to be recorded in a decision. The published agent CLI contract owns
 `describe`'s field list (its RFC-4, section 6, accepted by the maintainer: "I accept RFC, and yes
-allow option can be outside rule"), and its describe schema at `v1.1.0-rc.3` fixes the keys.
+allow option can be outside rule"), and its describe schema at `v1.1.0-rc.4` fixes the keys.
 What the contract leaves to each tool is where the values come from and a few classifications:
 which commands are `safe`, which `profile` each has, which `protocol` word an exempt command
 names, which environment variables count, and which `contract_version` to print.
@@ -42,8 +42,7 @@ repository's corpus a debug build's `check` with no arguments takes 33 seconds a
 In the context of `describe` being the one place an agent reads urzua's inputs, facing a parser
 that knows the arguments and nothing about safety or profiles, we decided option A, to keep the
 arguments impossible to forget and the classifications in one reviewed table, accepting that a
-relation urzua refuses in code is declared from a hand-kept table, and that a rule of the form
-"needs one of two" or "required unless another is given" is stated only in an argument's `means`.
+relation urzua refuses in code is declared from a hand-kept table.
 
 1. **Arguments.** Every argument is generated from `Cli::command()`, walking subcommands
    recursively. A command's `name` is its full path; only commands that run are listed (a group is
@@ -60,8 +59,9 @@ relation urzua refuses in code is declared from a hand-kept table, and that a ru
    --stdin-path` with `paths` or `--base`, `fix --force` without `--apply`, `--as-of` with
    `--apply`) is declared from a table in `describe`, a conflict on both arguments; a test runs
    every declared pair and expects a refusal naming both. A "needs one of two" rule (`fix --apply`
-   needs `--ids` or `--force`) or "required unless" (`explain <path>`) is stated in `means`, and
-   the argument carries the weaker reading (`required: false`, no `requires`).
+   and `reverify --apply` need `--ids` or `--force`) is declared as `requires_any`, and a "required
+   unless" rule (`explain <path>`, unless `--rule`, `--types`, `--type` or `--full`) as
+   `required_unless` with `required: false`; the contract's rc.4 added both keys.
 2. **The table.** `safe` is true only for a command that writes nothing whatever its arguments
    (the contract's RFC-1 section 3), so a command whose `--apply` writes is not safe; a safe command
    that is slow gets a quick `example` where it has one (RFC-4 section 8). `audit` is safe: it writes
@@ -106,7 +106,7 @@ arguments is the hard part to give up, and nothing argues for that.
 
 - `MILE-359`, `MILE-370`, `MILE-365`, `MILE-367`
 - `ADR-46` (one shared output contract), `ADR-23` (stdout is always JSON), `ADR-106`
-- The published agent CLI contract, RFC-4 sections 5, 6, 8 and 9, and its describe schema at `v1.1.0-rc.3`, vendored as `rust/crates/urzua-cli/tests/fixtures/agent-cli-contract/schemas/describe.schema.json`
+- The published agent CLI contract, RFC-4 sections 5, 6, 8 and 9, and its describe schema at `v1.1.0-rc.4`, vendored as `rust/crates/urzua-cli/tests/fixtures/agent-cli-contract/schemas/describe.schema.json`
 
 > **Revision log**
 >
@@ -115,3 +115,4 @@ arguments is the hard part to give up, and nothing argues for that.
 > | 2026-11-24 | Filed as Proposed with the `describe` built in the same change; the decision is the maintainer's. | **structural** |
 > | 2026-11-24 | Revised while Proposed, after the published agent CLI contract's maintainers answered review on pull request #647: the top-level `args` is empty and each global is declared on the commands that take it; relations refused in code are declared; "needs one of two" and "required unless" rules are stated in `means`; `migrate schema` loses its example, which named a record field. | **substantive** |
 > | 2026-11-24 | Revised while Proposed, after an independent review of pull request #647: `safe` means writes nothing, as the contract defines it, not also quick, so `audit` is safe. | **substantive** |
+> | 2026-11-24 | Revised while Proposed, after the published agent CLI contract moved to `v1.1.0-rc.4`: the vendored schemas are that tag's; "needs one of two" and "required unless" rules are declared as `requires_any` and `required_unless` instead of only in `means`. `describe` still does not list itself. | **substantive** |

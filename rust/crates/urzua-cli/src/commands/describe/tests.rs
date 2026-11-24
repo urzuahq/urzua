@@ -136,10 +136,11 @@ fn relations_refused_in_code_are_declared_on_both_arguments() {
     assert!(arg(check, "--base").contains(&"--stdin-path".to_string()));
     let fix = find(&d, "fix");
     let apply = fix.args.iter().find(|a| a.name == "--apply").unwrap();
-    assert!(
-        apply.requires.is_empty(),
-        "needs --ids or --force: only in means"
-    );
+    assert!(apply.requires.is_empty());
+    assert_eq!(apply.requires_any, ["--ids", "--force"]);
+    let reverify = find(&d, "reverify");
+    let apply = reverify.args.iter().find(|a| a.name == "--apply").unwrap();
+    assert_eq!(apply.requires_any, ["--ids", "--force"]);
     assert!(apply.conflicts_with.contains(&"--as-of".to_string()));
     assert_eq!(
         fix.args
@@ -168,6 +169,10 @@ fn relations_between_arguments_are_read_from_clap() {
     let path = explain.args.iter().find(|a| a.name == "path").unwrap();
     assert_eq!(path.kind, "positional");
     assert!(!path.required, "required only unless another is given");
+    assert_eq!(
+        path.required_unless,
+        ["--rule", "--types", "--type", "--full"]
+    );
     let export = find(&d, "export");
     let format = export.args.iter().find(|a| a.name == "--format").unwrap();
     assert!(format.required);

@@ -277,6 +277,10 @@ pub(crate) struct ArgDecl {
     pub(crate) conflicts_with: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) requires: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) requires_any: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) required_unless: Vec<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     after_separator: bool,
 }
@@ -406,8 +410,7 @@ fn global_applies(name: &str, path: &str) -> bool {
 
 /// `(command, argument, conflicts_with, requires)`: the relations a command
 /// refuses in its own code rather than through clap. A conflict is declared on
-/// both arguments. A rule of the form "needs one of two" is not a relation the
-/// contract can state, so it is only in the argument's `means`.
+/// both arguments.
 type CodeRule = (
     &'static str,
     &'static str,
@@ -458,6 +461,21 @@ const CODE_RULES: &[CodeRule] = &[
     ("waive", "--as-of", &["--apply"], &[]),
 ];
 
+/// `(command, argument, names)`: an argument that needs at least one of
+/// `names` given with it, refused in the command's code.
+const CODE_REQUIRES_ANY: &[(&str, &str, &[&str])] = &[
+    ("fix", "--apply", &["--ids", "--force"]),
+    ("reverify", "--apply", &["--ids", "--force"]),
+];
+
+/// `(command, argument, names)`: an argument that must be given unless one of
+/// `names` is. `explain`'s path is checked by clap, which exposes no getter.
+const CODE_REQUIRED_UNLESS: &[(&str, &str, &[&str])] = &[(
+    "explain",
+    "path",
+    &["--rule", "--types", "--type", "--full"],
+)];
+
 fn apply_code_rules(path: &str, args: &mut [ArgDecl]) -> Result<(), String> {
     let index = |args: &[ArgDecl], name: &str| {
         args.iter().position(|a| a.name == name).ok_or_else(|| {
@@ -474,6 +492,21 @@ fn apply_code_rules(path: &str, args: &mut [ArgDecl]) -> Result<(), String> {
         for &other in requires {
             index(args, other)?;
             add(&mut args[at].requires, other);
+        }
+    }
+    let tables = [(CODE_REQUIRES_ANY, true), (CODE_REQUIRED_UNLESS, false)];
+    for (table, any) in tables {
+        for &(_, name, names) in table.iter().filter(|r| r.0 == path) {
+            let at = index(args, name)?;
+            for &other in names {
+                index(args, other)?;
+                let list = if any {
+                    &mut args[at].requires_any
+                } else {
+                    &mut args[at].required_unless
+                };
+                add(list, other);
+            }
         }
     }
     Ok(())
@@ -521,6 +554,8 @@ fn args_of(command: &Command, args: &[&Arg]) -> Vec<ArgDecl> {
                 .map(name_of)
                 .collect(),
             requires: requires_of(command, arg, args),
+            requires_any: Vec::new(),
+            required_unless: Vec::new(),
             after_separator: arg.is_last_set(),
         })
         .collect();

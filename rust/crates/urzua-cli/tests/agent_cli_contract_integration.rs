@@ -468,7 +468,8 @@ fn as_one_one(mut d: Value) -> Value {
 
 /// What the schema cannot state and the contract's runner checks: names are
 /// unique within a command together with the top-level `args`, and each name in
-/// `conflicts_with` and `requires` is one of them.
+/// `conflicts_with`, `requires`, `requires_any` and `required_unless` is one of
+/// them, and an argument with `required_unless` is not `required`.
 fn argument_names_resolve(d: &Value) -> Result<(), String> {
     let names = |args: &Value| -> Vec<String> {
         args.as_array()
@@ -491,7 +492,18 @@ fn argument_names_resolve(d: &Value) -> Result<(), String> {
             ));
         }
         for arg in command["args"].as_array().into_iter().flatten() {
-            for key in ["conflicts_with", "requires"] {
+            if !arg["required_unless"].is_null() && arg["required"] == true {
+                return Err(format!(
+                    "{}: {} is required and has required_unless",
+                    command["name"], arg["name"]
+                ));
+            }
+            for key in [
+                "conflicts_with",
+                "requires",
+                "requires_any",
+                "required_unless",
+            ] {
                 for other in arg[key].as_array().into_iter().flatten() {
                     if !all.iter().any(|n| n == other.as_str().unwrap()) {
                         return Err(format!(
@@ -567,6 +579,16 @@ fn the_describe_check_rejects_what_the_contract_forbids() {
     ));
     assert!(broken(
         &|r| r["commands"][check]["args"][0]["name"] = serde_json::json!("--config")
+    ));
+    let explain = at("explain");
+    assert!(broken(&|r| r["commands"][explain]["args"][0]
+        ["required_unless"] =
+        serde_json::json!(["--nope"])));
+    assert!(broken(&|r| r["commands"][explain]["args"][0]
+        ["requires_any"] =
+        serde_json::json!("--rule")));
+    assert!(broken(
+        &|r| r["commands"][explain]["args"][0]["required"] = serde_json::json!(true)
     ));
 }
 
@@ -669,7 +691,7 @@ fn a_longer_name_does_not_name_a_shorter_one() {
 
 /// A refusal whose error names both arguments (`paths` is written `PATHS`), so
 /// it refuses the pair and not some other mistake in the probe.
-fn refused_naming(dir: &Path, argv: &[String], names: [&str; 2]) -> Result<(), String> {
+fn refused_naming(dir: &Path, argv: &[String], names: &[&str]) -> Result<(), String> {
     refused(dir, argv)?;
     let out = common::urzua()
         .args(argv)
@@ -685,12 +707,8 @@ fn refused_naming(dir: &Path, argv: &[String], names: [&str; 2]) -> Result<(), S
     }
 }
 
-/// A rule `describe` can state only in an argument's `means` ("needs --ids or
-/// --force"), and the argument the probe gives to meet it, so that a probe
-/// reaches the relation it tests instead of that earlier refusal.
-const MEANS_ONLY: [(&str, &str, &str); 1] = [("fix", "--apply", "--ids")];
-
-/// `args`, plus what they require and what meets a [`MEANS_ONLY`] rule, less `except`.
+/// `args`, plus what they require and the first name of each `requires_any`
+/// (so that a probe reaches the relation it tests), less `except`.
 fn with_companions<'a>(command: &'a Value, args: &[&'a Value], except: &str) -> Vec<&'a Value> {
     let mut all: Vec<&Value> = args.to_vec();
     let mut i = 0;
@@ -701,10 +719,8 @@ fn with_companions<'a>(command: &'a Value, args: &[&'a Value], except: &str) -> 
             .flatten()
             .map(|n| n.as_str().unwrap())
             .collect();
-        for (c, a, companion) in MEANS_ONLY {
-            if command["name"] == c && all[i]["name"] == a {
-                next.push(companion);
-            }
+        if let Some(first) = all[i]["requires_any"].get(0) {
+            next.push(first.as_str().unwrap());
         }
         for name in next {
             if name != except && !all.iter().any(|x| x["name"] == name) {
@@ -733,7 +749,25 @@ fn every_declared_relation_is_refused() {
                     arg["name"].as_str().unwrap(),
                     other["name"].as_str().unwrap(),
                 ];
-                accepted.extend(refused_naming(&dir, &argv, names).err());
+                accepted.extend(refused_naming(&dir, &argv, &names).err());
+            }
+            if let Some(first) = arg["requires_any"].get(0) {
+                let first = first.as_str().unwrap();
+                let argv = invocation(command, &[], &with_companions(command, &[arg], first));
+                let mut names = vec![arg["name"].as_str().unwrap()];
+                names.extend(
+                    arg["requires_any"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|n| n.as_str().unwrap()),
+                );
+                accepted.extend(refused_naming(&dir, &argv, &names).err());
+            }
+            if arg["required_unless"].is_array() {
+                let argv = invocation(command, &[arg["name"].as_str().unwrap()], &[]);
+                let names = [arg["name"].as_str().unwrap()];
+                accepted.extend(refused_naming(&dir, &argv, &names).err());
             }
             for needed in arg["requires"].as_array().into_iter().flatten() {
                 let needed = needed.as_str().unwrap();
@@ -743,7 +777,7 @@ fn every_declared_relation_is_refused() {
                     &with_companions(command, &[arg], needed),
                 );
                 let names = [arg["name"].as_str().unwrap(), needed];
-                accepted.extend(refused_naming(&dir, &argv, names).err());
+                accepted.extend(refused_naming(&dir, &argv, &names).err());
             }
         }
     }
@@ -880,7 +914,7 @@ fn every_required_argument_is_refused_when_missing() {
             } else {
                 name.to_string()
             };
-            accepted.extend(refused_naming(&dir, &argv, [shown.as_str(), shown.as_str()]).err());
+            accepted.extend(refused_naming(&dir, &argv, &[shown.as_str(), shown.as_str()]).err());
         }
     }
     assert!(accepted.is_empty(), "{}", accepted.join("\n"));
