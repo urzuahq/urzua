@@ -1,0 +1,14 @@
+id: fix-pin-removes-one-tier-of-a-file-cited-in-two
+corpus: corpus-g
+bugs: [BUG-230]
+# The record cites src/cache.rs as code and as test at one hash. `--remove` named
+# with its tier removes that citation only; the code citation stays.
+commits:
+  - write:
+      records/ADR-0015-two-tiers.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222, test:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n---\n# ADR-0015 \u2014 Two tiers\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+invocation: [fix, --pin, --apply, --ids, records/ADR-0015-two-tiers.md, --remove, "test:src/cache.rs", --by, ana, --actor, agent, --reason, "the test tier no longer cites cache.rs."]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: applied}
+  - {at: /failed, equals: []}
+mutation_exempt: fix --pin writes a record and runs no rule, so there is no rule to switch off.

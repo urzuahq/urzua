@@ -12,6 +12,7 @@ use crate::report::{census_records, Outcome};
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Pin {
     in_item: bool,
+    category: String,
     locator: String,
     hash: Option<String>,
 }
@@ -21,6 +22,7 @@ fn pins_of(text: &str, in_item: bool, out: &mut Vec<Pin>) {
         let pin = match entry.parsed {
             Ok(l) => Pin {
                 in_item,
+                category: entry.category.clone(),
                 locator: l.display(),
                 hash: match &l.anchor {
                     Some(crate::locator::Anchor::Pin(h)) => Some(h.clone()),
@@ -29,6 +31,7 @@ fn pins_of(text: &str, in_item: bool, out: &mut Vec<Pin>) {
             },
             Err(_) => Pin {
                 in_item,
+                category: entry.category,
                 locator: entry.raw,
                 hash: None,
             },
@@ -254,6 +257,7 @@ fn unpaired(base: &[Pin], head: &[Pin]) -> (Vec<usize>, Vec<usize>) {
             let h = &head[i];
             let found = (0..base.len()).find(|&j| {
                 !b_used[j]
+                    && base[j].category == h.category
                     && base[j].locator == h.locator
                     && base[j].hash == h.hash
                     && (!same_site || base[j].in_item == h.in_item)
@@ -275,7 +279,10 @@ fn unpaired(base: &[Pin], head: &[Pin]) -> (Vec<usize>, Vec<usize>) {
 /// pins left at one locator are compared in order: a base pin and a head pin
 /// left at the same locator are a change (so a current hash copied over a stale
 /// one is reported), a head pin left alone was added and a base pin left alone
-/// was removed. A citation added or removed without a pin is not judged.
+/// was removed. Pins pair only within one tier. A base pin left alone that the
+/// head still pins in the same tier at the same hash was a duplicate the head
+/// collapsed (`collapsed`), so the evidence is unchanged. A citation added or
+/// removed without a pin is not judged.
 fn unattested(base: &[Pin], head: &[Pin], events: &[Event]) -> Vec<Problem> {
     let (b_left, h_left) = unpaired(base, head);
     let mut out = Vec::new();
@@ -283,7 +290,10 @@ fn unattested(base: &[Pin], head: &[Pin], events: &[Event]) -> Vec<Problem> {
     for i in h_left {
         let locator = &head[i].locator;
         let h = head[i].hash.as_deref().unwrap_or_default();
-        match b_pool.iter().position(|&j| base[j].locator == *locator) {
+        match b_pool
+            .iter()
+            .position(|&j| base[j].category == head[i].category && base[j].locator == *locator)
+        {
             Some(k) => {
                 let j = b_pool.remove(k);
                 let b = base[j].hash.as_deref().unwrap_or_default();
@@ -316,7 +326,7 @@ fn unattested(base: &[Pin], head: &[Pin], events: &[Event]) -> Vec<Problem> {
     for j in b_pool {
         let locator = &base[j].locator;
         let b = base[j].hash.as_deref().unwrap_or_default();
-        if removed_ok(events, locator, b) {
+        if removed_ok(events, locator, b) || collapsed(base, head, j) {
             continue;
         }
         let what = if head.iter().any(|p| p.locator == *locator) {
@@ -337,6 +347,16 @@ fn unattested(base: &[Pin], head: &[Pin], events: &[Event]) -> Vec<Problem> {
         });
     }
     out
+}
+
+/// True when the head still pins base pin `j`'s tier, locator and hash and
+/// left no more of its citations unpinned than the base did: a duplicate the
+/// head collapsed, not a pin stripped from a citation it kept.
+fn collapsed(base: &[Pin], head: &[Pin], j: usize) -> bool {
+    let b = &base[j];
+    let at = |p: &&Pin| p.category == b.category && p.locator == b.locator;
+    let unpinned = |pins: &[Pin]| pins.iter().filter(at).filter(|p| p.hash.is_none()).count();
+    head.iter().filter(at).any(|p| p.hash == b.hash) && unpinned(head) <= unpinned(base)
 }
 
 /// The command that writes the row a problem lacks, for its message.
@@ -459,6 +479,7 @@ mod tests {
             .iter()
             .map(|(l, h)| Pin {
                 in_item: false,
+                category: "code".into(),
                 locator: l.to_string(),
                 hash: h.map(str::to_string),
             })
@@ -590,6 +611,65 @@ mod tests {
         assert!(
             unattested(&base, &plain, &[]).is_empty(),
             "an unpinned locator is not judged"
+        );
+    }
+
+    #[test]
+    fn a_collapsed_duplicate_pin_is_not_a_removal_observed_failing() {
+        let base = occ(&[("src/a.rs", Some(A)), ("src/a.rs", Some(A))]);
+        let collapsed = occ(&[("src/a.rs", Some(A))]);
+        assert!(unattested(&base, &collapsed, &[]).is_empty());
+        let mut moved_site = collapsed.clone();
+        moved_site[0].in_item = true;
+        assert!(unattested(&base, &moved_site, &[]).is_empty());
+        assert_eq!(
+            variants(unattested(&base, &occ(&[("src/u.rs", None)]), &[])),
+            ["pin-removed", "pin-removed"]
+        );
+        assert_eq!(
+            variants(unattested(&base, &occ(&[("src/a.rs", Some(B))]), &[])),
+            ["pin-changed-unattested", "pin-removed"]
+        );
+        assert_eq!(
+            variants(unattested(&base, &occ(&[("src/a.rs#f", Some(A))]), &[])),
+            ["pin-added-unattested", "pin-removed", "pin-removed"]
+        );
+        let two = occ(&[("src/a.rs", Some(A)), ("src/a.rs", Some(B))]);
+        assert_eq!(variants(unattested(&two, &collapsed, &[])), ["pin-removed"]);
+        assert_eq!(
+            variants(unattested(&collapsed, &base, &[])),
+            ["pin-added-unattested"]
+        );
+    }
+
+    fn tier(mut pins: Vec<Pin>, i: usize, category: &str) -> Vec<Pin> {
+        pins[i].category = category.into();
+        pins
+    }
+
+    #[test]
+    fn a_collapse_keeps_its_tier_and_its_pin_observed_failing() {
+        let both = tier(
+            occ(&[("src/a.rs", Some(A)), ("src/a.rs", Some(A))]),
+            1,
+            "test",
+        );
+        assert_eq!(
+            variants(unattested(&both, &occ(&[("src/a.rs", Some(A))]), &[])),
+            ["pin-removed"]
+        );
+        let base = occ(&[("src/a.rs", Some(A)), ("src/a.rs", Some(A))]);
+        let stripped = occ(&[("src/a.rs", Some(A)), ("src/a.rs", None)]);
+        assert_eq!(variants(unattested(&base, &stripped, &[])), ["pin-removed"]);
+    }
+
+    #[test]
+    fn a_pin_moved_to_another_tier_is_not_unchanged_observed_failing() {
+        let base = occ(&[("src/a.rs", Some(A))]);
+        let swapped = tier(occ(&[("src/a.rs", Some(A))]), 0, "test");
+        assert_eq!(
+            variants(unattested(&base, &swapped, &[])),
+            ["pin-added-unattested", "pin-removed"]
         );
     }
 

@@ -1,0 +1,24 @@
+id: a-pin-moved-from-code-to-test-fails-check-base
+corpus: corpus-g
+bugs: [BUG-228]
+# The head moves the pin on src/cache.rs from the code tier to the test tier at the
+# same hash with no row: a pin moved to another tier is added and removed, not
+# unchanged.
+commits:
+  - write:
+      .urzua/config.yaml: "schema_version: 2\nfail_on: warning\nrecord_types:\n  adr:\n    dir: records\n    prefix: ADR\n    required_fields: [Status, Embodiment, Realized-by]\n    header_shape: yaml-frontmatter\nrules:\n  diff.pin-changed-unattested: off\n  embodiment.consistency: warn\n  embodiment.locator-exists: error\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n  code.dangling-bug-reference:\n    level: error\n    back_pointer_paths: [src]\n    extensions: [rs]\n"
+      records/ADR-0014-tier-swapped.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n---\n# ADR-0014 \u2014 Tier swapped\n"
+  - write:
+      .urzua/config.yaml: "schema_version: 2\nfail_on: warning\nrecord_types:\n  adr:\n    dir: records\n    prefix: ADR\n    required_fields: [Status, Embodiment, Realized-by]\n    header_shape: yaml-frontmatter\nrules:\n  diff.pin-changed-unattested: error\n  embodiment.consistency: warn\n  embodiment.locator-exists: error\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n  code.dangling-bug-reference:\n    level: error\n    back_pointer_paths: [src]\n    extensions: [rs]\n"
+      records/ADR-0014-tier-swapped.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: test:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n---\n# ADR-0014 \u2014 Tier swapped\n"
+invocation: [check, --base, HEAD~1]
+expect_exit: 1
+expect_findings:
+  - rule: diff.pin-changed-unattested
+    file: records/ADR-0014-tier-swapped.md
+    severity: error
+    message_contains: "a pin on 'src/cache.rs'"
+  - rule: diff.pin-changed-unattested
+    file: records/ADR-0014-tier-swapped.md
+    severity: error
+    message_contains: "the pin on 'src/cache.rs' was removed"
