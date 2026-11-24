@@ -60,11 +60,13 @@ fn a_panic_exits_2_with_a_not_run_result() {
         .unwrap_or_else(|e| panic!("stdout must be one JSON object ({e}): {out:?}"));
     assert_eq!(report["status"], "not-run", "{report}");
     assert!(
-        report["panic"]
+        report["error"]
             .as_str()
             .is_some_and(|p| p.contains("URZUA_TEST_PANIC set")),
-        "the report names the panic: {report}"
+        "the report names the panic under `error`: {report}"
     );
+    assert_eq!(report["error_kind"], "internal", "{report}");
+    assert!(report.get("panic").is_none(), "no `panic` key: {report}");
     // MILE-72: the not-run shape carries the two keys like every report.
     assert!(report["next_action"].is_null(), "{report}");
     assert!(report["next_action_reason"].is_null(), "{report}");

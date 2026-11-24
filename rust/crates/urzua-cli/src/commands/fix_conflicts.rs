@@ -9,6 +9,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RelationRole};
 use urzua_core::conflicts::{self, Shape, Stages};
+use urzua_core::report::FailureKind;
 use urzua_core::report::{
     Conflict, ConflictKind, ConflictOutcome, ConflictsReport, ConflictsStatus, CouldNotRun,
     FixFailure,
@@ -30,7 +31,8 @@ pub(crate) struct ConflictsArgs<'a> {
 }
 
 pub(crate) fn run(config_path: Option<PathBuf>, args: ConflictsArgs<'_>) -> ExitCode {
-    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from(e)))
+    run_checked(config_path, args)
+        .unwrap_or_else(|e| emit(&CouldNotRun::new(FailureKind::Environment, e)))
 }
 
 fn run_checked(config_path: Option<PathBuf>, args: ConflictsArgs<'_>) -> Result<ExitCode, Refusal> {

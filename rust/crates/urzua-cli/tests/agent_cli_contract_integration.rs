@@ -313,13 +313,30 @@ fn the_vendored_copy_matches_its_own_checksums() {
 #[test]
 fn every_vendored_schema_uses_only_the_contract_keywords_and_every_pattern_compiles() {
     let mut found = std::collections::BTreeSet::new();
+    let mut walked = Vec::new();
     for entry in std::fs::read_dir(schema_dir()).unwrap() {
         let name = entry.unwrap().file_name().into_string().unwrap();
         if name.ends_with(".schema.json") {
             let root = load(&name);
             keywords_of(&root, &root, &mut found);
+            walked.push(name);
         }
     }
+    walked.sort();
+    assert_eq!(
+        walked,
+        [
+            "describe",
+            "finding",
+            "gate-report",
+            "log-line",
+            "receipt",
+            "report",
+            "run-report"
+        ]
+        .map(|n| format!("{n}.schema.json")),
+        "the walk covers each of the contract's seven schemas"
+    );
     let outside: Vec<&String> = found
         .iter()
         .filter(|k| !CONTRACT_KEYWORDS.contains(&k.as_str()))
@@ -449,4 +466,72 @@ fn a_not_run_report_that_started_counts_zero_and_one_that_could_not_start_counts
     assert!(failed.get("error").is_some());
     assert!(failed.get("files_examined").is_none());
     assert!(failed.get("examined").is_none());
+}
+
+fn no_repository() -> common::TempDir {
+    common::TempDir::new("urzua-contract-bare")
+}
+
+fn run_with_env(dir: &Path, args: &[&str], env: (&str, &str)) -> (Value, i32) {
+    let out = common::urzua()
+        .args(args)
+        .env(env.0, env.1)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    let json = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("stdout of {args:?} is not JSON ({e}): {out:?}"));
+    (json, out.status.code().unwrap())
+}
+
+fn assert_not_run_of_kind(report: &Value, code: i32, kind: &str, what: &str) {
+    assert_eq!(code, 2, "{what}: {report}");
+    assert_eq!(report["status"], "not-run", "{what}: {report}");
+    assert_eq!(report["error_kind"], kind, "{what}: {report}");
+    assert!(report["error"].is_string(), "{what}: {report}");
+    validate("report.schema.json", report)
+        .unwrap_or_else(|e| panic!("{what}: fails the report schema: {e}"));
+}
+
+#[test]
+fn every_not_run_report_carries_the_error_kind_of_its_cause() {
+    let dir = fixture_corpus();
+
+    let (usage, code) = run(&dir, &["check", "--no-such-flag"]);
+    assert_not_run_of_kind(&usage, code, "usage", "a wrong argument");
+
+    std::fs::write(dir.join(".urzua/config.yaml"), "rules: [unterminated\n").unwrap();
+    let (config, code) = run(&dir, &["check"]);
+    assert_not_run_of_kind(&config, code, "config", "an unreadable configuration");
+
+    let bare = no_repository();
+    let (environment, code) = run(&bare, &["check"]);
+    assert_not_run_of_kind(&environment, code, "environment", "a missing repository");
+
+    let (internal, code) = run_with_env(&dir, &["check"], ("URZUA_TEST_PANIC", "1"));
+    assert_not_run_of_kind(&internal, code, "internal", "a forced internal failure");
+    assert!(internal.get("panic").is_none(), "no panic key: {internal}");
+}
+
+#[test]
+fn a_usage_error_names_its_argument_in_one_sentence_without_the_parsers_usage_block() {
+    let dir = fixture_corpus();
+    for args in [
+        &["check", "--no-such-flag"][..],
+        &["explain"][..],
+        &["check", "--fail-on", "sideways"][..],
+        &["frobnicate"][..],
+    ] {
+        let (report, code) = run(&dir, args);
+        assert_not_run_of_kind(&report, code, "usage", &format!("{args:?}"));
+        let error = report["error"].as_str().unwrap();
+        assert!(!error.contains("Usage:"), "{args:?}: {error:?}");
+        assert!(!error.contains('\n'), "{args:?}: {error:?}");
+        assert!(!error.trim().is_empty(), "{args:?}");
+    }
+    let (report, _) = run(&dir, &["check", "--no-such-flag"]);
+    assert!(
+        report["error"].as_str().unwrap().contains("--no-such-flag"),
+        "names the argument: {report}"
+    );
 }

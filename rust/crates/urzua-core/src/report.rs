@@ -1371,6 +1371,7 @@ impl Report for CheckReport {
 pub struct CouldNotRun {
     pub status: ReportStatus,
     pub error: String,
+    pub error_kind: FailureKind,
     /// Present when the config's `schema_version` is outside the window this
     /// build reads (`ADR-77`): the same facts `error` states, as data an agent
     /// can branch on.
@@ -1395,20 +1396,39 @@ impl CouldNotRun {
         self
     }
 
-    pub fn from(error: impl Into<Failure>) -> Self {
+    /// `fallback` is the kind when the failure carries none of its own, so no
+    /// could-not-run is built without one.
+    pub fn new(fallback: FailureKind, error: impl Into<Failure>) -> Self {
         let Failure {
             message,
+            kind,
             schema_version,
             next,
         } = error.into();
         CouldNotRun {
             status: ReportStatus::NotRun,
             error: message,
+            error_kind: kind.unwrap_or(fallback),
             schema_version_error: schema_version.map(|boxed| *boxed),
             notices: Vec::new(),
             next: next.map(|boxed| *boxed),
         }
     }
+}
+
+/// Why a command could not run, as the published agent CLI contract defines
+/// the four kinds: the report's `error_kind`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FailureKind {
+    /// The arguments were wrong.
+    Usage,
+    /// The configuration could not be loaded or is invalid.
+    Config,
+    /// Something outside the tool is missing: a repository, a program, a file.
+    Environment,
+    /// The tool itself failed.
+    Internal,
 }
 
 /// Why a command could not run: a message, and the structured form of the
@@ -1418,6 +1438,9 @@ impl CouldNotRun {
 #[derive(Debug, Clone)]
 pub struct Failure {
     pub message: String,
+    /// Set where the cause is known; a site that builds the report names the
+    /// kind of a failure that has none.
+    pub kind: Option<FailureKind>,
     /// Boxed so a `Result<_, Failure>` stays small on the success path.
     pub schema_version: Option<Box<crate::schema_version::SchemaVersionError>>,
     /// The command that removes the cause, when one does.
@@ -1429,8 +1452,19 @@ impl Failure {
     pub fn with_next(message: impl Into<String>, next: NextAction) -> Self {
         Failure {
             message: message.into(),
+            kind: None,
             schema_version: None,
             next: Some(Box::new(next)),
+        }
+    }
+}
+
+impl Failure {
+    /// A failure whose kind is known where it arises.
+    pub fn of(kind: FailureKind, message: impl Into<String>) -> Self {
+        Failure {
+            kind: Some(kind),
+            ..Failure::from(message.into())
         }
     }
 }
@@ -1445,6 +1479,7 @@ impl From<String> for Failure {
     fn from(message: String) -> Self {
         Failure {
             message,
+            kind: None,
             schema_version: None,
             next: None,
         }
@@ -2584,10 +2619,10 @@ mod tests {
     /// directions.
     #[test]
     fn notices_never_move_a_not_run_exit_code() {
-        let without_notices = CouldNotRun::from("could not run");
+        let without_notices = CouldNotRun::new(FailureKind::Internal, "could not run");
         let with_notices = CouldNotRun {
             notices: vec![warning_notice()],
-            ..CouldNotRun::from("could not run")
+            ..CouldNotRun::new(FailureKind::Internal, "could not run")
         };
         assert_eq!(
             Report::exit_code(&without_notices),

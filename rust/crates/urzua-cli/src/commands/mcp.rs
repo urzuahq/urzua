@@ -11,6 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
 
 use serde_json::{Map, Value};
+use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, Failure};
 use urzua_mcp::{Host, Param, ParamKind, ToolResult, ToolSpec};
 
@@ -108,10 +109,13 @@ pub fn run(config: Option<PathBuf>, root: Option<PathBuf>) -> ExitCode {
                 max,
             ) {
                 Ok(()) => ExitCode::SUCCESS,
-                Err(e) => could_not_start(&format!("the stdio transport failed: {e}")),
+                Err(e) => could_not_start(
+                    FailureKind::Environment,
+                    &format!("the stdio transport failed: {e}"),
+                ),
             }
         }
-        Err(message) => could_not_start(&message),
+        Err(message) => could_not_start(FailureKind::Environment, &message),
     }
 }
 
@@ -143,8 +147,8 @@ fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, Strin
 }
 
 /// Stdout carries protocol frames only, so a start failure is JSON on stderr.
-pub(crate) fn could_not_start(message: &str) -> ExitCode {
-    let report = CouldNotRun::from(message.to_string());
+pub(crate) fn could_not_start(kind: FailureKind, message: &str) -> ExitCode {
+    let report = CouldNotRun::new(kind, message.to_string());
     let _ = writeln!(
         std::io::stderr().lock(),
         "{}",
@@ -242,7 +246,7 @@ impl Server {
             .find(|r| r.id.as_deref() == Some(id.as_str()))
         else {
             let message = format!("no record has the id `{id}`; urzua_list_records lists the ids");
-            return outcome::<CouldNotRun>(Err(message.into()));
+            return outcome::<CouldNotRun>(Err(Failure::of(FailureKind::Usage, message)));
         };
         let edges: Vec<_> = graph
             .edges
@@ -285,7 +289,10 @@ fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResu
                 .is_ok_and(|v| v.get("status").and_then(Value::as_str) == Some("not-run"));
             (value, not_run)
         }
-        Err(failure) => (crate::report_value(&CouldNotRun::from(failure)), true),
+        Err(failure) => (
+            crate::report_value(&CouldNotRun::new(FailureKind::Environment, failure)),
+            true,
+        ),
     };
     match value {
         Ok(report) => ToolResult { report, is_error },
@@ -295,6 +302,7 @@ fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResu
             report: serde_json::json!({
                 "status": "not-run",
                 "error": message,
+                "error_kind": "internal",
                 "next_action": null,
                 "next_action_reason": null,
                 "next_action_inputs": [],

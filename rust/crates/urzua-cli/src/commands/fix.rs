@@ -8,6 +8,7 @@ use std::process::ExitCode;
 use urzua_core::config::{Config, RuleLevel};
 use urzua_core::fix::{Attestation, FailedPin, Rebaseline, Repair};
 use urzua_core::record::Record;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{
     CouldNotRun, Failure, FixFailure, FixReport, FixStatus, NextAction, Notice, NoticeSeverity,
     Population,
@@ -43,8 +44,19 @@ pub(crate) fn refuse(reason: impl Into<Failure>) -> Refusal {
     reason.into()
 }
 
+/// A refusal because the flags given cannot be combined or are incomplete.
+pub(crate) fn refuse_usage(reason: impl Into<String>) -> Refusal {
+    Failure::of(FailureKind::Usage, reason)
+}
+
+/// A refusal because the configuration does not enable what the command needs.
+pub(crate) fn refuse_config(reason: impl Into<String>) -> Refusal {
+    Failure::of(FailureKind::Config, reason)
+}
+
 pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
-    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from(e)))
+    run_checked(config_path, args)
+        .unwrap_or_else(|e| emit(&CouldNotRun::new(FailureKind::Environment, e)))
 }
 
 /// Whether `rule` runs: declared above `off`, or on by declaration.
@@ -120,7 +132,7 @@ fn run_checked(config_path: Option<PathBuf>, mut args: FixArgs) -> Result<ExitCo
         && !rule_enabled(&config, urzua_core::rules::RULE_STATUS_DELIVERY_AGREEMENT)
         && !urzua_core::fix::inverse::any_enabled(&config)
     {
-        return Err(refuse(
+        return Err(refuse_config(
             "urzua fix repairs the Embodiment field that embodiment.consistency judges, the Status that status.delivery-agreement judges and the missing inverse of a relation that relation.pair-reciprocity and relation.supersession-reciprocity judge, and those rules are off or undeclared in the configuration: nothing to repair",
         ));
     }
@@ -217,7 +229,7 @@ fn pending_action(rebaseline: bool) -> NextAction {
 /// `fix --pin`, with the flags that belong to other modes refused.
 fn run_pin(config_path: Option<PathBuf>, args: &FixArgs) -> Result<ExitCode, Refusal> {
     if !args.pin {
-        return Err(refuse("--replace and --remove belong to --pin: `urzua fix --pin --replace OLD=NEW` or `--remove OLD`"));
+        return Err(refuse_usage("--replace and --remove belong to --pin: `urzua fix --pin --replace OLD=NEW` or `--remove OLD`"));
     }
     if args.rebaseline
         || args.conflicts
@@ -225,10 +237,10 @@ fn run_pin(config_path: Option<PathBuf>, args: &FixArgs) -> Result<ExitCode, Ref
         || !args.paths.is_empty()
         || args.force
     {
-        return Err(refuse("urzua fix --pin cannot be combined with --rebaseline, --conflicts, --stdin-path, --force or PATHS (--ids names the records)"));
+        return Err(refuse_usage("urzua fix --pin cannot be combined with --rebaseline, --conflicts, --stdin-path, --force or PATHS (--ids names the records)"));
     }
     if args.apply && args.ids.is_empty() {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --pin --apply: pass --ids <record,...>; a pin is attested record by record",
         ));
     }
@@ -237,7 +249,7 @@ fn run_pin(config_path: Option<PathBuf>, args: &FixArgs) -> Result<ExitCode, Ref
             || args.actor != urzua_core::fix::ActorKind::Unspecified
             || args.reason.is_some())
     {
-        return Err(refuse("urzua fix --pin: --by, --actor and --reason belong to --apply; without it nothing is written"));
+        return Err(refuse_usage("urzua fix --pin: --by, --actor and --reason belong to --apply; without it nothing is written"));
     }
     super::fix_pin::run(
         config_path,
@@ -256,17 +268,17 @@ fn run_pin(config_path: Option<PathBuf>, args: &FixArgs) -> Result<ExitCode, Ref
 
 fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
     if args.base.is_some() && !args.rebaseline {
-        return Err(refuse(
+        return Err(refuse_usage(
             "--base belongs to --rebaseline and --pin: the ref whose merge-base copy of a record is read before a revision log is created",
         ));
     }
     if args.tier != 1 {
-        return Err(refuse(
+        return Err(refuse_usage(
             "--tier accepts only 1: the one tier-2 repair built, the missing inverse of a relation, runs in every run without it, and tier 3 is not built",
         ));
     }
     if args.apply && args.ids.is_empty() && !args.force {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --apply: pass --ids <record,...> or --force (never the default)",
         ));
     }
@@ -278,7 +290,7 @@ fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
             || args.by.is_some()
             || args.actor != urzua_core::fix::ActorKind::Unspecified)
     {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --force, --by and --actor belong to --apply: without it nothing is written, so they would be ignored (--ids alone narrows the dry-run report)",
         ));
     }
@@ -288,17 +300,17 @@ fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
             || args.reason.is_some()
             || !args.paths.is_empty())
     {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --conflicts works on every record git lists as unmerged and writes no person's reason: it cannot be combined with --rebaseline, --stdin-path, --reason or PATHS (--ids narrows it)",
         ));
     }
     if args.rebaseline && args.stdin_path.is_some() {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --rebaseline works on files in the tree: it cannot be combined with --stdin-path",
         ));
     }
     if !args.rebaseline && args.reason.is_some() {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --reason belongs to --rebaseline: a Tier 1 repair records its computation, not a reason",
         ));
     }
@@ -315,7 +327,7 @@ fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
             || args.by.is_some()
             || !args.paths.is_empty())
     {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --stdin-path judges proposed content and writes nothing: it cannot be combined with PATHS, --apply, --ids, --by or --force",
         ));
     }
@@ -965,7 +977,8 @@ struct RebaselineScan {
 /// share one set of gates. A record is the selector (`--ids` takes its
 /// repo-relative path), and all of its stale pins move together.
 fn run_rebaseline(args: RebaselineArgs<'_>) -> ExitCode {
-    rebaseline_checked(args).unwrap_or_else(|e| emit(&CouldNotRun::from(e)))
+    rebaseline_checked(args)
+        .unwrap_or_else(|e| emit(&CouldNotRun::new(FailureKind::Environment, e)))
 }
 
 fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal> {

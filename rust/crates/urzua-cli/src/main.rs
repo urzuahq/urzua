@@ -16,6 +16,7 @@ use std::process::ExitCode;
 
 use clap::error::ErrorKind;
 use clap::{Parser, Subcommand};
+use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, Report};
 
 mod commands;
@@ -69,9 +70,10 @@ fn emit_as<T: Report>(report: &T, inline: bool) -> ExitCode {
         // A report that cannot be written as a JSON object (the two keys are
         // appended to it) is a could-not-run, never a panic.
         Err(e) => (
-            serde_json::to_string_pretty(&CouldNotRun::from(format!(
-                "could not serialise the report: {e}"
-            )))
+            serde_json::to_string_pretty(&CouldNotRun::new(
+                FailureKind::Internal,
+                format!("could not serialise the report: {e}"),
+            ))
             .unwrap_or_default(),
             ExitCode::from(2),
         ),
@@ -756,7 +758,7 @@ enum ExportFormat {
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
-        let out = serde_json::json!({ "status": "not-run", "panic": info.to_string(), "next_action": null, "next_action_reason": null, "next_action_inputs": [] });
+        let out = serde_json::json!({ "status": "not-run", "error": info.to_string(), "error_kind": "internal", "next_action": null, "next_action_reason": null, "next_action_inputs": [] });
         // write_all + let-ignore, never println!/a panicking macro here -- a
         // broken pipe during the hook itself would double-panic and abort
         // with no output at all, defeating the hook's entire purpose.
@@ -1010,7 +1012,8 @@ fn dispatch_migrate(config: Option<PathBuf>, target: MigrateTarget) -> ExitCode 
             report: true,
             field: Some(field),
         } => commands::migrate::run_schema_report(config, field),
-        MigrateTarget::Schema { .. } => emit(&CouldNotRun::from(
+        MigrateTarget::Schema { .. } => emit(&CouldNotRun::new(
+            FailureKind::Usage,
             "pass --report --field <Name> (--assist-waivers and --apply are not implemented yet)",
         )),
     }
@@ -1066,9 +1069,10 @@ fn dispatch_harness(config: Option<PathBuf>, target: HarnessTarget) -> ExitCode 
 /// Exit code 2: could not run at all -- distinct from "ran and found
 /// nothing," per SPEC-0001's exit-code contract.
 fn not_implemented(name: &str) -> ExitCode {
-    emit(&CouldNotRun::from(format!(
-        "`urzua {name}` is not implemented yet -- see docs/specs/SPEC-1-cli.md"
-    )))
+    emit(&CouldNotRun::new(
+        FailureKind::Usage,
+        format!("`urzua {name}` is not implemented yet -- see docs/specs/SPEC-1-cli.md"),
+    ))
 }
 
 /// Applies `--as-of` before any command reads a date. A date is refused (exit
@@ -1134,9 +1138,9 @@ fn parse_cli() -> Result<Cli, ExitCode> {
     let serving = names_mcp(std::env::args().skip(1));
     let refuse = |message: String| {
         if serving {
-            commands::mcp::could_not_start(&message)
+            commands::mcp::could_not_start(FailureKind::Usage, &message)
         } else {
-            emit(&CouldNotRun::from(message))
+            emit(&CouldNotRun::new(FailureKind::Usage, message))
         }
     };
     let cli = match Cli::try_parse() {
@@ -1144,10 +1148,77 @@ fn parse_cli() -> Result<Cli, ExitCode> {
         Err(e) if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) => {
             e.exit()
         }
-        Err(e) => return Err(refuse(e.to_string())),
+        Err(e) => return Err(refuse(usage_message(&e))),
     };
     fix_evaluation_date(&cli).map_err(refuse)?;
     Ok(cli)
+}
+
+/// One sentence naming the argument the parser refused, built from the error's
+/// kind and context: the parser's own text carries a `Usage:` block and tips,
+/// and `describe` is where the inputs are listed.
+fn usage_message(e: &clap::Error) -> String {
+    use clap::error::ContextKind;
+    let ctx = |kind: ContextKind| e.get(kind).map(ToString::to_string);
+    let arg = ctx(ContextKind::InvalidArg);
+    let value = ctx(ContextKind::InvalidValue);
+    let named = |what: &str| match &arg {
+        Some(a) => format!("{what} '{a}'"),
+        None => what.to_string(),
+    };
+    match e.kind() {
+        ErrorKind::UnknownArgument => format!("unexpected argument {}", quoted(arg)),
+        ErrorKind::InvalidSubcommand => {
+            format!(
+                "unrecognized subcommand {}",
+                quoted(ctx(ContextKind::InvalidSubcommand))
+            )
+        }
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation
+            if value.as_deref().is_none_or(str::is_empty) =>
+        {
+            format!("{} needs a value", named("argument"))
+        }
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
+            let expected = ctx(ContextKind::ValidValue)
+                .filter(|v| !v.is_empty())
+                .map(|v| format!(" (expected one of: {v})"))
+                .unwrap_or_default();
+            format!(
+                "invalid value {} for {}{expected}",
+                quoted(value),
+                quoted(arg)
+            )
+        }
+        ErrorKind::MissingRequiredArgument => {
+            format!("missing required argument {}", arg.unwrap_or_default())
+        }
+        ErrorKind::MissingSubcommand | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => {
+            "a subcommand is required".to_string()
+        }
+        ErrorKind::ArgumentConflict => match ctx(ContextKind::PriorArg) {
+            Some(prior) => format!("{} cannot be used with '{prior}'", named("argument")),
+            None => format!("{} conflicts with another argument", named("argument")),
+        },
+        ErrorKind::NoEquals => format!("{} needs a value after '='", named("argument")),
+        ErrorKind::WrongNumberOfValues | ErrorKind::TooFewValues | ErrorKind::TooManyValues => {
+            format!("wrong number of values for {}", quoted(arg))
+        }
+        ErrorKind::InvalidUtf8 => "an argument is not valid UTF-8".to_string(),
+        _ => {
+            let text = e.to_string();
+            let first = text
+                .lines()
+                .map(str::trim)
+                .find(|l| !l.is_empty())
+                .unwrap_or("the arguments are not valid");
+            first.strip_prefix("error: ").unwrap_or(first).to_string()
+        }
+    }
+}
+
+fn quoted(value: Option<String>) -> String {
+    value.map_or_else(|| "(unnamed)".to_string(), |v| format!("'{v}'"))
 }
 
 /// Whether the first word of the command line that is not a flag (or a flag's

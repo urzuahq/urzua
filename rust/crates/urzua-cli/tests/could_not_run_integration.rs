@@ -50,13 +50,13 @@ fn run(dir: &Path, args: &[&str]) -> Output {
         .expect("urzua binary should run")
 }
 
-fn assert_not_run(out: &Output, error: &str, what: &str) {
+fn assert_not_run(out: &Output, error: &str, kind: &str, what: &str) {
     assert_eq!(out.status.code(), Some(2), "{what}: {out:?}");
     let json: serde_json::Value = serde_json::from_slice(&out.stdout)
         .unwrap_or_else(|e| panic!("{what}: stdout is not JSON ({e}): {out:?}"));
     assert_eq!(
         json,
-        serde_json::json!({ "status": "not-run", "error": error, "next_action": null, "next_action_reason": null, "next_action_inputs": [] }),
+        serde_json::json!({ "status": "not-run", "error": error, "error_kind": kind, "next_action": null, "next_action_reason": null, "next_action_inputs": [] }),
         "{what}"
     );
 }
@@ -87,7 +87,12 @@ fn every_command_that_reads_a_repository_exits_2_outside_one_observed_failing() 
         &["check", "docs/adr/ADR-1-x.md"][..],
         &["check", "docs"][..],
     ]) {
-        assert_not_run(&run(&dir, args), NEEDS_A_GIT_REPOSITORY, &args.join(" "));
+        assert_not_run(
+            &run(&dir, args),
+            NEEDS_A_GIT_REPOSITORY,
+            "environment",
+            &args.join(" "),
+        );
     }
 }
 
@@ -111,7 +116,7 @@ fn every_corpus_command_reports_a_missing_config() {
         .copied()
         .chain([&["new", "adr", "T"][..]])
     {
-        assert_not_run(&run(&dir, args), &error, &args.join(" "));
+        assert_not_run(&run(&dir, args), &error, "config", &args.join(" "));
     }
 }
 
@@ -141,7 +146,7 @@ fn every_corpus_command_reports_an_unreadable_tracked_record() {
     let error =
         "could not read 1 tracked record(s): docs/adr/ADR-1-x.md: Is a directory (os error 21)";
     for args in CORPUS_COMMANDS {
-        assert_not_run(&run(&dir, args), error, &args.join(" "));
+        assert_not_run(&run(&dir, args), error, "environment", &args.join(" "));
     }
 }
 

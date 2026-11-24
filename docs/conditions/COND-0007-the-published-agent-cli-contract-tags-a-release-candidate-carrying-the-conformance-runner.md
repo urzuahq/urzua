@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M85Q8VABJB05ZVFV262QP3PV
-Status: Open
+Status: Met
+Met-by: MILE-369
 ---
 # COND-0007 — the published agent CLI contract tags a release candidate carrying the conformance runner
 
@@ -15,3 +16,4 @@ Met when the published agent CLI contract tags a release candidate whose tree co
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-24 | Filed `Open`. **Why:** the plan to conform to contract 1.1 (`MILE-369`) needs a tag that carries the runner, and none does. | **substantive** |
+> | 2026-11-24 | Met by the release candidate `v1.1.0-rc.3` of the published agent CLI contract (commit `51ca7dc325f60e041f9925c59683101b87de5caf`): its tree contains the conformance runner (`scripts/conform.py`) and the seven schemas it checks, and `MILE-369` vendors the tag's schemas and records it in its revision log (`Met-by` is a record pointer, so it names `MILE-369`). **Why:** the Signal asks for a tag whose tree carries the runner, and `v1.1.0-rc.3` is the first. | **substantive** |

@@ -11,6 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::RecordTypeConfig;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{
     CouldNotRun, Failure, Notice, NoticeSeverity, ReportStatus, WaiveDraft, WaiveFindings,
     WaiveReport, WaiveStatus,
@@ -58,7 +59,7 @@ pub struct WaiveArgs {
 pub fn run(config_path: Option<PathBuf>, args: WaiveArgs) -> ExitCode {
     match execute(config_path, args) {
         Ok(report) => emit(&report),
-        Err(e) => emit(&CouldNotRun::from(e)),
+        Err(e) => emit(&CouldNotRun::new(FailureKind::Environment, e)),
     }
 }
 

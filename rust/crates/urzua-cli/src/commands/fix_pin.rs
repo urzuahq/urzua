@@ -16,7 +16,9 @@ use urzua_core::report::{ActionInput, AttestationReport, FixFailure, NextAction,
 use urzua_core::reverify::{apply_reverify, review_locators, FirstPin, ReverifyPlan};
 
 use super::evidence_log::{evidence_log, with_evidence_log, EvidenceLog, LogHistory};
-use super::fix::{refuse, repo_relative_ids, resolve_attestation, validate_reason, Refusal};
+use super::fix::{
+    refuse, refuse_usage, repo_relative_ids, resolve_attestation, validate_reason, Refusal,
+};
 use crate::emit;
 use crate::session::Session;
 
@@ -113,12 +115,12 @@ fn unknown_ids(ids: &[String], selected: &[&Record]) -> Vec<FixFailure> {
 
 pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<ExitCode, Refusal> {
     if (args.replace.is_some() || args.remove.is_some()) && args.ids.len() != 1 {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --pin --replace/--remove changes one record: name it with --ids <record>",
         ));
     }
     if args.replace.is_some() && args.remove.is_some() {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --pin takes --replace or --remove, not both",
         ));
     }

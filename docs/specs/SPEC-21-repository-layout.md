@@ -3,7 +3,7 @@ Version: '0.9'
 Date: 2026-09-19
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:Makefile@sha256:8ac4c5bd1ebd96dcb40aa74f83eb75eadd08fa800268c3f0003ac7bc5c6ea305
+Realized-by: code:Makefile@sha256:90e1f9eef6be263156c65ebc2fdc5d724c922b73e9109ca84928b6e4bec24509
 Author: beauwilliams
 Stable-Id: 01M2VNAMK7V28A67T84JZ5NZPP
 Subject: 'What each top-level directory holds, and the rules the root obeys -- the living counterpart to ADR-4''s decision to organize by language.'
@@ -100,3 +100,4 @@ the speculative reservation this spec exists to stop accumulating.
 > | 2026-11-16 | Bumped to `0.8`. The `scripts/` row names `install.sh` and `install-test.sh`, the release install script and its tests. **Why:** `MILE-217` adds a one-line installer that is fetched by release tag from `scripts/install.sh`, so the layout table has to say it lives there. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `Makefile` ccc04e61c2e3 -> 8ac4c5bd1ebd. Reason: Read the diff of the Makefile: it only adds the install-script-test target (runs scripts/install-test.sh), lists it in .PHONY and in the ci target's prerequisites; the targets that dispatch the layout this record describes are unchanged, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-17 | Bumped to `0.9`. Layout table: added `plugins/` and `.claude-plugin/`; the `.claude/` row no longer names hook scripts, since its hooks call the binary. **Why:** `MILE-339` moves the harness into the binary and `MILE-280` adds the Claude Code plugin and its marketplace entry at the root. | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `Makefile` 8ac4c5bd1ebd -> 90e1f9eef6be. Reason: Read the diff of Makefile against main. Makefile: adds the conform target with its CONFORM_BIN and CONFORM_SCHEMAS variables and lists it in .PHONY; no existing target changed. The claims each record cites are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

@@ -16,7 +16,10 @@ Two flags are accepted by every command:
 Every command prints one JSON object to stdout. Where a command has a `status`, it is one of the
 values listed for it. Exit code 0 means the command ran and nothing blocks, 1 means it ran and found
 something blocking, and 2 means it could not run (the report then has `"status": "not-run"` and an
-`error`). `urzua --help` lists the commands and `urzua <command> --help` lists the flags; the pages
+`error` and an `error_kind`). `error_kind` is `usage` (the arguments were wrong; `error` names the
+argument in one sentence, with no usage block), `config` (the configuration could not be read or is
+invalid), `environment` (something outside the tool is missing: a repository, a file, a program) or
+`internal` (the tool failed; a panic reports this way, under `error`). `urzua --help` lists the commands and `urzua <command> --help` lists the flags; the pages
 below were written from that output.
 
 Every report also carries `next_action`, `next_action_reason` and `next_action_inputs`, on every command and on a `not-run`

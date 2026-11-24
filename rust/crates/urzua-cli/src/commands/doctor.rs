@@ -7,6 +7,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, NextAction, Notice, Report};
 
 use super::hooks::{self, invokes_urzua, HookState};
@@ -204,7 +205,7 @@ impl DoctorCheck {
 pub fn run(config: Option<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
     };
 
     let mut checks = Vec::new();

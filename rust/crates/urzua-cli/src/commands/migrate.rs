@@ -402,6 +402,7 @@ fn run_config_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
         let v = urzua_core::schema_version::SchemaVersionError::new(found);
         return Err(Failure {
             message: v.to_string(),
+            kind: Some(urzua_core::report::FailureKind::Config),
             schema_version: Some(Box::new(v)),
             next: None,
         });

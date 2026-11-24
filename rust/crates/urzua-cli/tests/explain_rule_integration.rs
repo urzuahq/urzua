@@ -297,7 +297,12 @@ fn explain_with_neither_a_path_nor_a_rule_is_a_usage_error() {
     assert_eq!(out.status.code(), Some(2));
     let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let text = report["error"].as_str().unwrap();
-    assert!(text.contains("urzua explain --rule <RULE_ID>"), "{text}");
+    assert!(
+        text.contains("<PATH>"),
+        "names the missing argument: {text}"
+    );
+    assert_eq!(report["error_kind"], "usage", "{report}");
+    assert!(!text.contains("Usage:"), "{text}");
 }
 
 /// The unit a rule declares is the unit it reports: every rule this

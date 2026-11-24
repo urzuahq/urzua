@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::header::{self, HeaderShape};
+use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, Notice, NoticeSeverity, Report, ReportStatus};
 
 use crate::discovery::find_repo_root;
@@ -1393,7 +1394,7 @@ impl InitContext<'_> {
 pub fn run(config: Option<PathBuf>, args: InitArgs) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
     };
 
     // `--config X` names the file to write (SPEC-5); only the default location
@@ -1406,7 +1407,7 @@ pub fn run(config: Option<PathBuf>, args: InitArgs) -> ExitCode {
     // it: it shows what adopt would propose today. Greenfield decides for itself,
     // since a re-run that would write the same config is a no-op.
     if config_exists && !dry_run && args.types.is_empty() {
-        return emit(&CouldNotRun::from(format!(
+        return emit(&CouldNotRun::new(FailureKind::Environment, format!(
             "{} already exists -- refusing to overwrite. Edit it directly, or remove it to re-run adopt.",
             config_path.display()
         )));
@@ -1414,7 +1415,7 @@ pub fn run(config: Option<PathBuf>, args: InitArgs) -> ExitCode {
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root, None) {
         Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e.to_string())),
     };
     let ctx = InitContext {
         repo_root: &repo_root,
@@ -1448,17 +1449,17 @@ fn run_adopt(ctx: &InitContext, dir: Option<&Path>) -> ExitCode {
         Ok(pair) => pair,
         Err(ProposeError::NothingToAdopt(why)) => {
             if config_exists || !crate::commands::init_greenfield::can_prompt() {
-                return emit(&CouldNotRun::from(why).with_next_action(
+                return emit(&CouldNotRun::new(FailureKind::Environment, why).with_next_action(
                         GREENFIELD_COMMAND,
                         "no record directory to adopt; greenfield mode writes a config for the types --types names",
                     ));
             }
             return crate::commands::init_greenfield::run_interactive(ctx, dir);
         }
-        Err(e) => return emit(&CouldNotRun::from(e.message())),
+        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e.message())),
     };
     if dir.is_some() {
-        return emit(&CouldNotRun::from(
+        return emit(&CouldNotRun::new(FailureKind::Usage,
             "--dir sets the layout root for greenfield mode and adopt reads the directories that exist; pass --types to select record types, or drop --dir",
         ));
     }
@@ -1471,7 +1472,7 @@ fn run_adopt(ctx: &InitContext, dir: Option<&Path>) -> ExitCode {
     // Whatever was proposed, the file written must load: a config `init` calls
     // ready that `check` then refuses is the worst outcome adopt can have.
     if let Err(e) = urzua_core::config::parse(&rendered) {
-        return emit(&CouldNotRun::from(format!(
+        return emit(&CouldNotRun::new(FailureKind::Internal, format!(
             "adopt generated a config that does not load ({e}); this is a bug in `urzua init`, nothing was written"
         )));
     }
@@ -1491,7 +1492,7 @@ fn run_adopt(ctx: &InitContext, dir: Option<&Path>) -> ExitCode {
     }
 
     if let Err(why) = write_config(repo_root, config_path, explicit_config, &rendered) {
-        return emit(&CouldNotRun::from(why));
+        return emit(&CouldNotRun::new(FailureKind::Environment, why));
     }
 
     emit(&InitReport {

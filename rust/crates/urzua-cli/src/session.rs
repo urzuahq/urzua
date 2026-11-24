@@ -10,6 +10,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::Config;
 use urzua_core::record::Record;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, Failure};
 use urzua_io::DiscoveredFiles;
 
@@ -156,6 +157,6 @@ impl Session {
 pub(crate) fn emit_or_not_run(result: Result<ExitCode, Failure>) -> ExitCode {
     match result {
         Ok(code) => code,
-        Err(e) => emit(&CouldNotRun::from(e)),
+        Err(e) => emit(&CouldNotRun::new(FailureKind::Environment, e)),
     }
 }

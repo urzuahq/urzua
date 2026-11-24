@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.194'
+Version: '0.195'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:4299b921cd08f47a2f918bfa9888875787e90ca84255d470fccf2a968aa2c34b, code:rust/crates/urzua-core/src/rules.rs@sha256:960c264aaba685079377199b706a84320b0c402c052e6f891303bbb746dd504e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:2dfb5060f1e8bc86c9f8c3354435112c5519203e560609a9619bc83415c4c2d6, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:2e53a696df85d4e99d6975a9cba537269cd77f5443462230872392a5c260e614, code:rust/crates/urzua-core/src/rules.rs@sha256:960c264aaba685079377199b706a84320b0c402c052e6f891303bbb746dd504e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:2dfb5060f1e8bc86c9f8c3354435112c5519203e560609a9619bc83415c4c2d6, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -301,7 +301,7 @@ left in its place, so that a later edit to the moved copy changed the record's s
 **No git repository**: there is no fallback. A directory walk has the failure mode above, so discovery is
 the tracked set or nothing. Outside a git repository, every command that reads one (`check`, `audit`,
 `explain`, `graph`, `export`, `fix`, `index`, `refs`, `migrate`, `init`, `doctor`, `new`) exits 2 with
-`{"status":"not-run","error":"urzua needs a git repository: ..."}` (`BUG-170`), whether or not a config and records
+`{"status":"not-run","error":"urzua needs a git repository: ...","error_kind":"environment"}` (`BUG-170`; `error_kind` is `config` for a configuration that cannot be read or is invalid, `usage` for a wrong argument or an unknown `--rules` id, and `internal` for a failure of the tool, as `SPEC-1` states), whether or not a config and records
 sit on disk. `rules` prints the static rule table and reads no repository, so it runs anywhere. The
 `scope.source` table has no directory-walk value for the same reason.
 
@@ -1710,3 +1710,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-21 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 31ada9b4a0e8 -> c5138779e78f. Reason: BUG-213: load_renamed_paths reads a deleted record's merge-base copy through Record::parse_declared with the governing type's declared document model instead of YAML header::parse, so a prefix-lines rename pairs by Stable-Id; nothing else in check.rs changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-23 | Bumped to `0.194`. `check`'s report gains `examined`, an object of per-unit counts (`files`, equal to `files_examined`), added beside `files_examined`, which stays; a `not-run` report that could not start prints neither, and one that started prints both at `0`. **Why:** `MILE-358` and `ADR-106`: a consuming gate reads `examined` directly, and the maintainer accepted on 2026-11-23 that "the shared contract is urzua's existing shape, and urzua conforms by addition only". | **substantive** |
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c5138779e78f -> 4299b921cd08. Reason: Read the diff of check.rs: run_opened fills CheckReport.examined from files_examined; nothing else in the run path changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.195`. A `check` run that could not start names the kind of cause in `error_kind` (`usage`, `config`, `environment` or `internal`), beside `error`; nothing else about the report changes. **Why:** `MILE-365`, piece of conforming to the published agent CLI contract 1.1; `SPEC-1` states the key. | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 4299b921cd08 -> 2e53a696df85. Reason: Read the diff of rust/crates/urzua-cli/src/commands/check.rs against main. rust/crates/urzua-cli/src/commands/check.rs: the CouldNotRun emitter names environment as the fallback and unknown_rule_failure builds its failures with usage kind; nothing else changed. The claims each record cites are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::NewDecl;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{
     CouldNotRun, NewReport, Notice, NoticeSeverity, PullRefsReport, ReportStatus, SkippedNumber,
     SkippedReason,
@@ -19,7 +20,7 @@ use crate::session::Workspace;
 use crate::{emit, NOTICE_IDENTITY};
 
 fn fail(message: impl Into<String>) -> ExitCode {
-    emit(&CouldNotRun::from(message.into()))
+    emit(&CouldNotRun::new(FailureKind::Environment, message.into()))
 }
 
 pub fn run(
@@ -34,7 +35,7 @@ pub fn run(
         config,
     } = match Workspace::open(&[], config_path) {
         Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
     };
 
     let type_config = match lookup_record_type(&config, &record_type, &config_path) {

@@ -33,7 +33,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::harness::{HarnessDecl, GUARDRAILS};
-use urzua_core::report::{CouldNotRun, Notice, NoticeSeverity, Report};
+use urzua_core::report::FailureKind;
+use urzua_core::report::{CouldNotRun, Failure, Notice, NoticeSeverity, Report};
 
 use crate::emit;
 use crate::session::Workspace;
@@ -71,6 +72,9 @@ struct HarnessReport {
     items: Vec<Item>,
     /// Guardrails the repository turned on that no chosen adapter can wire, and
     /// keys the build does not know: reported, never skipped.
+    /// Set with `status` `not-run`: why the run refused (the published agent CLI contract).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error_kind: Option<FailureKind>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     problems: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -101,6 +105,7 @@ impl HarnessReport {
             adapters,
             items: Vec::new(),
             problems: Vec::new(),
+            error_kind: None,
             notices: Vec::new(),
             registration: Vec::new(),
             exit: 0,
@@ -128,8 +133,19 @@ impl HarnessReport {
     /// The run changed nothing because it refused.
     fn refuse(mut self, why: String) -> Self {
         self.status = "not-run";
+        self.error_kind = Some(FailureKind::Environment);
         self.exit = 2;
         self.problems.push(why);
+        self
+    }
+
+    /// A refusal because the request itself was wrong.
+    fn refuse_usage(self, why: String) -> Self {
+        self.refuse(why).with_kind(FailureKind::Usage)
+    }
+
+    fn with_kind(mut self, kind: FailureKind) -> Self {
+        self.error_kind = Some(kind);
         self
     }
 
@@ -390,8 +406,8 @@ fn save_settings(root: &Path, rel: &str, s: &Settings) -> Result<(), String> {
     write(root, rel, &out)
 }
 
-fn open(config: Option<PathBuf>) -> Result<Env, String> {
-    let ws = Workspace::open(&[PathBuf::from(".")], config).map_err(|e| e.message)?;
+fn open(config: Option<PathBuf>) -> Result<Env, Failure> {
+    let ws = Workspace::open(&[PathBuf::from(".")], config)?;
     if let Some(h) = &ws.config.harness {
         limits::activate(&h.limits);
     }
@@ -402,8 +418,8 @@ fn open(config: Option<PathBuf>) -> Result<Env, String> {
     })
 }
 
-fn not_run(message: impl Into<String>) -> ExitCode {
-    emit(&CouldNotRun::from(message.into()))
+fn not_run(message: impl Into<Failure>) -> ExitCode {
+    emit(&CouldNotRun::new(FailureKind::Environment, message))
 }
 
 fn load_lock(env: &Env) -> Result<Option<Lock>, String> {
@@ -522,7 +538,7 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
     }
     let (unknown, unprovided) = harness_problems(env, &adapters);
     if !unknown.is_empty() {
-        return report.refuse(unknown.join("; "));
+        return report.refuse_usage(unknown.join("; "));
     }
     let want = match desired(env, &adapters) {
         Ok(w) => w,

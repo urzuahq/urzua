@@ -13,6 +13,7 @@ use urzua_core::config::{Config, DriftPolicy, RuleLevel};
 use urzua_core::fix::{revision_log_refusal, ActorKind, Attestation, PinRead};
 use urzua_core::locator::Locator;
 use urzua_core::record::Record;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{
     census, CouldNotRun, FixStatus, Notice, Outcome, Population, PopulationUnit,
 };
@@ -25,8 +26,8 @@ use urzua_core::rules::{self, ClaimExpiredOpts, ClaimSkip};
 
 use crate::commands::fix::{
     back_pointer_evidence, excused_evidence_notice, identity_notices, into_failures, refuse,
-    repo_relative_ids, resolve_attestation, rule_enabled, validate_reason, Refusal,
-    ResolvedAttestation,
+    refuse_config, refuse_usage, repo_relative_ids, resolve_attestation, rule_enabled,
+    validate_reason, Refusal, ResolvedAttestation,
 };
 use crate::discovery::{ClaimMeasures, DriftedRecords};
 use crate::emit;
@@ -56,7 +57,8 @@ struct Reviewed {
 }
 
 pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
-    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from(e)))
+    run_checked(config_path, args)
+        .unwrap_or_else(|e| emit(&CouldNotRun::new(FailureKind::Environment, e)))
 }
 
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
@@ -78,7 +80,7 @@ fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<E
             .map_err(|e| refuse(format!("urzua reverify --apply: {e}")))?;
     }
     if !rule_enabled(&config, rules::RULE_EMBODIMENT_CLAIM_EXPIRED) {
-        return Err(refuse(
+        return Err(refuse_config(
             "urzua reverify renews the claims that embodiment.claim-expired judges, and that rule is off or undeclared in the configuration: declare it (ADR-97) first",
         ));
     }
@@ -285,7 +287,7 @@ fn apply_batch(
         mut failed,
     } = batch;
     if force && reviewed.len() > 1 {
-        return Err(refuse(format!(
+        return Err(refuse_usage(format!(
             "urzua reverify --force is refused when it selects more than one record ({} selected): it lifts max_batch for a single record and never batches",
             reviewed.len()
         )));
@@ -318,7 +320,7 @@ fn apply_batch(
 /// they are reported; the validated `--reason` (empty when none applies).
 fn check_usage(args: &ReverifyArgs) -> Result<String, Refusal> {
     if args.apply && args.ids.is_empty() && !args.force {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua reverify --apply: pass --ids <record,...> or --force (never the default)",
         ));
     }
@@ -328,7 +330,7 @@ fn check_usage(args: &ReverifyArgs) -> Result<String, Refusal> {
             || args.reason.is_some()
             || args.actor != ActorKind::Unspecified)
     {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua reverify --force, --by, --actor and --reason belong to --apply: without it nothing is written, so they would be ignored (--ids alone narrows the review)",
         ));
     }

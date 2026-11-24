@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.56'
+Version: '0.57'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -260,8 +260,16 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 - **`--help`/`--version` are the one stated plain-text exception** — clap's own output, never
   JSON-wrapped, matching `cargo`'s own convention that help/version generation is never gated behind
   a machine-format flag.
+- **A `not-run` report carries `error_kind`** (the published agent CLI contract's key): `usage`, `config`,
+  `environment` or `internal`. Every `CouldNotRun` is built with a kind, so one without does not compile; a
+  failure that knows its own kind (a configuration that cannot be read, a wrong argument) keeps it, and the
+  site that emits the report names the kind of one that does not. The `harness` and `hooks` reports that print
+  `"status": "not-run"` with `problems` carry the key too. A usage error's `error` is one sentence naming the
+  argument, built from the parser's error kind and context, with no `Usage:` block and no line break. A run
+  that examined nothing and says `not-run` for that reason is not an error and carries no `error_kind`.
 - **A `std::panic::set_hook` covers the one gap `Report`/`emit()` can't reach**: an unexpected panic
-  prints a minimal ad hoc JSON object to stdout before the process exits, instead of Rust's default
+  prints a minimal ad hoc JSON object to stdout, with the text under `error` (not `panic`) and `error_kind`
+  `internal`, before the process exits 2, instead of Rust's default
   raw-text-to-stderr behavior. Not routed through `Notice`/`Report` — a panic is a lower-level escape
   hatch, not another instance of the five-command contract.
 
@@ -477,3 +485,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-541) f08b2cd956eb -> 57344b8c2562. Reason: main.rs#Command: the Board variant gained one boolean flag, --prompt (conflicts with --serve and --out, prints a JSON answer and writes no file); the spec defers the board's surface to docs/reference/board.md, which now documents it, and no other variant changed, so the command surface the spec states still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Bumped to `0.56`. The description of `state_disagrees_with_children` names the rule `status.children-agreement` (SPEC-2) that reports the same two cases and says a `dropped` record never disagrees; the key's meaning is unchanged. **Why:** an adopting repository ran a script over the export to fail on this key because `check` had no rule for it. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-551) 57344b8c2562 -> 564b30f48e0f. Reason: `board`'s `--port` and `--allowed-host` arguments gain `conflicts_with = "prompt"`; nothing else in `Command` changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.57`. A `not-run` report gains `error_kind` (`usage`, `config`, `environment` or `internal`); a usage error's `error` names its argument without the parser's `Usage:` block; the panic report prints its text under `error`, not `panic`, with `error_kind` `internal`. The `panic` key is replaced, as `MILE-365` says; no other key is renamed or removed. **Why:** `MILE-365`, one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted: "I accept RFC, and yes allow option can be outside rule" (the contract's RFC-4, revision row of 2026-11-24). | **substantive** |

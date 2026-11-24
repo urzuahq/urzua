@@ -18,6 +18,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel, RuleSetting};
 use urzua_core::refs_snapshot::RefsSnapshot;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{BaselineInfo, DetailValue, Failure};
 use urzua_core::report::{
     CheckReport, CouldNotRun, DiffScope, Finding, FindingSeverity, Notice, NoticeSeverity,
@@ -447,7 +448,7 @@ pub struct CheckArgs {
 pub fn run(config_path: Option<PathBuf>, args: CheckArgs) -> ExitCode {
     match execute(config_path, args) {
         Ok(report) => emit(&report),
-        Err(e) => emit(&CouldNotRun::from(e)),
+        Err(e) => emit(&CouldNotRun::new(FailureKind::Environment, e)),
     }
 }
 
@@ -491,10 +492,12 @@ fn validate_selection(
 fn unknown_rule_failure(requested: &[String], id: &str) -> Failure {
     let Some(nearest) = urzua_core::harness::nearest_name(id, rules::ALL_RULES.iter().copied())
     else {
-        return format!(
-            "urzua check --rules: '{id}' is not a rule this build ships (`urzua rules` lists them)"
-        )
-        .into();
+        return Failure::of(
+            FailureKind::Usage,
+            format!(
+                "urzua check --rules: '{id}' is not a rule this build ships (`urzua rules` lists them)"
+            ),
+        );
     };
     let corrected: Vec<&str> = requested
         .iter()
