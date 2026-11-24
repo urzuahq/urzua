@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.79'
+Version: '0.80'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:e7577259ef4e79b7507e488f9ac6bceabd644810757f3020805f64749972f5f3, code:rust/crates/urzua-core/src/fix.rs@sha256:c8c3ad750b4ff30be5b5323be74f8bc014179ea9a8ea1f383f454304f7f95e0b, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:ac8cb61dec86e05f89e4e58ba45e4d6d90822868859a6d5142c2f5ba38e96e7e, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:e7577259ef4e79b7507e488f9ac6bceabd644810757f3020805f64749972f5f3, code:rust/crates/urzua-core/src/fix.rs@sha256:c8c3ad750b4ff30be5b5323be74f8bc014179ea9a8ea1f383f454304f7f95e0b, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:099021e54fce321134ac84e9d973e256225a11264cdcfa9f93ba03e54952974b, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -730,9 +730,10 @@ It works on any record of any type and status; no expiry period is needed.
 - `urzua fix --pin --apply --ids <record,...> --actor agent --reason '<why this evidence carries the claim>'` pins them
   and appends a `Pinned` row naming each locator and its hash.
 - `--replace OLD=NEW` (one record) moves a pin to another locator, a new scope or a renamed file: `OLD` is the pinned
-  locator as `path` or `path#scope`, `NEW` the locator that replaces it (optionally `code:` or `test:`), hashed now. The
+  locator as `path` or `path#scope`, prefixed with its tier (`code:`, `test:`) when the record cites it in more than one
+  (a bare `OLD` that matches two tiers is refused, naming both), `NEW` the locator that replaces it (optionally `code:` or `test:`), hashed now. The
   row names the old locator and hash and the new locator and hash, in full.
-- `--remove OLD` (one record) removes a pinned locator from the evidence, with a row naming it and its hash. A record's
+- `--remove OLD` (one record), `OLD` named as for `--replace`, removes a pinned locator from the evidence, with a row naming it and its hash. A record's
   only locator is removed by hand.
 
 Each write takes `--reason` (held to `attestation.reason`), an identity and `--actor`, takes the fix lock, re-reads the
@@ -906,3 +907,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-22 | Bumped to `0.78`. A re-pin keeps a scope's member kind suffix (`Type::name[fn]`) as written, and a scope naming a kind no member entry declares is refused like any unresolved scope. **Why:** `MILE-352` / `ADR-74` amendment of 2026-11-22, chosen by the maintainer (2026-11-22, AskUserQuestion answer to the orchestrating agent): question "MILE-352: ... How should a locator tell them apart? Any grammar change is an ADR-74 amendment you'd accept.", answer "Declared kind suffix (Recommended)". | **substantive** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 07c6e30fd14e -> e7577259ef4e, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` c566717e9a27 -> ac8cb61dec86. Reason: Read the diff of each file against origin/main: fix.rs passes the pending-listing remedy as words instead of a string; the json helper checks every report agrees with its argv and the heading action is asserted as an sh -c command. The cited behavior is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-24 | Bumped to `0.79`. Corrects two statements to match the code: the no-body `next_action` is an `sh -c` command, not a `printf`, and the `--pin --apply` form shows its `--reason` placeholder single-quoted, as `next_action` prints it. No behaviour changes. **Why:** review of the pull request for `MILE-367`, which builds every `next_action` from a list of words. | **structural** |
+> | 2026-11-24 | Bumped to `0.80`. `fix --pin --replace OLD=NEW` and `--remove OLD` accept `OLD` with its tier (`code:X`, `test:X`); a bare `OLD` that matches citations in two tiers is refused naming both, instead of a false "pinned at more than one hash". **Why:** `BUG-230`, the `pin-removed` finding for a dropped `test:` copy beside its `code:` copy named a command that refused to run. | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` ac8cb61dec86 -> 099021e54fce. Reason: Read the diff of fix_rebaseline_integration.rs: it gains one test, fix_pin_removes_one_tier_of_a_file_cited_in_two_observed_failing, for --remove naming a tier; the existing tests are unchanged and the spec's claims about them still hold. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

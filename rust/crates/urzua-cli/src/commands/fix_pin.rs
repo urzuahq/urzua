@@ -394,8 +394,13 @@ fn pinned_entry(record: &Record, config: &Config, name: &str) -> Result<PinnedEn
         urzua_core::config::RelationRole::EmbodimentLocator,
     );
     let text = urzua_core::rules::evidence_text(record, field).unwrap_or_default();
+    let (tier, name) = match name.split_once(':') {
+        Some((c, rest)) if urzua_core::locator::CATEGORIES.contains(&c) => (Some(c), rest),
+        _ => (None, name),
+    };
     let found: Vec<PinnedEntry> = urzua_core::locator::realized_by_locators(&text)
         .into_iter()
+        .filter(|e| tier.is_none_or(|t| t == e.category))
         .filter_map(|e| {
             let l = e.parsed.ok()?;
             match (&l.anchor, l.display() == name) {
@@ -410,6 +415,7 @@ fn pinned_entry(record: &Record, config: &Config, name: &str) -> Result<PinnedEn
         .collect();
     match found.first() {
         Some(e) if found.iter().all(|f| f == e) => Ok(e.clone()),
+        Some(e) if found.iter().any(|f| f.category != e.category) => Err(format!("'{name}' is cited in more than one tier: name the one to change as `code:{name}` or `test:{name}`")),
         Some(_) => Err(format!("'{name}' is pinned at more than one hash: re-pin with `urzua fix --rebaseline` first")),
         None => Err(format!("the record has no pinned locator '{name}' (name it as `path` or `path#scope`, without the pin)")),
     }
