@@ -275,7 +275,9 @@ fn unpaired(base: &[Pin], head: &[Pin]) -> (Vec<usize>, Vec<usize>) {
 /// pins left at one locator are compared in order: a base pin and a head pin
 /// left at the same locator are a change (so a current hash copied over a stale
 /// one is reported), a head pin left alone was added and a base pin left alone
-/// was removed. A citation added or removed without a pin is not judged.
+/// was removed. A base pin left alone whose locator and hash the head still
+/// pins was a duplicate the head collapsed, so the evidence is unchanged. A
+/// citation added or removed without a pin is not judged.
 fn unattested(base: &[Pin], head: &[Pin], events: &[Event]) -> Vec<Problem> {
     let (b_left, h_left) = unpaired(base, head);
     let mut out = Vec::new();
@@ -316,7 +318,11 @@ fn unattested(base: &[Pin], head: &[Pin], events: &[Event]) -> Vec<Problem> {
     for j in b_pool {
         let locator = &base[j].locator;
         let b = base[j].hash.as_deref().unwrap_or_default();
-        if removed_ok(events, locator, b) {
+        if removed_ok(events, locator, b)
+            || head
+                .iter()
+                .any(|p| p.locator == *locator && p.hash == base[j].hash)
+        {
             continue;
         }
         let what = if head.iter().any(|p| p.locator == *locator) {
@@ -590,6 +596,34 @@ mod tests {
         assert!(
             unattested(&base, &plain, &[]).is_empty(),
             "an unpinned locator is not judged"
+        );
+    }
+
+    #[test]
+    fn a_collapsed_duplicate_pin_is_not_a_removal_observed_failing() {
+        let base = occ(&[("src/a.rs", Some(A)), ("src/a.rs", Some(A))]);
+        let collapsed = occ(&[("src/a.rs", Some(A))]);
+        assert!(unattested(&base, &collapsed, &[]).is_empty());
+        let mut moved_site = collapsed.clone();
+        moved_site[0].in_item = true;
+        assert!(unattested(&base, &moved_site, &[]).is_empty());
+        assert_eq!(
+            variants(unattested(&base, &occ(&[("src/u.rs", None)]), &[])),
+            ["pin-removed", "pin-removed"]
+        );
+        assert_eq!(
+            variants(unattested(&base, &occ(&[("src/a.rs", Some(B))]), &[])),
+            ["pin-changed-unattested", "pin-removed"]
+        );
+        assert_eq!(
+            variants(unattested(&base, &occ(&[("src/a.rs#f", Some(A))]), &[])),
+            ["pin-added-unattested", "pin-removed", "pin-removed"]
+        );
+        let two = occ(&[("src/a.rs", Some(A)), ("src/a.rs", Some(B))]);
+        assert_eq!(variants(unattested(&two, &collapsed, &[])), ["pin-removed"]);
+        assert_eq!(
+            variants(unattested(&collapsed, &base, &[])),
+            ["pin-added-unattested"]
         );
     }
 
