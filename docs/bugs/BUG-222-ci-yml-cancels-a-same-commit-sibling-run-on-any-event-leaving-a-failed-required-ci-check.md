@@ -67,6 +67,10 @@ diffs against `github.event.pull_request.base.ref`. Also change alongside it, in
   waits replaces the waiting run, which is cancelled before it starts. Whether that leaves a failed required
   `ci` is unverified; if it does, a group key that includes the event action for non-`synchronize` runs avoids it.
 
+## Observation (2026-11-24): a third same-commit event may replace the pending run
+
+A sibling repository was observed once with the case the caveat above leaves unchecked: a third event for one commit replaced the run waiting in the group. The replaced run showed `cancelled` with zero jobs and posted no `ci` check, and the head commit carried one green `ci`. This is one observation, not proof: it was not reproduced, and whether the missing check blocks a required-check ruleset is not shown here. It bears on the proposed edit, whose `cancel-in-progress` is false for every event but a new commit: with that edit, a third event can still replace the waiting run, so the group key that includes the event action (the fallback the caveat names) is worth deciding before the edit is applied.
+
 ## References
 
 - `.github/workflows/ci.yml` (lines 12-23, 184-199), `knope.toml` (the `gh pr edit release --add-label no-changeset` step), `docs/specs/SPEC-20-ci-cd-pipeline.md`, `BUG-223`, `ADR-95`.
@@ -75,3 +79,4 @@ diffs against `github.event.pull_request.base.ref`. Also change alongside it, in
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-24 | Added the section `Observation (2026-11-24)`: one observation from a sibling repository of a third same-commit event replacing the pending run (cancelled, zero jobs, no `ci` check posted, head commit carrying one green `ci`). Nothing else changed and `Status` stays `Open`. **Why:** the earlier caveat said whether a replaced waiting run leaves a failed required `ci` was unverified; this is a first data point, and a single one. | **structural** |
