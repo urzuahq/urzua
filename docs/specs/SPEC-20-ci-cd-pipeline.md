@@ -2,9 +2,9 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.github/workflows/ci.yml@sha256:d967686a97628663a0fcd754ce5da6e83f38a374d9f784fa7f06d9af26f67563, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30, code:.github/actions/install-knope/action.yml@sha256:7890ed184b08dbc99d465a61b46f6bef28ea8fd37a2eba69f05484c44ee3826b, test:.github/scripts/knope-pin.test.sh@sha256:2c13f4fc3ca389b738f6f0a913e45696023f38236868bae27d5a9a352ad40a8d, test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f, test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381, test:.github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c56c6483e31d10e31ce44b29db039518446a3f305a1f1f4a2bce9d, test:.github/actions/urzua-gate/test.sh@sha256:41938df777f1c21826b2ace086817f00e23a9fff71bf1de07c49f4cb897d6325, code:scripts/install.sh@sha256:beaaf0ac9f236ab8b3c586fa602d7f0780339e3ef1772f9b307a22ed622b12f2, test:scripts/install-test.sh@sha256:cd8b216d2a197c9e9e18585fae8f55730e2c83c1ae2c608efaa18e2c491e37f1
+Realized-by: code:.github/workflows/ci.yml@sha256:d7e1bf9840e867dfa7246e3cd261ddf2e4cd1914cb239d63b8f380ac4379d6de, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30, code:.github/actions/install-knope/action.yml@sha256:7890ed184b08dbc99d465a61b46f6bef28ea8fd37a2eba69f05484c44ee3826b, test:.github/scripts/knope-pin.test.sh@sha256:2c13f4fc3ca389b738f6f0a913e45696023f38236868bae27d5a9a352ad40a8d, test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f, test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381, test:.github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c56c6483e31d10e31ce44b29db039518446a3f305a1f1f4a2bce9d, test:.github/actions/urzua-gate/test.sh@sha256:41938df777f1c21826b2ace086817f00e23a9fff71bf1de07c49f4cb897d6325, code:scripts/install.sh@sha256:beaaf0ac9f236ab8b3c586fa602d7f0780339e3ef1772f9b307a22ed622b12f2, test:scripts/install-test.sh@sha256:cd8b216d2a197c9e9e18585fae8f55730e2c83c1ae2c608efaa18e2c491e37f1
 Date: 2026-09-10
-Version: '0.25'
+Version: '0.26'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -24,11 +24,16 @@ here is a `record_type`; this is process, realized entirely in `.github/workflow
 
 ## `ci.yml` and `checks.yml` — the PR/push gate
 
-`ci.yml` runs on `pull_request` (`opened`, `synchronize`, `reopened`, `labeled`, `unlabeled`, `edited`),
-`merge_group`, `push` to `main` and `workflow_dispatch`. It is deliberately unfiltered (no
+`ci.yml` runs on `pull_request` (`opened`, `synchronize`, `reopened`, `labeled`, `unlabeled`),
+`merge_group` and `push` to `main`. `edited` is not listed, so a title or body edit starts no run and
+neither does a base-branch change (push a commit to re-check), and there is no `workflow_dispatch`: a manual
+run on a PR branch lands in its own concurrency group and can post a green `ci` over a failed changeset
+gate (`BUG-223`). It is deliberately unfiltered (no
 `branches:`/`paths:` restriction) — a filtered required check can fail to report on a PR that doesn't
 touch the filtered paths, deadlocking a merge that requires it. Its concurrency group is per ref and
-cancels a superseded run, except on a push to `main`, whose run always finishes.
+only a new commit on a pull request (`synchronize`) cancels the run in it, so a second event for the same
+commit, such as a label, never cancels a correct run (`BUG-222`); a push to `main` is never cancelled, so
+its run always finishes.
 
 The required check is the aggregate job **`ci`**. It `needs` every other job, runs `if: always()`, and
 runs `ci-gate.sh`, which fails when any of them failed, was cancelled or was skipped; the one allowed
@@ -101,8 +106,9 @@ nested inside a called workflow have unstable names (`ADR-95`).
   adopter uses (checksum and attestation verified), run over this repository's corpus as of that release
   tag. Its version, sha256 and ref are bumped together by hand when a release is cut.
 
-Concurrency is workflow-level, so a new commit cancels the whole superseded run, including on a PR title
-or body edit (`edited`).
+Concurrency is workflow-level, so a new commit on a pull request cancels the whole superseded run, and no
+other event does. Whether a third event for one commit, queued behind a running and a waiting run, replaces
+the waiting run and leaves a failed required `ci` is unverified.
 
 - **The install script** (`scripts/install.sh`, `MILE-217`) is how a user installs a release: it maps the
   platform to one of the two published targets, downloads `urzua-<target>.tar.gz` over https, and installs
@@ -311,3 +317,5 @@ replays the original payload.
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `scripts/install-test.sh` 7775c1f4517b -> deea59418d7d. Reason: scripts/install-test.sh gained a check that fails when a documented install command pipes a download into a shell; no installer behaviour or existing scenario changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `scripts/install-test.sh` deea59418d7d -> 23a366374a00. Reason: scripts/install-test.sh: the no-pipe scan's regex also matches a pipe into sudo and into a path-qualified or dash/zsh shell; no other line changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `scripts/install-test.sh` 23a366374a00 -> cd8b216d2a19. Reason: scripts/install-test.sh: the no-pipe scan also matches a pipe continued onto the next line, with a comment saying why a bare trailing pipe is not matched; no other line changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.26`. `ci.yml` no longer lists `edited` or `workflow_dispatch`, and only a new commit on a pull request cancels a run; a push to `main` is never cancelled and a base-branch change starts no run. **Why:** `BUG-222` (a same-commit sibling event cancelled a correct run, leaving a failed required `ci`) and `BUG-223` (a manual run could leave a green `ci` over a failed changeset gate); this spec described the pre-fix triggers. | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` d967686a9762 -> d7e1bf9840e8. Reason: ci.yml: the pull_request types drop edited, workflow_dispatch is removed, and cancel-in-progress is true only for a pull_request synchronize event, with comments updated; no job, step or gate script changed, so the claim about the jobs this record cites still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
