@@ -457,7 +457,7 @@ urzua describe
 
 Every command that runs, with its arguments (`name`, `kind`, `type`, `required`, `repeatable`,
 `means` and the relations between them), its profile, whether it is safe to run, and what it reads on
-standard input; also the options every command accepts, the environment variables urzua reads and its
+standard input; also the environment variables urzua reads and its
 configuration file. It is not a report: it has no `status` and exits 0. It reads no configuration.
 [`describe`](describe.md) has every key.
 

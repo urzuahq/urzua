@@ -38,8 +38,8 @@ no configuration and no records, so it answers in any directory.
 | `scopes` | `paths` for a command that takes record paths, `base-ref` for `check --base`. |
 | `metrics` | `files` for `check` and `audit`, the count in their `examined`. |
 | `args` | Each argument: `name` (`--base`, or a positional's name), `kind` (`flag`, `option` or `positional`), `type` (`string`, `integer` or `path`; a flag has none), `required`, `repeatable`, `means`, and where they apply `values`, `format` (`date` for `YYYY-MM-DD`), `conflicts_with`, `requires` and `after_separator`. |
-| `stdin` | `null`, or `{format, means}` for a command that reads standard input: `check` and `fix` with `--stdin-path`, `init` on a terminal, and the exempt commands. |
-| `example` | For a safe command that needs arguments to do real work, the arguments of one quick run. |
+| `stdin` | `null`, or `{format, means}` for a command that reads standard input: `check` and `fix` with `--stdin-path`, `init` on a terminal, and the exempt commands except `hooks run`, which reads none and has `stdin` `null`. |
+| `example` | For a safe command that needs arguments to do real work, the arguments of one quick run, where one exists: `migrate schema` is safe and needs `--field`, but has none, since any field would name a record field the engine never hardcodes ([ADR-108](../adr/ADR-108-urzua-describe-states-each-command-s-inputs-from-the-clap-definitions-and-a-per-command-table-at-contract-version-1-0-until-every-1-1-piece-ships.md)). |
 | `protocol` | On an exempt command: `mcp` (`urzua mcp`), `harness-hook` (`harness hook`), `harness-run` (each `harness run` event, a neutral request on stdin and a verdict on stdout) and `git-hook` (`hooks run`). A reader that does not know the word does not call the command. |
 
 ## How it is kept true
