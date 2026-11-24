@@ -89,22 +89,72 @@ fn every_argument_says_what_it_means() {
     assert!(silent.is_empty(), "arguments with no help text: {silent:?}");
 }
 
+/// No option is accepted by every command, so the top level declares none;
+/// each global is declared on the commands that accept and honour it.
 #[test]
-fn the_globals_are_declared_once_at_the_top() {
+fn a_global_is_declared_only_on_the_commands_that_take_it() {
     let d = describe(urzua()).unwrap();
-    let top: Vec<&str> = d.args.iter().map(|a| a.name.as_str()).collect();
-    assert_eq!(top, ["--config", "--as-of"]);
-    let as_of = &d.args[1];
+    assert!(d.args.is_empty());
+    let with = |name: &str| -> Vec<&str> {
+        d.commands
+            .iter()
+            .filter(|c| c.args.iter().any(|a| a.name == name))
+            .map(|c| c.name.as_str())
+            .collect()
+    };
+    assert_eq!(
+        with("--as-of"),
+        ["waive", "check", "audit", "fix", "reverify"]
+    );
+    let as_of = find(&d, "check")
+        .args
+        .iter()
+        .find(|a| a.name == "--as-of")
+        .unwrap();
     assert_eq!(as_of.format, Some("date"));
-    assert_eq!(d.args[0].value_type, Some("path"));
+    let config = with("--config");
+    assert_eq!(config.len(), d.commands.len() - CONFIG_IGNORED.len());
+    assert!(CONFIG_IGNORED.iter().all(|c| !config.contains(c)));
     for c in &d.commands {
-        assert!(
-            c.args.iter().all(|a| !top.contains(&a.name.as_str())),
-            "`{}` repeats a global",
-            c.name
-        );
-        assert!(c.args.iter().all(|a| a.name != "--help"));
+        assert!(c.args.iter().all(|a| a.name != "--help"), "{}", c.name);
     }
+}
+
+#[test]
+fn relations_refused_in_code_are_declared_on_both_arguments() {
+    let d = describe(urzua()).unwrap();
+    let check = find(&d, "check");
+    let arg = |c: &CommandDecl, n: &str| {
+        c.args
+            .iter()
+            .find(|a| a.name == n)
+            .unwrap()
+            .conflicts_with
+            .clone()
+    };
+    assert_eq!(arg(check, "--stdin-path"), ["paths", "--base", "--actors"]);
+    assert!(arg(check, "--base").contains(&"--stdin-path".to_string()));
+    let fix = find(&d, "fix");
+    let apply = fix.args.iter().find(|a| a.name == "--apply").unwrap();
+    assert!(
+        apply.requires.is_empty(),
+        "needs --ids or --force: only in means"
+    );
+    assert!(apply.conflicts_with.contains(&"--as-of".to_string()));
+    assert_eq!(
+        fix.args
+            .iter()
+            .find(|a| a.name == "--replace")
+            .unwrap()
+            .requires,
+        ["--pin"]
+    );
+}
+
+#[test]
+fn a_code_rule_naming_no_argument_is_refused() {
+    let mut args = Vec::new();
+    assert!(apply_code_rules("check", &mut args).is_err());
 }
 
 #[test]
@@ -145,47 +195,143 @@ fn the_protocol_commands_are_exempt_and_name_their_protocol() {
     }
 }
 
-/// Every `URZUA_`-prefixed variable named in the source is declared in `env`
-/// or is one only a test build reads.
-#[test]
-fn env_drift() {
-    const TEST_ONLY: [&str; 9] = [
-        "URZUA_TEST_PANIC",
-        "URZUA_TODAY_CHILD",
-        "URZUA_UPDATE_GOLDEN",
-        "URZUA_WRITE_PLUGIN",
-        "URZUA_HOOK_DEADLINE_FOR_TESTS",
-        "URZUA_HOOK_ENGINE_FOR_TESTS",
-        "URZUA_HOOK_PANIC_FOR_TESTS",
+/// The variables `env` leaves out on purpose, each with the reason.
+const NOT_DECLARED: &[(&str, &str)] = &[
+    (
         "URZUA_BOARD_TEST_BUILD_DELAY_MS",
+        "read by a test-seams build only",
+    ),
+    (
         "URZUA_BOARD_TEST_CHECK_DELAY_MS",
-    ];
+        "read by a test-seams build only",
+    ),
+    ("PATH", "only used to find programs"),
+    ("HOME", "only used to find the home directory"),
+    ("TZ", "read by a test of the clock, never by urzua"),
+    ("URZUA_TODAY_CHILD", "read by a test of the clock"),
+    ("URZUA_UPDATE_GOLDEN", "read by a golden-file test"),
+    ("URZUA_WRITE_PLUGIN", "read by a plugin test"),
+    (
+        "URZUA_TEST_PANIC",
+        "read by a debug build only, for the panic test",
+    ),
+    (
+        "URZUA_HOOK_DEADLINE_FOR_TESTS",
+        "read by a test-seams build only",
+    ),
+    (
+        "URZUA_HOOK_ENGINE_FOR_TESTS",
+        "read by a test-seams build only",
+    ),
+    (
+        "URZUA_HOOK_PANIC_FOR_TESTS",
+        "read by a test-seams build only",
+    ),
+];
+
+/// A read whose name is a variable, and the names it can hold. `None`: names
+/// a test-seams build alone reads.
+const DYNAMIC_READS: [(&str, &str, Option<&[&str]>); 5] = [
+    ("harness/record.rs", "v", Some(&["URZUA_BIN", "URZUA"])),
+    ("commands/refs.rs", "k", Some(&["GITHUB_TOKEN", "GH_TOKEN"])),
+    // The variables an embedded adapter's manifest requires: its host's.
+    ("harness/run.rs", "var", Some(&["CLAUDE_PROJECT_DIR"])),
+    ("harness/hook/mod.rs", "name", None),
+    ("commands/board_server.rs", "variable", None),
+];
+
+fn rust_sources() -> Vec<(std::path::PathBuf, String)> {
     let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let literal = regex::Regex::new(r#""(URZUA_[A-Z0-9_]+)""#).unwrap();
-    let mut undeclared = std::collections::BTreeSet::new();
-    let mut stack = vec![crates];
+    let mut out = Vec::new();
+    let mut stack: Vec<_> = std::fs::read_dir(&crates)
+        .unwrap()
+        .map(|e| e.unwrap().path().join("src"))
+        .filter(|p| p.is_dir())
+        .collect();
     while let Some(dir) = stack.pop() {
         for entry in std::fs::read_dir(&dir).unwrap() {
             let path = entry.unwrap().path();
             if path.is_dir() {
-                if path
-                    .file_name()
-                    .is_some_and(|n| n != "tests" && n != "target")
-                {
-                    stack.push(path);
-                }
-            } else if path.extension().is_some_and(|e| e == "rs") {
+                stack.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs")
+                && !path.ends_with("describe/tests.rs")
+            {
                 let text = std::fs::read_to_string(&path).unwrap();
-                for name in literal.captures_iter(&text).map(|c| c[1].to_string()) {
-                    if !ENV.iter().any(|(n, _)| *n == name) && !TEST_ONLY.contains(&name.as_str()) {
-                        undeclared.insert(name);
-                    }
-                }
+                out.push((path, text));
             }
         }
     }
-    assert!(
-        undeclared.is_empty(),
-        "read but not declared in env: {undeclared:?}"
-    );
+    out
+}
+
+/// The names the source reads with `env::var`/`var_os` that `env` does not
+/// declare and [`NOT_DECLARED`] does not excuse, and each read whose name
+/// cannot be resolved. An `URZUA_` literal anywhere counts as a read too, for
+/// the names passed to a helper (`test_seam("...")`).
+fn undeclared_reads(sources: &[(std::path::PathBuf, String)]) -> Vec<String> {
+    let call = regex::Regex::new(r"env::var(?:_os)?\(\s*([^)]*?)\s*\)").unwrap();
+    let constant = regex::Regex::new(r#"const ([A-Z_]+): &str = "([^"]+)";"#).unwrap();
+    let urzua = regex::Regex::new(r#""(URZUA_[A-Z0-9_]+)""#).unwrap();
+    let consts: std::collections::HashMap<String, String> = sources
+        .iter()
+        .flat_map(|(_, t)| {
+            constant
+                .captures_iter(t)
+                .map(|c| (c[1].to_string(), c[2].to_string()))
+        })
+        .collect();
+    let declared = |n: &str| {
+        ENV.iter()
+            .chain(crate::harness::ADAPTER_ENV)
+            .any(|(d, _)| *d == n)
+            || NOT_DECLARED.iter().any(|(d, _)| *d == n)
+    };
+    let mut problems = std::collections::BTreeSet::new();
+    for (path, text) in sources {
+        let file = path.to_string_lossy().replace('\\', "/");
+        let mut names: Vec<String> = urzua
+            .captures_iter(text)
+            .map(|c| c[1].to_string())
+            .collect();
+        for c in call.captures_iter(text) {
+            let arg = c[1].trim();
+            let ident = arg.rsplit("::").next().unwrap();
+            if let Some(name) = arg.strip_prefix('"').and_then(|a| a.strip_suffix('"')) {
+                names.push(name.to_string());
+            } else if let Some(name) = consts.get(ident) {
+                names.push(name.clone());
+            } else if let Some((_, _, held)) = DYNAMIC_READS
+                .iter()
+                .find(|(f, a, _)| file.ends_with(f) && *a == arg)
+            {
+                names.extend(held.iter().flat_map(|h| h.iter()).map(|n| n.to_string()));
+            } else {
+                problems.insert(format!(
+                    "{file}: env::var({arg}) names no variable this test can read"
+                ));
+            }
+        }
+        for n in names.into_iter().filter(|n| !declared(n)) {
+            problems.insert(format!("{file}: {n} is read but not declared in env"));
+        }
+    }
+    problems.into_iter().collect()
+}
+
+#[test]
+fn env_drift() {
+    let problems = undeclared_reads(&rust_sources());
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+#[test]
+fn env_drift_catches_a_planted_read() {
+    let mut sources = rust_sources();
+    let planted =
+        "fn f() { let _ = std::env::var(\"PLANTED_TOKEN\"); let _ = std::env::var_os(who); }";
+    sources.push(("crates/planted/src/lib.rs".into(), planted.to_string()));
+    let problems = undeclared_reads(&sources);
+    assert_eq!(problems.len(), 2, "{problems:#?}");
+    assert!(problems.iter().any(|p| p.contains("PLANTED_TOKEN")));
+    assert!(problems.iter().any(|p| p.contains("env::var(who)")));
 }

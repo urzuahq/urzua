@@ -21,7 +21,7 @@ no configuration and no records, so it answers in any directory.
 | `version` | The binary's version, the same as `urzua --version` prints after the name. |
 | `contract_version` | The contract version urzua conforms to: `1.0`. It moves to `1.1` once urzua meets every rule of 1.1 (`MILE-370`); the inputs below are printed already. |
 | `system` | `0`: urzua's own work is deterministic. |
-| `args` | The options every command accepts: `--config` and `--as-of`. `--as-of` is refused by the commands that compare no dates; its `means` names the ones that accept it. |
+| `args` | `[]`. No option is accepted and honoured by every command, so each is declared on the commands that take it: `--as-of` on `check`, `audit`, `fix`, `reverify` and `waive`, and `--config` on every command but `rules`, `import`, `harness adapters`, `harness hook` and `harness record`, which never read it. |
 | `env` | `{name, means}` for each environment variable that changes what urzua does. `PATH` and `HOME` are not listed: urzua only uses them to find programs and the home directory. |
 | `config` | `[{"path": ".urzua/config.yaml", "format": "yaml"}]`. No schema is given; the configuration is validated by `urzua doctor` and on every load. |
 | `log` | `null`: urzua has no diagnostic log. |
@@ -34,7 +34,7 @@ no configuration and no records, so it answers in any directory.
 | `name` | The full path, words separated by one space: `migrate ids`, `harness run edit`. A group such as `harness` is not listed, only the commands under it, and `describe` does not list itself. |
 | `profile` | `gate` for `check` and `audit`, whose reports carry `blocking`, `findings` and `examined`; `exempt` for a command that speaks a host's protocol; `base` for every other. |
 | `kind` | `records`, on `check` and `audit`. |
-| `safe` | `true` only for a command that writes nothing whatever its arguments and finishes quickly. A command whose `--apply` writes is not safe, and neither is `audit`, which runs every declared rule and cannot be narrowed. |
+| `safe` | `true` only for a command that writes nothing whatever its arguments. A command whose `--apply` writes is not safe. A safe command that is slow with no arguments has a quick `example` where one exists; `audit` has none and runs every declared rule. |
 | `scopes` | `paths` for a command that takes record paths, `base-ref` for `check --base`. |
 | `metrics` | `files` for `check` and `audit`, the count in their `examined`. |
 | `args` | Each argument: `name` (`--base`, or a positional's name), `kind` (`flag`, `option` or `positional`), `type` (`string`, `integer` or `path`; a flag has none), `required`, `repeatable`, `means`, and where they apply `values`, `format` (`date` for `YYYY-MM-DD`), `conflicts_with`, `requires` and `after_separator`. |
@@ -51,7 +51,10 @@ entry makes `describe` fail its tests (and print `not-run` if it ever shipped). 
 when an argument has no help text to use as its `means`, and when the source reads an `URZUA_`
 variable that `env` does not list.
 
-Two things the contract can say are not stated for urzua's arguments, because the parser does not
-hold them: an exclusion checked in code rather than declared to the parser (`check --stdin-path`
-cannot be combined with paths or `--base`, which `check` refuses itself) and a requirement that
-depends on another argument's value (`fix --apply` needs `--ids` or `--force`).
+`conflicts_with` and `requires` include the relations a command refuses in its own code, not only
+those declared to the parser: `check --stdin-path` conflicts with `paths` and `--base`, `fix --force`
+requires `--apply`, `--as-of` conflicts with `--apply`. A test runs each declared pair and expects it
+refused. A rule of the form "needs one of two" (`fix --apply` needs `--ids` or `--force`) or "required
+unless another is given" (`explain <path>`) has no field in the contract: it is stated in the
+argument's `means`, and the argument is declared with the weaker reading (`required: false`, no
+`requires`).

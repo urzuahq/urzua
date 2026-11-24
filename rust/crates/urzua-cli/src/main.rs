@@ -245,7 +245,8 @@ enum Command {
     )]
     Explain {
         /// A file, directory, glob or `path#scope`. Always a path, even when
-        /// it spells a rule id; use `--rule` for a rule.
+        /// it spells a rule id; use `--rule` for a rule. Required unless
+        /// `--rule`, `--types`, `--type` or `--full` is given.
         #[arg(
             required_unless_present_any = ["rule", "types", "record_type", "full"],
             conflicts_with_all = ["rule", "types", "record_type"]

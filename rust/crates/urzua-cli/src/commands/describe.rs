@@ -55,7 +55,8 @@ const RECORD_STDIN: Option<(&str, &str)> = Some((
 ));
 
 /// `safe` is true only for a command that writes nothing whatever its
-/// arguments and finishes quickly; one whose `--apply` writes is not safe.
+/// arguments; one whose `--apply` writes is not safe. A slow safe command
+/// gets a quick `example` where it has one.
 /// `describe` itself is not listed: its answer is this object, not a report.
 const COMMANDS: &[Entry] = &[
     base("new", false),
@@ -82,20 +83,18 @@ const COMMANDS: &[Entry] = &[
     ),
     base("board", false),
     base("roadmap", true),
-    // Runs every declared rule with no way to narrow it, so it is not quick.
     Entry {
         profile: "gate",
         kind: Some("records"),
         metrics: &["files"],
-        ..base("audit", false)
+        ..base("audit", true)
     },
     base("migrate ids", false),
     base("migrate filenames", false),
     base("migrate config", false),
-    Entry {
-        example: Some(&["--report", "--field", "Status"]),
-        ..base("migrate schema", true)
-    },
+    // No example: any `--field` would name a record field, which the engine
+    // never hardcodes, so the runner gets the usage `not-run`.
+    base("migrate schema", true),
     Entry {
         example: Some(&["--format", "json", "--no-text", "--no-checklist-items"]),
         ..base("export", true)
@@ -316,13 +315,12 @@ fn describe(mut cli: Command) -> Result<Describe, String> {
         .filter(|(path, _)| path != "describe")
         .map(|(path, command)| command_decl(path, command))
         .collect::<Result<Vec<_>, _>>()?;
-    let globals: Vec<&Arg> = cli.get_arguments().filter(|a| a.is_global_set()).collect();
     Ok(Describe {
         name: "urzua",
         version: env!("CARGO_PKG_VERSION"),
         contract_version: CONTRACT_VERSION,
         system: 0,
-        args: args_of(&cli, &globals),
+        args: Vec::new(),
         env: ENV
             .iter()
             .chain(crate::harness::ADAPTER_ENV)
@@ -361,8 +359,10 @@ fn command_decl(path: &str, command: &Command) -> Result<CommandDecl, String> {
         .ok_or_else(|| format!("`{path}` has no entry in describe's command table"))?;
     let own: Vec<&Arg> = command
         .get_arguments()
-        .filter(|a| !a.is_global_set() && !is_builtin(a))
+        .filter(|a| !is_builtin(a) && (!a.is_global_set() || global_applies(&name_of(a), path)))
         .collect();
+    let mut args = args_of(command, &own);
+    apply_code_rules(path, &mut args)?;
     Ok(CommandDecl {
         name: path.to_string(),
         profile: entry.profile,
@@ -370,13 +370,119 @@ fn command_decl(path: &str, command: &Command) -> Result<CommandDecl, String> {
         safe: entry.safe,
         scopes: entry.scopes,
         metrics: entry.metrics,
-        args: args_of(command, &own),
+        args,
         stdin: entry
             .stdin
             .map(|(format, means)| StdinDecl { format, means }),
         example: entry.example,
         protocol: entry.protocol,
     })
+}
+
+/// The commands that accept `--as-of`, as `fix_evaluation_date` in `main.rs`
+/// admits them; every other command refuses it.
+const AS_OF_COMMANDS: &[&str] = &["check", "audit", "fix", "reverify", "waive"];
+
+/// The commands that never read `--config`: `rules` reads no configuration,
+/// `import` is not built, and the harness's adapter list, hook and drafting
+/// steps find the project themselves.
+const CONFIG_IGNORED: &[&str] = &[
+    "rules",
+    "import",
+    "harness adapters",
+    "harness hook",
+    "harness record",
+];
+
+/// Whether a global option is part of the command at `path`. A global is
+/// listed per command because not every command accepts or honours it.
+fn global_applies(name: &str, path: &str) -> bool {
+    match name {
+        "--as-of" => AS_OF_COMMANDS.contains(&path),
+        "--config" => !CONFIG_IGNORED.contains(&path),
+        _ => true,
+    }
+}
+
+/// `(command, argument, conflicts_with, requires)`: the relations a command
+/// refuses in its own code rather than through clap. A conflict is declared on
+/// both arguments. A rule of the form "needs one of two" is not a relation the
+/// contract can state, so it is only in the argument's `means`.
+type CodeRule = (
+    &'static str,
+    &'static str,
+    &'static [&'static str],
+    &'static [&'static str],
+);
+
+const CODE_RULES: &[CodeRule] = &[
+    ("check", "--stdin-path", &["paths", "--base"], &[]),
+    ("check", "--actors", &["--stdin-path"], &[]),
+    ("explain", "--full", &["--type"], &["--types"]),
+    (
+        "fix",
+        "--pin",
+        &[
+            "--rebaseline",
+            "--conflicts",
+            "--stdin-path",
+            "--force",
+            "paths",
+        ],
+        &[],
+    ),
+    ("fix", "--replace", &[], &["--pin"]),
+    ("fix", "--remove", &[], &["--pin"]),
+    ("fix", "--force", &[], &["--apply"]),
+    ("fix", "--by", &[], &["--apply"]),
+    ("fix", "--actor", &[], &["--apply"]),
+    (
+        "fix",
+        "--conflicts",
+        &["--rebaseline", "--stdin-path", "--reason", "paths"],
+        &[],
+    ),
+    ("fix", "--rebaseline", &["--stdin-path"], &[]),
+    (
+        "fix",
+        "--stdin-path",
+        &["paths", "--apply", "--ids", "--by", "--force"],
+        &[],
+    ),
+    ("fix", "--as-of", &["--apply"], &[]),
+    ("reverify", "--force", &[], &["--apply"]),
+    ("reverify", "--by", &[], &["--apply"]),
+    ("reverify", "--actor", &[], &["--apply"]),
+    ("reverify", "--reason", &[], &["--apply"]),
+    ("reverify", "--as-of", &["--apply"], &[]),
+    ("waive", "--as-of", &["--apply"], &[]),
+];
+
+fn apply_code_rules(path: &str, args: &mut [ArgDecl]) -> Result<(), String> {
+    let index = |args: &[ArgDecl], name: &str| {
+        args.iter().position(|a| a.name == name).ok_or_else(|| {
+            format!("describe's code rules name `{path} {name}`, which is not an argument")
+        })
+    };
+    for &(_, name, conflicts, requires) in CODE_RULES.iter().filter(|r| r.0 == path) {
+        let at = index(args, name)?;
+        for &other in conflicts {
+            let there = index(args, other)?;
+            add(&mut args[at].conflicts_with, other);
+            add(&mut args[there].conflicts_with, name);
+        }
+        for &other in requires {
+            index(args, other)?;
+            add(&mut args[at].requires, other);
+        }
+    }
+    Ok(())
+}
+
+fn add(list: &mut Vec<String>, name: &str) {
+    if !list.iter().any(|n| n == name) {
+        list.push(name.to_string());
+    }
 }
 
 fn is_builtin(arg: &Arg) -> bool {
@@ -470,10 +576,10 @@ fn date_format(arg: &Arg) -> Option<&'static str> {
 }
 
 /// The arguments `arg` requires. clap exposes no getter for `requires`, so the
-/// command is parsed with `arg` alone (and every unconditionally required
-/// argument) and the arguments clap then reports missing are the answer.
+/// command is parsed with `arg` and every unconditionally required argument,
+/// and the arguments clap then reports missing, less those it reports missing
+/// without `arg` (one required unless another is given), are the answer.
 fn requires_of(command: &Command, arg: &Arg, siblings: &[&Arg]) -> Vec<String> {
-    let mut probe = command.clone().no_binary_name(true);
     let mut argv: Vec<String> = Vec::new();
     for other in siblings
         .iter()
@@ -481,23 +587,31 @@ fn requires_of(command: &Command, arg: &Arg, siblings: &[&Arg]) -> Vec<String> {
     {
         argv.extend(tokens_for(other));
     }
+    let without = missing(command, &argv);
     argv.extend(tokens_for(arg));
-    let Err(error) = probe.try_get_matches_from_mut(&argv) else {
-        return Vec::new();
-    };
-    if error.kind() != clap::error::ErrorKind::MissingRequiredArgument {
-        return Vec::new();
-    }
-    let Some(clap::error::ContextValue::Strings(missing)) =
-        error.get(clap::error::ContextKind::InvalidArg)
-    else {
-        return Vec::new();
-    };
+    let with = missing(command, &argv);
     siblings
         .iter()
-        .filter(|s| missing.iter().any(|m| rendered_as(s, m)))
+        .filter(|s| {
+            let named = |list: &[String]| list.iter().any(|m| rendered_as(s, m));
+            named(&with) && !named(&without)
+        })
         .map(|s| name_of(s))
         .collect()
+}
+
+/// The arguments clap reports missing when it parses `argv`, as it renders them.
+fn missing(command: &Command, argv: &[String]) -> Vec<String> {
+    let mut probe = command.clone().no_binary_name(true);
+    match probe.try_get_matches_from_mut(argv) {
+        Err(e) if e.kind() == clap::error::ErrorKind::MissingRequiredArgument => {
+            match e.get(clap::error::ContextKind::InvalidArg) {
+                Some(clap::error::ContextValue::Strings(names)) => names.clone(),
+                _ => Vec::new(),
+            }
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// The words that give `arg` on a command line, with a value it accepts.
