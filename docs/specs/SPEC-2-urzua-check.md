@@ -878,17 +878,20 @@ Scope: a command that prints a report carries the keys; a command whose output i
 These print none, so their output has neither key: `urzua describe`, whose answer is the published agent
 CLI contract's `describe` object (RFC-4 section 6 of that contract, at `v1.1.0-rc.4`: "`describe` does
 not list itself. Its answer is not a report, so it fits no profile."); `urzua harness hook`, which prints
-an adapter's own hook output; `urzua harness record`, which prints no report of its own (a step that
-runs `urzua new` or `urzua fix` relays that command's report, with its keys, and the others write only
-to stderr); `urzua hooks run`, which prints nothing on stdout and reports on stderr; and `urzua mcp`,
+an adapter's own hook output; `urzua harness record`, which prints no report of its own, only the reports of the
+commands its steps run (`urzua new`, `urzua fix`, `urzua check`, `urzua reverify`), relayed on stdout
+with the keys those reports carry; `urzua hooks run`, which prints nothing on stdout when it runs and
+reports on stderr, except that an unknown hook name prints a `not-run` report on stdout, through the
+same emitter as every report, with both keys `null`; and `urzua mcp`,
 a JSON-RPC stream whose tool results are reports and carry the keys, as above. The maintainer decided
-this on 2026-11-24. Asked: "MILE-72 says every command's JSON output carries `next_action`. The agent
+this on 2026-11-24, in the agent session that built this pull request; the answer is not recorded in
+the repository or the pull request, so it cannot be checked there. Asked: "MILE-72 says every command's JSON output carries `next_action`. The agent
 CLI contract (RFC-4 section 6, rc.4) says `describe`'s answer is not a report, and `next_action` is
 required only of reports. Do you agree that `next_action` applies to commands that print a report, and
 that `describe` and the three harness commands (hook, record, run) don't print one?" They answered:
-"Yes". `urzua harness run` is in that question, but the code prints its verdict through the same
-emitter as every report, so its output carries both keys (always `null`); this section follows the
-code, and the keys stay on it until a later decision removes them.
+"Yes". The question listed `urzua harness run` in error: it prints its verdict through the same
+emitter as every report, which is a report, so the rule decided here gives it both keys (always
+`null`). No follow-up is needed.
 
 - `check` and `audit` (the same report). Over the unwaived findings of severity `error` or `warning`
   (a waived finding and an `info` finding never count), the tool is the first of the following that
@@ -1742,4 +1745,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c5138779e78f -> 4299b921cd08. Reason: Read the diff of check.rs: run_opened fills CheckReport.examined from files_examined; nothing else in the run path changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-24 | Bumped to `0.195`. Every `next_action` is built from its words and printed beside `next_action_argv` (always present, `null` exactly when `next_action` is); each `next_action_inputs` entry gains `index`; a placeholder is single-quoted in every report; a command that needed a shell construct is an `sh -c` argument vector. Additive to the report's keys; the placeholder quoting of `fix --pin`'s and `explain --types`' actions changes. **Why:** `MILE-367`, the published agent CLI contract's version 1.1 requires the array, the index and one quoting. | **substantive** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 4299b921cd08 -> 221dcf5bd041. Reason: Read the diff of each file against origin/main: check.rs passes the rule-name correction, git fetch and git fetch --unshallow remedies as words. The cited behavior is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
-> | 2026-11-24 | Bumped to `0.196`. `next_action` and `next_action_reason` apply to every command that prints a report, not to every command: `describe`, `harness hook`, `harness record`, `hooks run` and `mcp`'s own stream print none and carry neither key; `harness run` prints a verdict that carries both, always `null`. **Why:** `MILE-72` read "every command"; `urzua describe` (`MILE-359`) answers with a contract object that is not a report (RFC-4 section 6 of the agent CLI contract, `v1.1.0-rc.4`: "Its answer is not a report, so it fits no profile."). The maintainer, 2026-11-24, asked whether `next_action` applies to commands that print a report and whether `describe` and the harness commands don't print one: "Yes". | **substantive** |
+> | 2026-11-24 | Bumped to `0.196`. `next_action` and `next_action_reason` apply to every command that prints a report, not to every command: `describe`, `harness hook`, `harness record`, `hooks run` and `mcp`'s own stream print none and carry neither key; `harness run` prints a verdict that carries both, always `null`; `hooks run` prints a `not-run` report only for an unknown hook. **Why:** `MILE-72` read "every command"; `urzua describe` (`MILE-359`) answers with a contract object that is not a report (RFC-4 section 6 of the agent CLI contract, `v1.1.0-rc.4`: "Its answer is not a report, so it fits no profile."). The maintainer decided this in the agent session that built this pull request, 2026-11-24; the answer is not recorded in the repository or the pull request. Asked: "MILE-72 says every command's JSON output carries `next_action`. The agent CLI contract (RFC-4 section 6, rc.4) says `describe`'s answer is not a report, and `next_action` is required only of reports. Do you agree that `next_action` applies to commands that print a report, and that `describe` and the three harness commands (hook, record, run) don't print one?" They answered: "Yes". | **substantive** |
