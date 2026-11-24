@@ -10,11 +10,11 @@ Blocked-on: —
 
 ## What
 
-urzua prints `contract_version` `"1.1"` in `describe`: the vendored contract fixtures move from `v1.0.0` to the contract's 1.1 tag (`rust/crates/urzua-cli/tests/fixtures/agent-cli-contract/VERSION` and the schemas and `SHA256SUMS`), `agent_cli_contract_integration.rs` validates against them, and a changeset says what an adopter gets.
+urzua prints `contract_version` `"1.1"` in `describe`: the vendored contract fixtures move to the contract's final 1.1 tag (`rust/crates/urzua-cli/tests/fixtures/agent-cli-contract/VERSION` and the schemas and `SHA256SUMS`), `agent_cli_contract_integration.rs` validates against them, and a changeset says what an adopter gets.
 
 ## Why
 
-Contract 1.1 (the published agent CLI contract's RFC-4) is taken whole: urzua prints `contract_version` `"1.1"` only when every piece below is delivered (`MILE-370`). The contract's 1.1 tag waits for both tools to pass the runner (RFC-4 section 10), so this is last. It is the only milestone that changes the claim urzua makes; the others change behaviour. The vendored schemas are re-pinned only after reading the diff of the pinned test and fixture (`AGENTS.md`, "Re-pinning evidence"), and each re-pin is listed in the PR body.
+Contract 1.1 (the published agent CLI contract's RFC-4) is taken whole: urzua prints `contract_version` `"1.1"` only when every piece below is delivered (this milestone). The contract's 1.1 tag waits for both tools to pass the runner against a release candidate (RFC-4 section 10), which `MILE-369` vendors, so this is last: it moves the vendored copy from that candidate to the final tag. It is the only milestone that changes the claim urzua makes; the others change behaviour. The vendored schemas are re-pinned only after reading the diff of the pinned test and fixture (`AGENTS.md`, "Re-pinning evidence"), and each re-pin is listed in the PR body.
 
 ## Done means
 
@@ -27,4 +27,4 @@ Contract 1.1 (the published agent CLI contract's RFC-4) is taken whole: urzua pr
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-11-24 | Filed as planned work: nothing built, no evidence yet. It is one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted (relayed 2026-11-24: "accepted [the contract's] RFC-4 at 2026-11-24 00:02 UTC"). | **substantive** |
+> | 2026-11-24 | Filed as planned work: nothing built, no evidence yet. It is one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted: "I accept RFC, and yes allow option can be outside rule" (the contract's RFC-4, revision row of 2026-11-24). | **substantive** |

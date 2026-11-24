@@ -18,7 +18,7 @@ Contract 1.1 (the published agent CLI contract's RFC-4) is taken whole: urzua pr
 
 ## Done means
 
-- A test runs urzua with a wrong argument, an unreadable configuration, a missing repository and a forced internal failure, and each `not-run` report carries `error_kind` `usage`, `config`, `environment` and `internal` respectively, checked against the vendored report schema.
+- A test runs urzua with a wrong argument, an unreadable configuration, a missing repository and a forced internal failure, and each `not-run` report carries `error_kind` `usage`, `config`, `environment` and `internal` respectively, checked against the report schema of the release candidate `MILE-369` vendors.
 - A planted usage error's `error` contains no `Usage:` line and no line break; the test fails against the current `refuse(e.to_string())`.
 - A test that forces a panic (the existing `panic_if_requested` seam) finds `error` and `error_kind` `internal` and no `panic` key, and exit code 2.
 - A grep of `rust/crates/*/src` finds every construction of `CouldNotRun` setting a kind, so a new one without a kind does not compile or fails a test.
@@ -28,4 +28,4 @@ Contract 1.1 (the published agent CLI contract's RFC-4) is taken whole: urzua pr
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-11-24 | Filed as planned work: nothing built, no evidence yet. It is one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted (relayed 2026-11-24: "accepted [the contract's] RFC-4 at 2026-11-24 00:02 UTC"). | **substantive** |
+> | 2026-11-24 | Filed as planned work: nothing built, no evidence yet. It is one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted: "I accept RFC, and yes allow option can be outside rule" (the contract's RFC-4, revision row of 2026-11-24). | **substantive** |

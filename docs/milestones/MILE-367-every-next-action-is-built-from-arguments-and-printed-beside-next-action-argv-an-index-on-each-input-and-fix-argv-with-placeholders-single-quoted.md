@@ -22,11 +22,11 @@ Contract 1.1 (the published agent CLI contract's RFC-4) is taken whole: urzua pr
 - A test runs each reporting command with a planted case that yields a `next_action` and checks, for every report, `next_action_argv` is present, not empty when not null, and equals the string split as a POSIX shell would (the contract's runner does the same: `MILE-369`).
 - Every `next_action_inputs` entry has an `index`, and the element at it equals the entry's `placeholder`; the string carries it single-quoted. The test fails against the current bare and double-quoted forms.
 - Every finding that carries a `fix` also carries `fix_argv`, shown by a test over the rules that print one (`doctor`, `hooks`, `fix`).
-- The vendored report and finding schemas (`MILE-370`) accept the new keys and the reports validate against them.
+- The report and finding schemas of the release candidate `MILE-369` vendors accept the new keys and the reports validate against them.
 - `SPEC-2` and the reference pages that show a `next_action` show the quoted form, each spec with a revision row.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-11-24 | Filed as planned work: nothing built, no evidence yet. It is one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted (relayed 2026-11-24: "accepted [the contract's] RFC-4 at 2026-11-24 00:02 UTC"). | **substantive** |
+> | 2026-11-24 | Filed as planned work: nothing built, no evidence yet. It is one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted: "I accept RFC, and yes allow option can be outside rule" (the contract's RFC-4, revision row of 2026-11-24). | **substantive** |
