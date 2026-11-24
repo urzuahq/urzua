@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::NewDecl;
-use urzua_core::report::FailureKind;
+use urzua_core::report::Failure;
 use urzua_core::report::{
     CouldNotRun, NewReport, Notice, NoticeSeverity, PullRefsReport, ReportStatus, SkippedNumber,
     SkippedReason,
@@ -19,8 +19,8 @@ use super::new_refs::{self, FetchFailure, LockOutcome};
 use crate::session::Workspace;
 use crate::{emit, NOTICE_IDENTITY};
 
-fn fail(message: impl Into<String>) -> ExitCode {
-    emit(&CouldNotRun::new(FailureKind::Environment, message.into()))
+fn fail(failure: Failure) -> ExitCode {
+    emit(&CouldNotRun::from_failure(failure))
 }
 
 pub fn run(
@@ -35,12 +35,12 @@ pub fn run(
         config,
     } = match Workspace::open(&[], config_path) {
         Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
 
     let type_config = match lookup_record_type(&config, &record_type, &config_path) {
         Ok(t) => t,
-        Err(why) => return fail(why),
+        Err(why) => return fail(Failure::usage(why)),
     };
 
     let opts = &config.new;
@@ -49,7 +49,7 @@ pub fn run(
     // Held to the end of the run: the file write happens under the lock.
     let _lock = match scan_pull_requests(&repo_root, opts, &mut pull, &mut notices) {
         Ok(lock) => lock,
-        Err(why) => return fail(why),
+        Err(why) => return fail(Failure::environment(why)),
     };
 
     let dir = repo_root.join(&type_config.dir);
@@ -67,7 +67,7 @@ pub fn run(
         &mut notices,
     ) {
         Ok(n) => n,
-        Err(why) => return fail(why),
+        Err(why) => return fail(Failure::environment(why)),
     };
 
     let title = title.unwrap_or_else(|| "Title".to_string());
@@ -79,14 +79,15 @@ pub fn run(
         declared.as_ref().zip(compiled.as_ref()),
     ) {
         Ok(pair) => pair,
-        Err(why) => return fail(why),
+        Err(why) => return fail(Failure::usage(why)),
     };
 
     let stable_id = urzua_id::StableId::generate();
-    let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
-        Ok(id) => id,
-        Err(e) => return fail(format!("could not resolve an identity: {e}")),
-    };
+    let identity =
+        match urzua_io::resolve_identity(by.as_deref(), &repo_root).map_err(identity_failure) {
+            Ok(id) => id,
+            Err(failure) => return fail(failure),
+        };
 
     let (content, to_fill) = render_record(&NewRecordInputs {
         repo_root: &repo_root,
@@ -104,7 +105,7 @@ pub fn run(
 
     let (file_path, gate) = (dir.join(&filename), config.authority.as_ref());
     if let Err(why) = write_new_record(gate, &repo_root, &dir, &file_path, &content) {
-        return fail(why);
+        return fail(Failure::environment(why));
     }
 
     push_closing_notices(&mut notices, identity.warning, type_config, &record_type);
@@ -121,6 +122,10 @@ pub fn run(
         status_from: urzua_core::new_record::status_from(type_config),
         notices,
     })
+}
+
+fn identity_failure(e: impl std::fmt::Display) -> Failure {
+    Failure::usage(format!("could not resolve an identity: {e}"))
 }
 
 /// An untracked record is not examined unless the repository opts in

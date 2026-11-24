@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::Config;
 use urzua_core::record::Record;
-use urzua_core::report::FailureKind;
+use urzua_core::report::FailingAs;
 use urzua_core::report::{CouldNotRun, Failure};
 use urzua_io::DiscoveredFiles;
 
@@ -28,7 +28,8 @@ impl Workspace {
     /// `root_hint` locates the repository (the first path wins; none means the
     /// current directory). `config_path` defaults to the repository's own.
     pub fn open(root_hint: &[PathBuf], config_path: Option<PathBuf>) -> Result<Self, Failure> {
-        let repo_root = find_repo_root(root_hint)?;
+        let repo_root =
+            find_repo_root(root_hint).failing(urzua_core::report::FailureKind::Environment)?;
         let config_path = config_path.unwrap_or_else(|| default_config_path(&repo_root));
         let config = load_config(&config_path)?;
         Ok(Workspace {
@@ -65,12 +66,11 @@ impl Session {
     /// names it rather than letting the corpus shrink in silence.
     pub fn refusing_escaping_records(self) -> Result<Self, Failure> {
         match self.escaping_records.first() {
-            Some(e) => Err(format!(
+            Some(e) => Err(Failure::environment(format!(
                 "{} is a symlink {}; urzua refuses to read it",
                 e.path.display(),
                 e.reason
-            )
-            .into()),
+            ))),
             None => Ok(self),
         }
     }
@@ -98,8 +98,9 @@ impl Session {
             config_path,
             config,
         } = workspace;
-        let mut discovered =
-            crate::discovery::discover_files(&repo_root, &config).map_err(|e| e.to_string())?;
+        let mut discovered = crate::discovery::discover_files(&repo_root, &config)
+            .map_err(|e| e.to_string())
+            .failing(urzua_core::report::FailureKind::Environment)?;
         adjust(&repo_root, &config, &mut discovered)?;
         // A tracked record missing from the working tree is a removed record,
         // not a reason to refuse the whole run: it is the ordinary mid-rename
@@ -140,7 +141,8 @@ impl Session {
             .cloned()
             .collect();
         let (records, full_text) =
-            load_records(&repo_root, &readable, &discovered.staged_deletions, &config)?;
+            load_records(&repo_root, &readable, &discovered.staged_deletions, &config)
+                .failing(urzua_core::report::FailureKind::Environment)?;
         Ok(Session {
             repo_root,
             config_path,
@@ -157,6 +159,6 @@ impl Session {
 pub(crate) fn emit_or_not_run(result: Result<ExitCode, Failure>) -> ExitCode {
     match result {
         Ok(code) => code,
-        Err(e) => emit(&CouldNotRun::new(FailureKind::Environment, e)),
+        Err(e) => emit(&CouldNotRun::from_failure(e)),
     }
 }

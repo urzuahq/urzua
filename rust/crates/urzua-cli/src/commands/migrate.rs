@@ -10,6 +10,7 @@ use std::process::ExitCode;
 
 use urzua_core::header::HeaderShape;
 use urzua_core::record::Record;
+use urzua_core::report::FailingAs;
 use urzua_core::report::{
     Failure, MigrateSchemaReport, Notice, NoticeSeverity, Report, ReportStatus,
 };
@@ -128,7 +129,8 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
 
     // The lock `fix --apply` takes: two writers on one record must not
     // interleave.
-    let _lock = urzua_io::FixLock::acquire(&repo_root)?;
+    let _lock = urzua_io::FixLock::acquire(&repo_root)
+        .failing(urzua_core::report::FailureKind::Environment)?;
     let missing_paths: Vec<PathBuf> = missing.iter().map(|r| r.path.clone()).collect();
     let results: Vec<MigrateIdsResult> = missing
         .iter()
@@ -306,11 +308,14 @@ fn run_schema_report_inner(
         ..
     } = Session::open(config_path)?;
     if records.is_empty() {
-        return Err("no records discovered -- nothing to check".into());
+        return Err(Failure::environment(
+            "no records discovered -- nothing to check",
+        ));
     }
 
     let mut notices = Vec::new();
-    let templates = super::check::load_templates(&repo_root, &config, &mut notices)?;
+    let templates = super::check::load_templates(&repo_root, &config, &mut notices)
+        .failing(urzua_core::report::FailureKind::Environment)?;
     let (population, would_fail, report_notices) =
         urzua_core::migrate::schema_report(&records, &field, &config, &templates);
     notices.extend(report_notices);
@@ -369,18 +374,21 @@ pub fn run_config(config_path: Option<PathBuf>) -> ExitCode {
 }
 
 fn run_config_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
-    let repo_root = find_repo_root(&[])?;
+    let repo_root = find_repo_root(&[]).failing(urzua_core::report::FailureKind::Environment)?;
     let path = config_path.unwrap_or_else(|| default_config_path(&repo_root));
     let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("could not read config at {}: {e}", path.display()))?;
+        .map_err(|e| format!("could not read config at {}: {e}", path.display()))
+        .failing(urzua_core::report::FailureKind::Config)?;
     let content = urzua_core::config::strip_bom(&content).to_string();
-    let doc: yaml_serde::Value =
-        yaml_serde::from_str(&content).map_err(|e| format!("could not parse config: {e}"))?;
+    let doc: yaml_serde::Value = yaml_serde::from_str(&content)
+        .map_err(|e| format!("could not parse config: {e}"))
+        .failing(urzua_core::report::FailureKind::Config)?;
     let found = doc
         .as_mapping()
         .and_then(|m| m.get("schema_version"))
         .and_then(yaml_serde::Value::as_u64)
-        .ok_or_else(|| "the config declares no integer `schema_version`".to_string())?;
+        .ok_or_else(|| "the config declares no integer `schema_version`".to_string())
+        .failing(urzua_core::report::FailureKind::Config)?;
     let file = path
         .strip_prefix(&repo_root)
         .map(PathBuf::from)
@@ -402,13 +410,14 @@ fn run_config_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
         let v = urzua_core::schema_version::SchemaVersionError::new(found);
         return Err(Failure {
             message: v.to_string(),
-            kind: Some(urzua_core::report::FailureKind::Config),
+            kind: urzua_core::report::FailureKind::Config,
             schema_version: Some(Box::new(v)),
             next: None,
         });
     }
 
-    let migrated = urzua_core::schema_version::migrate_text(&content)?;
+    let migrated = urzua_core::schema_version::migrate_text(&content)
+        .failing(urzua_core::report::FailureKind::Config)?;
     // The file is only replaced by text that loads: the same typed parse
     // `check` runs, so a config the upgrade cannot make valid is reported, not
     // written.
@@ -417,9 +426,10 @@ fn run_config_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
             "the upgraded config would not load ({e}); {} is unchanged -- fix that and run `urzua migrate config` again",
             path.display()
         )
-    })?;
+    }).failing(urzua_core::report::FailureKind::Config)?;
     urzua_io::write_atomic(&path, &migrated.text)
-        .map_err(|e| format!("could not write {}: {e}", path.display()))?;
+        .map_err(|e| format!("could not write {}: {e}", path.display()))
+        .failing(urzua_core::report::FailureKind::Environment)?;
     Ok(emit(&MigrateConfigReport {
         status: ReportStatus::Ok,
         file,

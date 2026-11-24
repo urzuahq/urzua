@@ -69,7 +69,7 @@ pub(crate) fn load_config(path: &PathBuf) -> Result<Config, Failure> {
         // `{found, supported, current, migration}` (`ADR-77`).
         urzua_core::config::ConfigError::SchemaVersionOutOfWindow(v) => Failure {
             message: v.to_string(),
-            kind: Some(urzua_core::report::FailureKind::Config),
+            kind: urzua_core::report::FailureKind::Config,
             schema_version: Some(Box::new(v)),
             next: None,
         },

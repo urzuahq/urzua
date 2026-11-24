@@ -9,14 +9,14 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RelationRole};
 use urzua_core::conflicts::{self, Shape, Stages};
-use urzua_core::report::FailureKind;
 use urzua_core::report::{
     Conflict, ConflictKind, ConflictOutcome, ConflictsReport, ConflictsStatus, CouldNotRun,
     FixFailure,
 };
 
 use super::fix::{
-    identity_notices, refuse, repo_relative_ids, resolve_attestation, Refusal, ResolvedAttestation,
+    environment_of, identity_notices, refuse, repo_relative_ids, resolve_attestation, usage_of,
+    Refusal, ResolvedAttestation,
 };
 use super::merge_pins::Unverified;
 use crate::emit;
@@ -31,8 +31,7 @@ pub(crate) struct ConflictsArgs<'a> {
 }
 
 pub(crate) fn run(config_path: Option<PathBuf>, args: ConflictsArgs<'_>) -> ExitCode {
-    run_checked(config_path, args)
-        .unwrap_or_else(|e| emit(&CouldNotRun::new(FailureKind::Environment, e)))
+    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from_failure(e)))
 }
 
 fn run_checked(config_path: Option<PathBuf>, args: ConflictsArgs<'_>) -> Result<ExitCode, Refusal> {
@@ -42,14 +41,14 @@ fn run_checked(config_path: Option<PathBuf>, args: ConflictsArgs<'_>) -> Result<
     } = Workspace::open(&[], config_path).map_err(refuse)?;
     let ids = repo_relative_ids(&repo_root, args.ids);
     let args = ConflictsArgs { ids: &ids, ..args };
-    let unmerged = unmerged_paths(&repo_root).map_err(refuse)?;
+    let unmerged = unmerged_paths(&repo_root).map_err(environment_of)?;
     let identity = if args.apply {
-        Some(resolve_attestation(args.by, args.actor, &repo_root, &config).map_err(refuse)?)
+        Some(resolve_attestation(args.by, args.actor, &repo_root, &config).map_err(usage_of)?)
     } else {
         None
     };
     let _lock = if args.apply {
-        Some(urzua_io::FixLock::acquire(&repo_root).map_err(refuse)?)
+        Some(urzua_io::FixLock::acquire(&repo_root).map_err(environment_of)?)
     } else {
         None
     };

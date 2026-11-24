@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::{FailOn, HookManaged, HookOnNotRun, HooksDecl};
+use urzua_core::report::FailingAs;
 use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, Failure, NextAction, Notice, NoticeSeverity, Report};
 
@@ -1526,13 +1527,13 @@ impl HooksReport {
     }
 }
 
-fn not_run(message: impl Into<Failure>) -> ExitCode {
-    emit(&CouldNotRun::new(FailureKind::Environment, message))
+fn not_run(failure: Failure) -> ExitCode {
+    emit(&CouldNotRun::from_failure(failure))
 }
 
 fn open(config: Option<PathBuf>) -> Result<(Workspace, Layout), Failure> {
     let ws = Workspace::open(&[PathBuf::from(".")], config)?;
-    let layout = detect(&ws.repo_root)?;
+    let layout = detect(&ws.repo_root).failing(urzua_core::report::FailureKind::Environment)?;
     Ok((ws, layout))
 }
 
@@ -1575,7 +1576,7 @@ pub fn run_install(config: Option<PathBuf>, dry_run: bool, write_config: bool) -
     let decl = &ws.config.hooks;
     let off = match unpointed(&ws.repo_root, decl) {
         Ok(o) => o,
-        Err(m) => return not_run(m),
+        Err(m) => return not_run(Failure::environment(m)),
     };
     let Some(off) = off else {
         let mut guarded = HooksReport::new("install", dry_run, &layout);
@@ -2267,10 +2268,10 @@ pub fn run_hook(config: Option<PathBuf>, hook: String) -> ExitCode {
     };
     let decl = &ws.config.hooks;
     let Some(args) = decl.args(&hook) else {
-        return not_run(format!(
+        return not_run(Failure::usage(format!(
             "'{hook}' is not a hook urzua runs; the hooks are {}",
             HOOKS.join(", ")
-        ));
+        )));
     };
     let shown = format!("urzua {}", args.join(" "));
     let exe = match std::env::current_exe() {

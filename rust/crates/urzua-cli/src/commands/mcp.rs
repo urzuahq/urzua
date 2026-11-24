@@ -290,7 +290,7 @@ fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResu
             (value, not_run)
         }
         Err(failure) => (
-            crate::report_value(&CouldNotRun::new(FailureKind::Environment, failure)),
+            crate::report_value(&CouldNotRun::from_failure(failure)),
             true,
         ),
     };

@@ -13,6 +13,8 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 use urzua_core::config::{Config, RecordTypeConfig};
 use urzua_core::locator::CATEGORIES;
+use urzua_core::report::FailingAs;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{ActionInput, Failure, NextAction, Notice, Report, ReportStatus};
 use urzua_core::rules::RULE_EMBODIMENT_CLAIM_EXPIRED;
 use urzua_core::status_model::{DeliveryDecl, StatusDecl, StatusFieldRule};
@@ -111,6 +113,7 @@ pub fn run(config_path: Option<PathBuf>, mode: Mode) -> ExitCode {
 pub fn refuse_full_with_type(name: &str) -> ExitCode {
     let command = urzua_core::report::shell_command(&["urzua", "explain", "--type", name]);
     emit_or_not_run(Err(Failure::with_next(
+        FailureKind::Usage,
         format!("--full goes with --types; `{command}` already prints the full detail of one type"),
         NextAction::runs_as_printed(command, "the full detail of one type"),
     )))
@@ -120,6 +123,7 @@ pub fn refuse_full_with_type(name: &str) -> ExitCode {
 pub fn refuse_full_alone() -> ExitCode {
     let command = "urzua explain --types --full";
     emit_or_not_run(Err(Failure::with_next(
+        FailureKind::Usage,
         format!("--full goes with --types: `{command}`"),
         NextAction::runs_as_printed(command, "every declaration of every type"),
     )))
@@ -147,25 +151,26 @@ pub(crate) fn build(
     };
     let ws = Workspace::open(&[], config_path)?;
     let text = urzua_io::read_to_string(&ws.config_path)
-        .map_err(|e| format!("could not read {}: {e}", ws.config_path.display()))?;
+        .map_err(|e| format!("could not read {}: {e}", ws.config_path.display()))
+        .failing(FailureKind::Config)?;
     let lines = ConfigLines::scan(urzua_core::config::strip_bom(&text));
     let names: Vec<&String> = ws.config.record_types.keys().collect();
     if let Some(name) = &only {
         if !ws.config.record_types.contains_key(name) {
             let declared: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-            return Err(if declared.is_empty() {
+            return Err(Failure::usage(if declared.is_empty() {
                 format!("'{name}' is not a declared record type; the configuration declares no record type")
             } else {
                 format!(
                     "'{name}' is not a declared record type; the configuration declares: {}",
                     declared.join(", ")
                 )
-            }
-            .into());
+            }));
         }
     }
     let raw: yaml_serde::Value = yaml_serde::from_str(urzua_core::config::strip_bom(&text))
-        .map_err(|e| format!("could not read {}: {e}", ws.config_path.display()))?;
+        .map_err(|e| format!("could not read {}: {e}", ws.config_path.display()))
+        .failing(urzua_core::report::FailureKind::Config)?;
     let ctx = Ctx {
         config: &ws.config,
         lines: &lines,

@@ -1396,19 +1396,23 @@ impl CouldNotRun {
         self
     }
 
-    /// `fallback` is the kind when the failure carries none of its own, so no
-    /// could-not-run is built without one.
-    pub fn new(fallback: FailureKind, error: impl Into<Failure>) -> Self {
+    /// A could-not-run of a stated kind.
+    pub fn new(kind: FailureKind, message: impl Into<String>) -> Self {
+        Self::from_failure(Failure::of(kind, message))
+    }
+
+    /// From a failure, which already carries its kind.
+    pub fn from_failure(error: Failure) -> Self {
         let Failure {
             message,
             kind,
             schema_version,
             next,
-        } = error.into();
+        } = error;
         CouldNotRun {
             status: ReportStatus::NotRun,
             error: message,
-            error_kind: kind.unwrap_or(fallback),
+            error_kind: kind,
             schema_version_error: schema_version.map(|boxed| *boxed),
             notices: Vec::new(),
             next: next.map(|boxed| *boxed),
@@ -1438,9 +1442,9 @@ pub enum FailureKind {
 #[derive(Debug, Clone)]
 pub struct Failure {
     pub message: String,
-    /// Set where the cause is known; a site that builds the report names the
-    /// kind of a failure that has none.
-    pub kind: Option<FailureKind>,
+    /// Stated where the refusal is made: there is no conversion from a bare
+    /// message, so a failure without a kind does not compile.
+    pub kind: FailureKind,
     /// Boxed so a `Result<_, Failure>` stays small on the success path.
     pub schema_version: Option<Box<crate::schema_version::SchemaVersionError>>,
     /// The command that removes the cause, when one does.
@@ -1449,10 +1453,10 @@ pub struct Failure {
 
 impl Failure {
     /// A failure whose cause `next` removes.
-    pub fn with_next(message: impl Into<String>, next: NextAction) -> Self {
+    pub fn with_next(kind: FailureKind, message: impl Into<String>, next: NextAction) -> Self {
         Failure {
             message: message.into(),
-            kind: None,
+            kind,
             schema_version: None,
             next: Some(Box::new(next)),
         }
@@ -1460,41 +1464,45 @@ impl Failure {
 }
 
 impl Failure {
+    pub fn usage(message: impl Into<String>) -> Self {
+        Self::of(FailureKind::Usage, message)
+    }
+    pub fn config(message: impl Into<String>) -> Self {
+        Self::of(FailureKind::Config, message)
+    }
+    pub fn environment(message: impl Into<String>) -> Self {
+        Self::of(FailureKind::Environment, message)
+    }
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::of(FailureKind::Internal, message)
+    }
+
     /// A failure whose kind is known where it arises.
     pub fn of(kind: FailureKind, message: impl Into<String>) -> Self {
         Failure {
-            kind: Some(kind),
-            ..Failure::from(message.into())
-        }
-    }
-}
-
-impl std::fmt::Display for Failure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl From<String> for Failure {
-    fn from(message: String) -> Self {
-        Failure {
-            message,
-            kind: None,
+            message: message.into(),
+            kind,
             schema_version: None,
             next: None,
         }
     }
 }
 
-impl From<&str> for Failure {
-    fn from(message: &str) -> Self {
-        Failure::from(message.to_string())
+/// Names the kind of an error as it becomes a `Failure`, at the place the
+/// refusal is made.
+pub trait FailingAs<T> {
+    fn failing(self, kind: FailureKind) -> Result<T, Failure>;
+}
+
+impl<T, E: std::fmt::Display> FailingAs<T> for Result<T, E> {
+    fn failing(self, kind: FailureKind) -> Result<T, Failure> {
+        self.map_err(|e| Failure::of(kind, e.to_string()))
     }
 }
 
-impl From<Failure> for String {
-    fn from(failure: Failure) -> Self {
-        failure.message
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
     }
 }
 
@@ -1817,6 +1825,9 @@ pub struct WaiveReport {
     /// says which were written.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Present exactly when `status` is `not-run` and `error` is set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_kind: Option<FailureKind>,
     /// What the run said beyond its drafts: the identity it used in place of
     /// `--by`, and what numbering reported (a failed pull-request fetch, a
     /// missing directory). The same text is on stderr; stderr is not the

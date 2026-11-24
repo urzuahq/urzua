@@ -418,8 +418,8 @@ fn open(config: Option<PathBuf>) -> Result<Env, Failure> {
     })
 }
 
-fn not_run(message: impl Into<Failure>) -> ExitCode {
-    emit(&CouldNotRun::new(FailureKind::Environment, message))
+fn not_run(failure: Failure) -> ExitCode {
+    emit(&CouldNotRun::from_failure(failure))
 }
 
 fn load_lock(env: &Env) -> Result<Option<Lock>, String> {
@@ -498,10 +498,10 @@ fn open_installed(config: Option<PathBuf>, hint: &str) -> Result<(Env, Lock), Ex
     let env = open(config).map_err(not_run)?;
     match load_lock(&env) {
         Ok(Some(lock)) => Ok((env, lock)),
-        Ok(None) => Err(not_run(format!(
+        Ok(None) => Err(not_run(Failure::environment(format!(
             "no {LOCK_PATH}: the harness is not installed{hint}"
-        ))),
-        Err(m) => Err(not_run(m)),
+        )))),
+        Err(m) => Err(not_run(Failure::environment(m))),
     }
 }
 

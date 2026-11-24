@@ -758,7 +758,7 @@ enum ExportFormat {
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
-        let out = serde_json::json!({ "status": "not-run", "error": info.to_string(), "error_kind": "internal", "next_action": null, "next_action_reason": null, "next_action_inputs": [] });
+        let out = serde_json::json!({ "status": "not-run", "error": info.to_string().split_whitespace().collect::<Vec<_>>().join(" "), "error_kind": "internal", "next_action": null, "next_action_reason": null, "next_action_inputs": [] });
         // write_all + let-ignore, never println!/a panicking macro here -- a
         // broken pipe during the hook itself would double-panic and abort
         // with no output at all, defeating the hook's entire purpose.

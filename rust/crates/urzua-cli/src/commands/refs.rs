@@ -37,7 +37,7 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
         repo_root, config, ..
     } = match Workspace::open(&[], config_path) {
         Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
     let Some(refs) = config
         .rules

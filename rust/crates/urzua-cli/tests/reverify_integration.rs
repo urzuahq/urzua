@@ -529,6 +529,7 @@ fn a_batch_is_capped_names_its_records_and_shares_one_reason_observed_failing() 
         parsed["error"].as_str().unwrap().contains("max_batch"),
         "{parsed}"
     );
+    assert_eq!(parsed["error_kind"], "usage", "{parsed}");
     for n in 1..=4u32 {
         assert_eq!(read(&dir, &path(n)), before[(n - 1) as usize]);
     }

@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use urzua_core::report::FailingAs;
 use urzua_core::report::{ExportReport, Failure, ReportStatus};
 
 use super::board::{build_page, check_line, stamp, Listening, LAST_CHECK_SECS};
@@ -77,16 +78,19 @@ pub(super) fn serve(
     // Fails before listening when the records cannot be read at all.
     Workspace::open(&[], config_path.clone())?;
     let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, port)))
-        .map_err(|e| format!("could not listen on 127.0.0.1:{port}: {e}"))?;
+        .map_err(|e| format!("could not listen on 127.0.0.1:{port}: {e}"))
+        .failing(urzua_core::report::FailureKind::Environment)?;
     let address = listener
         .local_addr()
-        .map_err(|e| format!("could not read the listening address: {e}"))?;
+        .map_err(|e| format!("could not read the listening address: {e}"))
+        .failing(urzua_core::report::FailureKind::Environment)?;
     let line = crate::report_value(&Listening {
         status: ReportStatus::Ok,
         listening: format!("http://{address}/"),
         address: address.to_string(),
         port: address.port(),
-    })?;
+    })
+    .failing(urzua_core::report::FailureKind::Environment)?;
     let mut stdout = std::io::stdout().lock();
     let _ = writeln!(stdout, "{line}");
     let _ = stdout.flush();

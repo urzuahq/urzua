@@ -22,7 +22,7 @@ use crate::session::{Session, Workspace};
 pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
     let workspace = match Workspace::open(&[], config_path) {
         Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
     let config = &workspace.config;
     let authority = config.authority.clone();
@@ -45,7 +45,7 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         .and_then(Session::refusing_escaping_records)
     {
         Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
 
     let artifacts = match crate::discovery::read_index_artifacts(&repo_root, &specs) {

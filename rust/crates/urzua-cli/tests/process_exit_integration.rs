@@ -66,6 +66,10 @@ fn a_panic_exits_2_with_a_not_run_result() {
         "the report names the panic under `error`: {report}"
     );
     assert_eq!(report["error_kind"], "internal", "{report}");
+    assert!(
+        !report["error"].as_str().unwrap().contains('\n'),
+        "`error` is one line: {report}"
+    );
     assert!(report.get("panic").is_none(), "no `panic` key: {report}");
     // MILE-72: the not-run shape carries the two keys like every report.
     assert!(report["next_action"].is_null(), "{report}");

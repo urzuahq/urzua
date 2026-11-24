@@ -18,6 +18,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel, RuleSetting};
 use urzua_core::refs_snapshot::RefsSnapshot;
+use urzua_core::report::FailingAs;
 use urzua_core::report::FailureKind;
 use urzua_core::report::{BaselineInfo, DetailValue, Failure};
 use urzua_core::report::{
@@ -448,7 +449,7 @@ pub struct CheckArgs {
 pub fn run(config_path: Option<PathBuf>, args: CheckArgs) -> ExitCode {
     match execute(config_path, args) {
         Ok(report) => emit(&report),
-        Err(e) => emit(&CouldNotRun::new(FailureKind::Environment, e)),
+        Err(e) => emit(&CouldNotRun::from_failure(e)),
     }
 }
 
@@ -469,16 +470,17 @@ fn validate_selection(
     for id in requested {
         let id = id.trim();
         if id.is_empty() {
-            return Err("urzua check --rules: an empty rule id (a stray comma?)".into());
+            return Err(Failure::usage(
+                "urzua check --rules: an empty rule id (a stray comma?)",
+            ));
         }
         if !rules::ALL_RULES.contains(&id) {
             return Err(unknown_rule_failure(requested, id));
         }
         if !config.rules.contains_key(id) && urzua_core::rules::default_on(id).is_none() {
-            return Err(format!(
+            return Err(Failure::usage(format!(
                 "urzua check --rules: '{id}' is not declared in the configuration; --rules narrows the declared rules and never enables one"
-            )
-            .into());
+            )));
         }
         if !out.iter().any(|o| o == id) {
             out.push(id.to_string());
@@ -504,6 +506,7 @@ fn unknown_rule_failure(requested: &[String], id: &str) -> Failure {
         .map(|r| if r.trim() == id { nearest } else { r.trim() })
         .collect();
     Failure::with_next(
+        FailureKind::Usage,
         format!(
             "urzua check --rules: '{id}' is not a rule this build ships; did you mean '{nearest}'? (`urzua rules` lists them)"
         ),
@@ -574,16 +577,14 @@ fn scope_info(session: &Session, scope: ReportScope, base: Option<String>) -> Sc
 /// The flag combinations `check` refuses, before anything is read.
 fn reject_flag_conflicts(args: &CheckArgs) -> Result<(), Failure> {
     if args.stdin_path.is_some() && (!args.paths.is_empty() || args.base.is_some()) {
-        return Err(
-            "urzua check --stdin-path judges one record's proposed content and reports on it alone: it cannot be combined with PATHS or --base"
-                .into(),
-        );
+        return Err(Failure::usage(
+            "urzua check --stdin-path judges one record's proposed content and reports on it alone: it cannot be combined with PATHS or --base",
+        ));
     }
     if args.stdin_path.is_some() && args.actors.is_some() {
-        return Err(
-            "urzua check --actors names who made a --base change: it cannot be combined with --stdin-path"
-                .into(),
-        );
+        return Err(Failure::usage(
+            "urzua check --actors names who made a --base change: it cannot be combined with --stdin-path",
+        ));
     }
     Ok(())
 }
@@ -656,7 +657,8 @@ fn run_opened(mut opened: Opened, args: CheckArgs) -> Result<CheckReport, Failur
         ..
     } = args;
     let actors = actors_path.as_deref().map(read_actors).transpose()?;
-    add_records(&mut opened.session, added_records)?;
+    add_records(&mut opened.session, added_records)
+        .failing(urzua_core::report::FailureKind::Environment)?;
     let session = &opened.session;
     let selection = validate_selection(&session.config, &requested_rules)?;
     let baseline_commit = resolve_drift_baseline(session, selection.as_deref())?;
@@ -665,8 +667,10 @@ fn run_opened(mut opened: Opened, args: CheckArgs) -> Result<CheckReport, Failur
         opened.requested_scopes,
         opened.changed,
         opened.prospective,
-    )?;
-    let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())?;
+    )
+    .failing(urzua_core::report::FailureKind::Environment)?;
+    let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())
+        .failing(urzua_core::report::FailureKind::Environment)?;
     let baseline = hold_out_baseline(
         baseline_commit,
         session,
@@ -990,11 +994,10 @@ fn resolve_drift_baseline(
     let git_ref = baseline.git_ref.trim().to_string();
     match urzua_io::resolve_baseline_commit(&session.repo_root, &git_ref) {
         Ok(commit) => Ok(Some((git_ref, commit))),
-        Err(e) => Err(format!(
+        Err(e) => Err(Failure::config(format!(
             "{}.drift_baseline.ref: {e}; fix the ref or remove drift_baseline (a shallow clone may lack the commit: fetch full history)",
             rules::RULE_EMBODIMENT_CONSISTENCY
-        )
-        .into()),
+        ))),
     }
 }
 
@@ -1305,23 +1308,25 @@ fn base_failure(repo_root: &Path, e: urzua_io::DiscoveryError) -> Failure {
                 .filter(|(r, b)| !b.is_empty() && remotes.iter().any(|x| x == r))
             {
                 Some((remote, branch)) => Failure::with_next(
+                    FailureKind::Environment,
                     message,
                     NextAction::runs_as_printed(
                         shell_command(&["git", "fetch", remote, branch]),
                         format!("fetches {branch} from {remote}, so --base {base} resolves"),
                     ),
                 ),
-                None => Failure::from(message),
+                None => Failure::environment(message),
             }
         }
         urzua_io::DiscoveryError::ShallowClone { .. } => Failure::with_next(
+            FailureKind::Environment,
             message,
             NextAction::runs_as_printed(
                 "git fetch --unshallow",
                 "fetches the history a shallow clone lacks, so the merge base can be found",
             ),
         ),
-        _ => Failure::from(message),
+        _ => Failure::environment(message),
     }
 }
 
@@ -1337,7 +1342,8 @@ fn open_session(
     let mut requested_scopes = Vec::new();
     let mut changed = None;
     let session = Session::open_with(paths, config_path, |repo_root, _config, discovered| {
-        requested_scopes = crate::discovery::relative_scopes(repo_root, paths)?;
+        requested_scopes = crate::discovery::relative_scopes(repo_root, paths)
+            .failing(urzua_core::report::FailureKind::Usage)?;
         if !requested_scopes.is_empty() {
             // What git tracks or has staged. A record the option included is
             // not in it, so a file named on argv keeps its `BUG-24` treatment
@@ -1349,7 +1355,8 @@ fn open_session(
                 .cloned()
                 .collect();
             let extra =
-                crate::discovery::resolve_argv_overrides(repo_root, &requested_scopes, &tracked)?;
+                crate::discovery::resolve_argv_overrides(repo_root, &requested_scopes, &tracked)
+                    .failing(urzua_core::report::FailureKind::Usage)?;
             // The diff lists tracked paths, and the included untracked records
             // are added to it below, so only a named file the option would not
             // include could never be examined: refusing is the alternative to
@@ -1359,11 +1366,10 @@ fn open_session(
                     .iter()
                     .any(|p| !discovered.untracked_included.contains(p))
             {
-                return Err(
+                return Err(Failure::usage(
                     "--base cannot be combined with a named file git does not track; \
-                 drop --base or track the file"
-                        .into(),
-                );
+                 drop --base or track the file",
+                ));
             }
             if !extra.is_empty() {
                 discovered.paths.extend(extra);
@@ -1386,7 +1392,9 @@ fn open_session(
     })?;
     let mut session = session;
     let prospective = match stdin_path {
-        Some(p) => Some(propose(&mut session, p, proposed)?),
+        Some(p) => Some(
+            propose(&mut session, p, proposed).failing(urzua_core::report::FailureKind::Usage)?,
+        ),
         None => None,
     };
     if let Some(p) = &prospective {
@@ -2759,7 +2767,7 @@ fn load_pull_ref_claims(
 /// had not been told.
 fn read_actors(path: &Path) -> Result<urzua_core::authority::Actors, Failure> {
     let said = |why: String| -> Failure {
-        format!("urzua check --actors {}: {why}", path.display()).into()
+        Failure::environment(format!("urzua check --actors {}: {why}", path.display()))
     };
     let text =
         std::fs::read_to_string(path).map_err(|e| said(format!("could not be read: {e}")))?;

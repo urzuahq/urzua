@@ -164,7 +164,7 @@ pub fn run_verify(
 ) -> ExitCode {
     let ws = match Workspace::open(&[PathBuf::from(".")], config) {
         Ok(ws) => ws,
-        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
     let hooks: Vec<&str> = match &hook {
         Some(h) if HOOKS.contains(&h.as_str()) => vec![h.as_str()],

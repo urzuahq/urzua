@@ -10,6 +10,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use urzua_core::report::FailingAs;
 use urzua_core::report::{
     DetailValue, ExportReport, Failure, FindingSeverity, Notice, NoticeSeverity, ReadStamp, Report,
     ReportStatus,
@@ -253,10 +254,12 @@ fn write_file(config_path: Option<PathBuf>, out: Option<PathBuf>) -> Result<Exit
     notices.extend(export.notices);
     if let Some(dir) = target.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir)
-            .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+            .map_err(|e| format!("could not create {}: {e}", dir.display()))
+            .failing(urzua_core::report::FailureKind::Environment)?;
     }
     std::fs::write(&target, &page)
-        .map_err(|e| format!("could not write {}: {e}", target.display()))?;
+        .map_err(|e| format!("could not write {}: {e}", target.display()))
+        .failing(urzua_core::report::FailureKind::Environment)?;
     Ok(emit(&BoardReport {
         status: ReportStatus::Ok,
         file: target,

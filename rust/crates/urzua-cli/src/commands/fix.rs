@@ -44,6 +44,18 @@ pub(crate) fn refuse(reason: impl Into<Failure>) -> Refusal {
     reason.into()
 }
 
+pub(crate) fn refuse_environment(reason: impl Into<String>) -> Refusal {
+    Failure::of(FailureKind::Environment, reason)
+}
+
+pub(crate) fn usage_of(reason: impl std::fmt::Display) -> Refusal {
+    Failure::of(FailureKind::Usage, reason.to_string())
+}
+
+pub(crate) fn environment_of(reason: impl std::fmt::Display) -> Refusal {
+    Failure::of(FailureKind::Environment, reason.to_string())
+}
+
 /// A refusal because the flags given cannot be combined or are incomplete.
 pub(crate) fn refuse_usage(reason: impl Into<String>) -> Refusal {
     Failure::of(FailureKind::Usage, reason)
@@ -55,8 +67,7 @@ pub(crate) fn refuse_config(reason: impl Into<String>) -> Refusal {
 }
 
 pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
-    run_checked(config_path, args)
-        .unwrap_or_else(|e| emit(&CouldNotRun::new(FailureKind::Environment, e)))
+    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from_failure(e)))
 }
 
 /// Whether `rule` runs: declared above `off`, or on by declaration.
@@ -99,13 +110,13 @@ fn run_checked(config_path: Option<PathBuf>, mut args: FixArgs) -> Result<ExitCo
             .attestation
             .reason
             .check(&reason)
-            .map_err(|e| refuse(format!("urzua fix --rebaseline --apply: {e}")))?;
+            .map_err(|e| refuse_usage(format!("urzua fix --rebaseline --apply: {e}")))?;
     }
     // A re-pin compares hashes and needs neither repair rule: it is the fix
     // `embodiment.pin-stale` suggests, and that rule is on by default.
     if args.rebaseline {
         let history = LogHistory::resolve(&repo_root, args.base.as_deref())
-            .map_err(|e| refuse(format!("urzua fix --rebaseline: {e}")))?;
+            .map_err(|e| refuse_usage(format!("urzua fix --rebaseline: {e}")))?;
         return Ok(run_rebaseline(RebaselineArgs {
             repo_root: &repo_root,
             config: &config,
@@ -319,7 +330,7 @@ fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
         args.reason.as_deref(),
         "urzua fix --rebaseline --apply: pass --reason <why the evidence still holds>; a re-pin without a reason is a rubber stamp",
     )
-    .map_err(refuse)?;
+    .map_err(usage_of)?;
     if args.stdin_path.is_some()
         && (args.apply
             || args.force
@@ -350,15 +361,15 @@ fn select_scope(
     };
     // The proposed content replaces the on-disk record (or adds a new one)
     // for this one path; nothing else is examined or drifted.
-    let rel = crate::discovery::relative_to_root(repo_root, stdin_path).map_err(refuse)?;
+    let rel = crate::discovery::relative_to_root(repo_root, stdin_path).map_err(usage_of)?;
     let mut content = String::new();
     if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut content) {
-        return Err(refuse(format!(
+        return Err(refuse_environment(format!(
             "could not read the proposed content from stdin: {e}"
         )));
     }
     let record =
-        crate::discovery::parse_prospective_record(config, &rel, &content).map_err(refuse)?;
+        crate::discovery::parse_prospective_record(config, &rel, &content).map_err(usage_of)?;
     records.retain(|r| r.path != rel);
     records.push(record.clone());
     Ok((vec![record], Vec::new(), Some(content)))
@@ -414,7 +425,7 @@ fn detect_repairs_in(
     );
     notices.extend(pinned_drift_notice(&pinned_drift));
     let back_pointed =
-        back_pointer_evidence(repo_root, discovered, config, records).map_err(refuse)?;
+        back_pointer_evidence(repo_root, discovered, config, records).map_err(environment_of)?;
     // The derived-blocked records (`ADR-96` section 7): `fix` writes no
     // `progress` status to one. Computed only when a type is opted in.
     let blocked = if scoped.iter().any(|r| r.items.is_some()) {
@@ -505,8 +516,8 @@ fn apply_repairs(
     unmatched: Vec<(PathBuf, String)>,
 ) -> Result<ExitCode, Refusal> {
     let identity = resolve_attestation(args.by.as_deref(), args.actor, tree.repo_root, tree.config)
-        .map_err(refuse)?;
-    let _lock = urzua_io::FixLock::acquire(tree.repo_root).map_err(refuse)?;
+        .map_err(usage_of)?;
+    let _lock = urzua_io::FixLock::acquire(tree.repo_root).map_err(environment_of)?;
 
     let today = urzua_io::today();
     let selected: Vec<_> = detected
@@ -977,8 +988,7 @@ struct RebaselineScan {
 /// share one set of gates. A record is the selector (`--ids` takes its
 /// repo-relative path), and all of its stale pins move together.
 fn run_rebaseline(args: RebaselineArgs<'_>) -> ExitCode {
-    rebaseline_checked(args)
-        .unwrap_or_else(|e| emit(&CouldNotRun::new(FailureKind::Environment, e)))
+    rebaseline_checked(args).unwrap_or_else(|e| emit(&CouldNotRun::from_failure(e)))
 }
 
 fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal> {
@@ -987,12 +997,12 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
     // lock is taken first: evidence edited between an earlier detect and the
     // lock would otherwise be hashed stale and attested as current.
     let identity = if args.apply {
-        Some(resolve_attestation(args.by, args.actor, repo_root, config).map_err(refuse)?)
+        Some(resolve_attestation(args.by, args.actor, repo_root, config).map_err(usage_of)?)
     } else {
         None
     };
     let _lock = if args.apply {
-        Some(urzua_io::FixLock::acquire(repo_root).map_err(refuse)?)
+        Some(urzua_io::FixLock::acquire(repo_root).map_err(environment_of)?)
     } else {
         None
     };

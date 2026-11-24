@@ -13,7 +13,6 @@ use urzua_core::config::{Config, DriftPolicy, RuleLevel};
 use urzua_core::fix::{revision_log_refusal, ActorKind, Attestation, PinRead};
 use urzua_core::locator::Locator;
 use urzua_core::record::Record;
-use urzua_core::report::FailureKind;
 use urzua_core::report::{
     census, CouldNotRun, FixStatus, Notice, Outcome, Population, PopulationUnit,
 };
@@ -25,9 +24,9 @@ use urzua_core::reverify::{
 use urzua_core::rules::{self, ClaimExpiredOpts, ClaimSkip};
 
 use crate::commands::fix::{
-    back_pointer_evidence, excused_evidence_notice, identity_notices, into_failures, refuse,
-    refuse_config, refuse_usage, repo_relative_ids, resolve_attestation, rule_enabled,
-    validate_reason, Refusal, ResolvedAttestation,
+    back_pointer_evidence, environment_of, excused_evidence_notice, identity_notices,
+    into_failures, refuse, refuse_config, refuse_usage, repo_relative_ids, resolve_attestation,
+    rule_enabled, usage_of, validate_reason, Refusal, ResolvedAttestation,
 };
 use crate::discovery::{ClaimMeasures, DriftedRecords};
 use crate::emit;
@@ -57,8 +56,7 @@ struct Reviewed {
 }
 
 pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
-    run_checked(config_path, args)
-        .unwrap_or_else(|e| emit(&CouldNotRun::new(FailureKind::Environment, e)))
+    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from_failure(e)))
 }
 
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
@@ -77,7 +75,7 @@ fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<E
             .attestation
             .reason
             .check(&reason)
-            .map_err(|e| refuse(format!("urzua reverify --apply: {e}")))?;
+            .map_err(|e| refuse_usage(format!("urzua reverify --apply: {e}")))?;
     }
     if !rule_enabled(&config, rules::RULE_EMBODIMENT_CLAIM_EXPIRED) {
         return Err(refuse_config(
@@ -86,7 +84,7 @@ fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<E
     }
     let opts: ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
     if args.apply && !args.force && args.ids.len() > opts.max_batch {
-        return Err(refuse(format!(
+        return Err(refuse_usage(format!(
             "urzua reverify --apply names {} records, more than max_batch of {}: name at most {} and run another batch with its own reason",
             args.ids.len(),
             opts.max_batch,
@@ -96,7 +94,7 @@ fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<E
     let identity = if args.apply {
         Some(
             resolve_attestation(args.by.as_deref(), args.actor, &repo_root, &config)
-                .map_err(refuse)?,
+                .map_err(usage_of)?,
         )
     } else {
         None
@@ -105,7 +103,7 @@ fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<E
     // (as `fix --rebaseline` does): evidence edited between a review and the
     // lock would otherwise be hashed stale and attested as current.
     let _lock = if args.apply {
-        Some(urzua_io::FixLock::acquire(&repo_root).map_err(refuse)?)
+        Some(urzua_io::FixLock::acquire(&repo_root).map_err(environment_of)?)
     } else {
         None
     };
@@ -195,7 +193,7 @@ fn gather_evidence(
     let (measures, drift) =
         crate::discovery::measure_claims_and_drift(repo_root, subset, config, now);
     let back_pointed =
-        back_pointer_evidence(repo_root, discovered, config, records).map_err(refuse)?;
+        back_pointer_evidence(repo_root, discovered, config, records).map_err(environment_of)?;
     let disagreeing = if rule_enabled(config, rules::RULE_EMBODIMENT_CONSISTENCY) {
         let judge = |drifted: &HashSet<PathBuf>, fresh: &HashSet<PathBuf>| {
             embodiment_disagreements(
@@ -339,7 +337,7 @@ fn check_usage(args: &ReverifyArgs) -> Result<String, Refusal> {
         args.reason.as_deref(),
         "urzua reverify --apply: pass --reason <what you checked>; a renewal with no reason is a rubber stamp",
     )
-    .map_err(refuse)
+    .map_err(environment_of)
 }
 
 /// The records a review covers, and a failure for each `--ids` entry that names
