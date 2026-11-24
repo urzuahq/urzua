@@ -12,6 +12,8 @@
     "line": {"type": ["integer", "null"], "minimum": 1},
     "column": {"type": ["integer", "null"], "minimum": 1},
     "fix": {"type": "string"},
-    "fingerprint": {"type": "string"}
+    "fix_argv": {"type": "array", "items": {"type": "string"}},
+    "fingerprint": {"type": "string"},
+    "check": {"type": "string", "minLength": 1}
   }
 }

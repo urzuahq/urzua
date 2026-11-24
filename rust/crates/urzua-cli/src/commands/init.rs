@@ -1201,6 +1201,7 @@ impl Report for InitReport {
 
 /// The greenfield command named wherever adopt finds nothing to adopt.
 pub(crate) const GREENFIELD_COMMAND: &str = "urzua init --types adr";
+pub(crate) const GREENFIELD_ARGV: [&str; 4] = ["urzua", "init", "--types", "adr"];
 
 /// What `urzua init` would do in this repository today, for `doctor`.
 pub(crate) enum AdoptOutlook {
@@ -1449,7 +1450,7 @@ fn run_adopt(ctx: &InitContext, dir: Option<&Path>) -> ExitCode {
         Err(ProposeError::NothingToAdopt(why)) => {
             if config_exists || !crate::commands::init_greenfield::can_prompt() {
                 return emit(&CouldNotRun::from(why).with_next_action(
-                        GREENFIELD_COMMAND,
+                        GREENFIELD_ARGV,
                         "no record directory to adopt; greenfield mode writes a config for the types --types names",
                     ));
             }
@@ -1510,6 +1511,14 @@ fn run_adopt(ctx: &InitContext, dir: Option<&Path>) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_greenfield_command_is_the_rendering_of_its_words() {
+        assert_eq!(
+            urzua_core::report::shell_command(&GREENFIELD_ARGV),
+            GREENFIELD_COMMAND
+        );
+    }
 
     #[test]
     fn detects_one_type_per_populated_docs_subdirectory() {

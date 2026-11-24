@@ -100,3 +100,5 @@
   reason: "the documented install command piping a download into sh, so a failed download exits 0; it is documentation text and a shell pipeline, which no urzua command run over a corpus executes, and scripts/install-test.sh scans the documented commands for a pipe into a shell"
 - bug: BUG-224
   reason: "a test fixture writing an abbreviated commit sha unquoted into YAML; it depends on the sha of a commit a test makes, which no fixed corpus run can produce, and drift_baseline_integration quotes the ref"
+- bug: BUG-225
+  reason: "the fallback envelope printed when a report cannot be serialised; no input makes a report fail to serialise, so no corpus can reach it, and the main.rs unit test builds the envelope from a real serde error"

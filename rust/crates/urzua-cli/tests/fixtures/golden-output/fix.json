@@ -10,6 +10,15 @@
     },
     "failed": [],
     "next_action": "urzua fix --apply --ids docs/adr/ADR-3-third.md --actor agent",
+    "next_action_argv": [
+      "urzua",
+      "fix",
+      "--apply",
+      "--ids",
+      "docs/adr/ADR-3-third.md",
+      "--actor",
+      "agent"
+    ],
     "next_action_inputs": [],
     "next_action_reason": "writes 1 repair",
     "population": {

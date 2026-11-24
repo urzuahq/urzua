@@ -18,6 +18,7 @@
       }
     ],
     "next_action": null,
+    "next_action_argv": null,
     "next_action_inputs": [],
     "next_action_reason": null,
     "path": "src/a.rs",

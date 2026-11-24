@@ -10,7 +10,7 @@ use urzua_core::status_model::StatusDecl;
 
 /// The keys at the top of `urzua export --format json` that every export
 /// carries, and those it carries only when something asks for them.
-pub(crate) const TOP_KEYS: [&str; 9] = [
+pub(crate) const TOP_KEYS: [&str; 10] = [
     "status",
     "record_count",
     "types",
@@ -18,6 +18,7 @@ pub(crate) const TOP_KEYS: [&str; 9] = [
     "read",
     "records",
     "next_action",
+    "next_action_argv",
     "next_action_reason",
     "next_action_inputs",
 ];

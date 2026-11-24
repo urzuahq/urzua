@@ -394,3 +394,127 @@ pub fn write_stdin(child: &mut std::process::Child, input: &str) {
         assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
     }
 }
+
+/// `line` split into words as a POSIX shell reads it, or why it cannot be run
+/// as one command: an unquoted `< > | & ; ( ) $ { } [ ] * ?`, a leading `~`
+/// or `#` on a word, or a `$` inside double quotes (the published agent CLI
+/// contract's runner refuses each).
+pub fn posix_split(line: &str) -> Result<Vec<String>, String> {
+    let mut words: Vec<String> = Vec::new();
+    let mut current: Option<String> = None;
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            ' ' | '\t' | '\n' => {
+                words.extend(current.take());
+            }
+            '\'' => {
+                let word = current.get_or_insert_with(String::new);
+                loop {
+                    match chars.next() {
+                        Some('\'') => break,
+                        Some(q) => word.push(q),
+                        None => return Err(format!("unterminated ' in {line}")),
+                    }
+                }
+            }
+            '"' => {
+                let word = current.get_or_insert_with(String::new);
+                loop {
+                    match chars.next() {
+                        Some('"') => break,
+                        Some('$') | Some('`') => {
+                            return Err(format!("$ or ` inside double quotes in {line}"))
+                        }
+                        Some('\\') => match chars.next() {
+                            Some(e) => word.push(e),
+                            None => return Err(format!("unterminated \\ in {line}")),
+                        },
+                        Some(q) => word.push(q),
+                        None => return Err(format!("unterminated \" in {line}")),
+                    }
+                }
+            }
+            '\\' => match chars.next() {
+                Some(e) => current.get_or_insert_with(String::new).push(e),
+                None => return Err(format!("trailing \\ in {line}")),
+            },
+            '<' | '>' | '|' | '&' | ';' | '(' | ')' | '$' | '{' | '}' | '[' | ']' | '*' | '?'
+            | '`' => return Err(format!("unquoted {c:?} in {line}")),
+            '~' | '#' if current.is_none() => {
+                return Err(format!("a word starts with {c:?} in {line}"))
+            }
+            _ => current.get_or_insert_with(String::new).push(c),
+        }
+    }
+    words.extend(current.take());
+    Ok(words)
+}
+
+/// What every report promises of its next action and its findings' fixes: the
+/// `next_action_argv` key is present, `null` exactly when `next_action` is, and
+/// otherwise a non-empty array that is the string's POSIX splitting; each
+/// `next_action_inputs` entry's `index` names the element equal to its
+/// placeholder, and the string carries it single-quoted; a `fix` is the
+/// shell rendering of its `fix_argv`.
+pub fn assert_next_action_agrees(report: &serde_json::Value) {
+    let Some(object) = report.as_object() else {
+        return;
+    };
+    let Some(action) = object.get("next_action") else {
+        return;
+    };
+    let argv = object
+        .get("next_action_argv")
+        .unwrap_or_else(|| panic!("next_action_argv is always present: {report}"));
+    match action.as_str() {
+        None => {
+            assert!(action.is_null() && argv.is_null(), "{report}");
+            assert_eq!(object["next_action_inputs"], serde_json::json!([]));
+        }
+        Some(line) => {
+            let words: Vec<String> = argv
+                .as_array()
+                .unwrap_or_else(|| panic!("next_action_argv is an array: {report}"))
+                .iter()
+                .map(|w| w.as_str().unwrap().to_string())
+                .collect();
+            assert!(!words.is_empty(), "{report}");
+            let split = posix_split(line).unwrap_or_else(|e| panic!("{e}: {report}"));
+            assert_eq!(split, words, "next_action is not the rendering of its argv");
+            for input in object["next_action_inputs"].as_array().unwrap() {
+                let placeholder = input["placeholder"].as_str().unwrap();
+                let index = input["index"]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("an input has an index: {input}"))
+                    as usize;
+                assert_eq!(words.get(index).map(String::as_str), Some(placeholder));
+                assert!(
+                    line.contains(&format!("'{placeholder}'")),
+                    "the placeholder is single-quoted in {line}"
+                );
+            }
+        }
+    }
+    fn fixes(value: &serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if let Some(serde_json::Value::String(fix)) = map.get("fix") {
+                    let argv: Vec<String> = map
+                        .get("fix_argv")
+                        .and_then(|a| a.as_array())
+                        .unwrap_or_else(|| panic!("a fix carries fix_argv: {value}"))
+                        .iter()
+                        .map(|w| w.as_str().unwrap().to_string())
+                        .collect();
+                    assert!(!argv.is_empty(), "{value}");
+                    assert_eq!(posix_split(fix).unwrap(), argv, "{value}");
+                }
+                map.values().for_each(fixes);
+            }
+            serde_json::Value::Array(items) => items.iter().for_each(fixes),
+            _ => {}
+        }
+    }
+    fixes(report);
+}
