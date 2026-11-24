@@ -22,6 +22,11 @@ pub(crate) const HOOKS: [&str; 2] = ["pre-commit", "pre-push"];
 pub(crate) const BEGIN: &str = "# >>> urzua-hooks begin";
 pub(crate) const END: &str = "# <<< urzua-hooks end";
 pub(crate) const INSTALL: &str = "urzua hooks install";
+const INSTALL_ARGV: [&str; 3] = ["urzua", "hooks", "install"];
+
+fn words<const N: usize>(argv: [&str; N]) -> Vec<String> {
+    argv.map(String::from).to_vec()
+}
 const FRAMEWORK_CONFIG: &str = ".pre-commit-config.yaml";
 const SHEBANG: &str = "#!/bin/sh\n";
 const INSTALL_DOC: &str = "https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md";
@@ -290,8 +295,8 @@ pub(crate) struct Wiring {
     pub path: PathBuf,
     pub state: HookState,
     pub message: String,
-    /// The one runnable command that wires it, when there is one.
-    pub fix: Option<String>,
+    /// The one runnable command that wires it, when there is one, as its words.
+    pub fix: Option<Vec<String>>,
 }
 
 /// The one line a hook urzua will not write can carry to run urzua. Like the
@@ -580,8 +585,8 @@ fn append_rest(mut path: PathBuf, rest: &[std::path::Component]) -> PathBuf {
 
 /// `urzua hooks uninstall`, when running it would unset this clone's
 /// `core.hooksPath`.
-fn uninstall_fix(repo_root: &Path) -> Option<String> {
-    set_in_own_config(repo_root).then(|| "urzua hooks uninstall".to_string())
+fn uninstall_fix(repo_root: &Path) -> Option<Vec<String>> {
+    set_in_own_config(repo_root).then(|| words(["urzua", "hooks", "uninstall"]))
 }
 
 fn set_in_own_config(repo_root: &Path) -> bool {
@@ -680,7 +685,7 @@ fn pointer_wiring(
         None => match install_refusal(repo_root, &off, decl) {
             None => (
                 format!("this clone is not pointed at {p}, the directory hooks.path names: core.hooksPath is not set, so git does not run the hooks committed there -- `{INSTALL}` points this clone at {p}"),
-                Some(INSTALL.to_string()),
+                Some(words(INSTALL_ARGV)),
             ),
             Some(why) => (
                 format!("this clone is not pointed at {p}, the directory hooks.path names, and `{INSTALL}` would refuse: {why}"),
@@ -696,7 +701,7 @@ fn every_hook(
     dir: &Path,
     state: HookState,
     message: &str,
-    fix: Option<String>,
+    fix: Option<Vec<String>>,
 ) -> Vec<Result<Wiring, String>> {
     HOOKS
         .iter()
@@ -786,7 +791,7 @@ fn wired(
     path: &Path,
     state: HookState,
     message: String,
-    fix: Option<String>,
+    fix: Option<Vec<String>>,
 ) -> Wiring {
     Wiring {
         hook: hook.to_string(),
@@ -804,7 +809,7 @@ fn repair(
     path: &Path,
     unwritable: Option<&str>,
     message: String,
-) -> (String, Option<String>) {
+) -> (String, Option<Vec<String>>) {
     match unwritable {
         Some(why) => (
             format!(
@@ -814,7 +819,7 @@ fn repair(
             ),
             None,
         ),
-        None => (message, Some(INSTALL.to_string())),
+        None => (message, Some(words(INSTALL_ARGV))),
     }
 }
 
@@ -852,17 +857,18 @@ fn file_wiring(
                 "{} is not executable, so git ignores it -- make it executable, then run `{INSTALL}`",
                 path.display()
             ),
-            Some(format!(
-                "chmod +x {} && {INSTALL}",
-                shell_quote(&path.to_string_lossy())
-            )),
+            Some(vec![
+                "chmod".to_string(),
+                "+x".to_string(),
+                path.to_string_lossy().into_owned(),
+            ]),
         ));
     }
     let content = read_optional(path)?.unwrap_or_default();
     let (state, message) = content_state(hook, path, &content, decl);
     let fix = match state {
         HookState::InstalledRunningUrzua => None,
-        HookState::InstalledDuplicated => Some(format!("urzua hooks uninstall && {INSTALL}")),
+        HookState::InstalledDuplicated => Some(words(INSTALL_ARGV)),
         _ => {
             let (_, fix) = repair(hook, path, unwritable, String::new());
             return Ok(wired(
@@ -915,7 +921,11 @@ fn declared_wiring(
             path,
             HookState::DeclaredNotExecutable,
             format!("{key}, but {shown} is not executable, so git ignores it"),
-            Some(format!("chmod +x {}", shell_quote(&path.to_string_lossy()))),
+            Some(vec![
+                "chmod".to_string(),
+                "+x".to_string(),
+                path.to_string_lossy().into_owned(),
+            ]),
         ));
     }
     let content = read_optional(path)?.unwrap_or_default();
@@ -957,9 +967,7 @@ fn content_state(hook: &str, path: &Path, content: &str, decl: &HooksDecl) -> (H
     if blocks > 1 {
         return (
             HookState::InstalledDuplicated,
-            format!(
-                "{shown} has {blocks} urzua blocks -- run `urzua hooks uninstall && {INSTALL}`"
-            ),
+            format!("{shown} has {blocks} urzua blocks -- run `{INSTALL}`, which writes one"),
         );
     }
     if blocks == 1 {
@@ -1053,7 +1061,7 @@ fn framework_wiring(
                 "{} declares no hook that runs urzua at {hook} -- `{INSTALL} --write-config` adds the stanza",
                 config.display()
             ),
-            Some(format!("{INSTALL} --write-config")),
+            Some(words(["urzua", "hooks", "install", "--write-config"])),
         ));
     }
     let baked = Marker::read(&text).policy;
@@ -1067,7 +1075,7 @@ fn framework_wiring(
                 config.display(),
                 decl.on_not_run.as_str()
             ),
-            Some(format!("urzua hooks uninstall && {INSTALL} --write-config")),
+            Some(words(["urzua", "hooks", "uninstall"])),
         ));
     }
     let script = git_hooks.join(hook);
@@ -1081,7 +1089,7 @@ fn framework_wiring(
                 config.display(),
                 script.display()
             ),
-            Some(format!("pre-commit install --hook-type {hook}")),
+            Some(words(["pre-commit", "install", "--hook-type", hook])),
         ));
     }
     Ok(wired(
@@ -1506,9 +1514,9 @@ impl HooksReport {
         });
     }
 
-    fn next(&mut self, command: String, reason: &str) {
+    fn next(&mut self, argv: Vec<String>, reason: &str) {
         if self.next.is_none() {
-            self.next = Some(NextAction::runs_as_printed(command, reason));
+            self.next = Some(NextAction::runs_as_printed(argv, reason));
         }
     }
 
@@ -2026,11 +2034,14 @@ fn install_framework(
     let missing: Vec<String> = HOOKS
         .iter()
         .filter(|h| !git_hooks.join(h).is_file())
-        .map(|h| format!("--hook-type {h}"))
+        .flat_map(|h| ["--hook-type".to_string(), h.to_string()])
         .collect();
     if !missing.is_empty() {
         report.next(
-            format!("pre-commit install {}", missing.join(" ")),
+            std::iter::once("pre-commit".to_string())
+                .chain(std::iter::once("install".to_string()))
+                .chain(missing)
+                .collect(),
             "installs the pre-commit framework's own git hooks, which run the stanza",
         );
     }
@@ -2061,7 +2072,7 @@ fn append_stanza(
             ),
         );
         report.next(
-            format!("{INSTALL} --write-config"),
+            words(["urzua", "hooks", "install", "--write-config"]),
             "appends the urzua stanza to .pre-commit-config.yaml",
         );
         return false;

@@ -111,6 +111,7 @@ fn run_case(dir: &Path, args: &[&str]) -> String {
         .expect("urzua binary should run");
     let mut stdout: Value = serde_json::from_slice(&out.stdout)
         .unwrap_or_else(|e| panic!("{args:?}: stdout is not JSON ({e}): {out:?}"));
+    common::assert_next_action_agrees(&stdout);
     let root = dir.to_str().unwrap();
     normalise(&mut stdout, root);
     let case = serde_json::json!({

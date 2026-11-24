@@ -13,7 +13,7 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 use urzua_core::config::{Config, RecordTypeConfig};
 use urzua_core::locator::CATEGORIES;
-use urzua_core::report::{ActionInput, Failure, NextAction, Notice, Report, ReportStatus};
+use urzua_core::report::{Failure, NextAction, Notice, Report, ReportStatus};
 use urzua_core::rules::RULE_EMBODIMENT_CLAIM_EXPIRED;
 use urzua_core::status_model::{DeliveryDecl, StatusDecl, StatusFieldRule};
 
@@ -109,32 +109,32 @@ pub fn run(config_path: Option<PathBuf>, mode: Mode) -> ExitCode {
 
 /// `--full` with `--type`: the one-type report is already the full one.
 pub fn refuse_full_with_type(name: &str) -> ExitCode {
-    let command = urzua_core::report::shell_command(&["urzua", "explain", "--type", name]);
+    let argv = ["urzua", "explain", "--type", name];
+    let command = urzua_core::report::shell_command(&argv);
     emit_or_not_run(Err(Failure::with_next(
         format!("--full goes with --types; `{command}` already prints the full detail of one type"),
-        NextAction::runs_as_printed(command, "the full detail of one type"),
+        NextAction::runs_as_printed(argv, "the full detail of one type"),
     )))
 }
 
 /// `--full` with neither `--types` nor `--type`.
 pub fn refuse_full_alone() -> ExitCode {
-    let command = "urzua explain --types --full";
+    let argv = ["urzua", "explain", "--types", "--full"];
     emit_or_not_run(Err(Failure::with_next(
-        format!("--full goes with --types: `{command}`"),
-        NextAction::runs_as_printed(command, "every declaration of every type"),
+        format!(
+            "--full goes with --types: `{}`",
+            urzua_core::report::shell_command(&argv)
+        ),
+        NextAction::runs_as_printed(argv, "every declaration of every type"),
     )))
 }
 
 fn detail_action() -> NextAction {
-    NextAction {
-        command: "urzua explain --type <name>".to_string(),
-        reason: "one type's full declaration".to_string(),
-        inputs: vec![ActionInput {
-            placeholder: "<name>".to_string(),
-            flag: "--type".to_string(),
-            means: "a `name` from `types`".to_string(),
-        }],
-    }
+    NextAction::runs_as_printed(
+        ["urzua", "explain", "--type", "<name>"],
+        "one type's full declaration",
+    )
+    .with_input("<name>", "--type", "a `name` from `types`")
 }
 
 pub(crate) fn build(

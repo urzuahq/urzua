@@ -90,6 +90,7 @@ struct WithNextAction<'a, T: serde::Serialize> {
     #[serde(flatten)]
     report: &'a T,
     next_action: Option<String>,
+    next_action_argv: Option<Vec<String>>,
     next_action_reason: Option<String>,
     next_action_inputs: Vec<urzua_core::report::ActionInput>,
 }
@@ -98,7 +99,8 @@ fn with_next_action<T: urzua_core::report::Report>(report: &T) -> WithNextAction
     let next = report.next_action();
     WithNextAction {
         report,
-        next_action: next.as_ref().map(|n| n.command.clone()),
+        next_action: next.as_ref().map(urzua_core::report::NextAction::command),
+        next_action_argv: next.as_ref().map(|n| n.argv.clone()),
         next_action_reason: next.as_ref().map(|n| n.reason.clone()),
         next_action_inputs: next.map(|n| n.inputs).unwrap_or_default(),
     }
@@ -756,7 +758,7 @@ enum ExportFormat {
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
-        let out = serde_json::json!({ "status": "not-run", "panic": info.to_string(), "next_action": null, "next_action_reason": null, "next_action_inputs": [] });
+        let out = serde_json::json!({ "status": "not-run", "panic": info.to_string(), "next_action": null, "next_action_argv": null, "next_action_reason": null, "next_action_inputs": [] });
         // write_all + let-ignore, never println!/a panicking macro here -- a
         // broken pipe during the hook itself would double-panic and abort
         // with no output at all, defeating the hook's entire purpose.

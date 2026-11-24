@@ -285,7 +285,7 @@ pub(crate) fn evidence_log(
                 id.describe()
             ),
             Some(NextAction::runs_as_printed(
-                urzua_core::report::shell_command(&["git", "show", spec.as_str()]),
+                ["git", "show", spec.as_str()],
                 format!(
                     "shows the copy of {} whose Revision log to restore",
                     record.display()
@@ -331,10 +331,16 @@ fn add_heading_action(record: &Path) -> NextAction {
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let quoted = urzua_core::report::shell_command(&[stem]);
-    let path = urzua_core::report::shell_command(&[record.display().to_string()]);
+    let path = record.display().to_string();
     NextAction::runs_as_printed(
-        format!("printf '\\n# %s\\n' {quoted} >> {path}"),
+        [
+            "sh",
+            "-c",
+            "printf '\\n# %s\\n' \"$1\" >> \"$2\"",
+            "sh",
+            stem.as_str(),
+            path.as_str(),
+        ],
         format!(
             "{} has no body section for a new revision log to follow; this appends a heading named after the file (rename it as you like), then re-run the write",
             record.display()
@@ -355,7 +361,7 @@ mod tests {
         let action = add_heading_action(record);
         assert!(action.inputs.is_empty());
         let ran = std::process::Command::new("sh")
-            .args(["-c", &action.command])
+            .args(["-c", &action.command()])
             .current_dir(&dir)
             .status()
             .unwrap();
