@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.56'
+Version: '0.57'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:564b30f48e0fe1f444574d874b7180be7531f664d933f652a3d484fae11ca187, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:f71754a09fce6f5b325b57fff4e85cc79325a52d3b3c433bc5dfc0cbd8cef35c, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:2bb508f31a969f0ec5e72fcaddc3df59215a996ecfee3826a7e228a05a1bbfaf
+Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:9eda7e0bcd3d73c49978d64c447e5229624e651ec6ee0e6a4414bbd25b54d50a, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:f71754a09fce6f5b325b57fff4e85cc79325a52d3b3c433bc5dfc0cbd8cef35c, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:2bb508f31a969f0ec5e72fcaddc3df59215a996ecfee3826a7e228a05a1bbfaf
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -220,6 +220,17 @@ record's text at `GET /record/<id>` when the page links it on 127.0.0.1 only, re
 on every request, with `Cache-Control: no-store`, as a foreground process that prints one JSON line
 with its address when it listens. It is the one command whose product is a page for a person; its
 stdout is still JSON.
+
+### `urzua describe`
+**Specified in full by `docs/reference/describe.md`.** One JSON object stating how to call urzua, in
+the `describe` shape of the published agent CLI contract (its RFC-4, section 6): `name`, `version`,
+`contract_version` (`1.0` until `MILE-370` declares `1.1`), `system` `0`, the global `args`
+(`--config`, `--as-of`), `env`, `config`, `log` (`null`), and `commands`, one per command that runs,
+each with its full-path `name`, `profile`, `safe`, `scopes`, `metrics`, `args`, `stdin`, and an
+`example` or a `protocol` where they apply. Every argument is generated from the clap definitions in
+`main.rs`; a command missing from `describe`'s own table of profiles is a failing test, and a
+`not-run` (exit 2) if it ever ran. It is not a report: no `status`, exit 0, and it reads no
+configuration.
 
 ### `urzua export --format=agdr` / `urzua import`
 AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fields. Not
@@ -477,3 +488,5 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-541) f08b2cd956eb -> 57344b8c2562. Reason: main.rs#Command: the Board variant gained one boolean flag, --prompt (conflicts with --serve and --out, prints a JSON answer and writes no file); the spec defers the board's surface to docs/reference/board.md, which now documents it, and no other variant changed, so the command surface the spec states still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Bumped to `0.56`. The description of `state_disagrees_with_children` names the rule `status.children-agreement` (SPEC-2) that reports the same two cases and says a `dropped` record never disagrees; the key's meaning is unchanged. **Why:** an adopting repository ran a script over the export to fail on this key because `check` had no rule for it. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-551) 57344b8c2562 -> 564b30f48e0f. Reason: `board`'s `--port` and `--allowed-host` arguments gain `conflicts_with = "prompt"`; nothing else in `Command` changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.57`. Adds `urzua describe` to the commands (`MILE-359`): what a caller needs to invoke urzua, generated from the argument definitions, in the published agent CLI contract's `describe` shape, at contract version `1.0` until `MILE-370`. **Why:** the published agent CLI contract's RFC-4, which the maintainer accepted ("I accept RFC, and yes allow option can be outside rule", the contract's RFC-4, revision row of 2026-11-24), makes `describe` the place an agent reads a command's inputs. | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-569) 564b30f48e0f -> 9eda7e0bcd3d. Reason: Read the diff of main.rs: the Command enum gains a Describe variant with its doc comment, dispatch gains its arm (commands::describe::run with Cli::command()) and command_name its name; 21 existing arguments gain a one-line doc comment (help text, used as describe's means). No existing argument, default or dispatch path changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

@@ -112,4 +112,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [Where the host shows no prompt, the person approves a gated move by answering urzua's question](ADR-105-where-the-host-shows-no-prompt-the-person-approves-a-gated-move-by-answering-urzua-s-question.md)
 - [The check report's examined is an object of per-unit counts added beside files_examined](ADR-106-the-check-report-s-examined-is-an-object-of-per-unit-counts-added-beside-files-examined.md)
 - [A hook that cannot run urzua blocks, with no key, flag or variable to turn it off](ADR-107-a-hook-that-cannot-run-urzua-blocks-with-no-key-flag-or-variable-to-turn-it-off.md)
+- [urzua describe states each command's inputs from the clap definitions and a per-command table, at contract version 1.0 until every 1.1 piece ships](ADR-108-urzua-describe-states-each-command-s-inputs-from-the-clap-definitions-and-a-per-command-table-at-contract-version-1-0-until-every-1-1-piece-ships.md)
 <!-- urzua:index:end -->

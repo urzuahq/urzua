@@ -15,12 +15,23 @@
         "required": ["placeholder", "flag", "means"],
         "properties": {
           "placeholder": {"type": "string", "pattern": "^<.+>$"},
+          "index": {
+            "description": "The position in next_action_argv of the element to replace.",
+            "type": "integer",
+            "minimum": 0
+          },
           "flag": {"type": "string"},
           "means": {"type": "string"}
         }
       }
     },
+    "next_action_argv": {
+      "description": "The command as a program and its arguments, with no shell quoting.",
+      "type": ["array", "null"],
+      "items": {"type": "string"}
+    },
     "error": {"type": "string"},
+    "error_kind": {"enum": ["usage", "config", "environment", "internal"]},
     "notices": {
       "type": "array",
       "items": {
@@ -45,6 +56,18 @@
     {
       "if": {"required": ["error"]},
       "then": {"properties": {"status": {"const": "not-run"}}}
+    },
+    {
+      "if": {"required": ["error_kind"]},
+      "then": {"properties": {"status": {"const": "not-run"}}}
+    },
+    {
+      "if": {"required": ["next_action_argv"]},
+      "then": {
+        "if": {"properties": {"next_action": {"type": "null"}}, "required": ["next_action"]},
+        "then": {"properties": {"next_action_argv": {"type": "null"}}},
+        "else": {"properties": {"next_action_argv": {"type": "array"}}}
+      }
     }
   ],
   "$defs": {

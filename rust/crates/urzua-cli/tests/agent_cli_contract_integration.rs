@@ -450,3 +450,122 @@ fn a_not_run_report_that_started_counts_zero_and_one_that_could_not_start_counts
     assert!(failed.get("files_examined").is_none());
     assert!(failed.get("examined").is_none());
 }
+
+fn describe() -> Value {
+    let out = common::urzua().arg("describe").output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    assert!(out.stderr.is_empty(), "describe writes nothing to stderr");
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+/// `describe` as a 1.1 tool would print it: the same object with the version
+/// raised, so the schema's 1.1 requirements (`args`, `env`, `config`, `log`,
+/// `stdin` and `protocol`) are checked although urzua still declares 1.0.
+fn as_one_one(mut d: Value) -> Value {
+    d["contract_version"] = serde_json::json!("1.1");
+    d
+}
+
+/// What the schema cannot state and the contract's runner checks: names are
+/// unique within a command together with the top-level `args`, and each name in
+/// `conflicts_with` and `requires` is one of them.
+fn argument_names_resolve(d: &Value) -> Result<(), String> {
+    let names = |args: &Value| -> Vec<String> {
+        args.as_array()
+            .into_iter()
+            .flatten()
+            .map(|a| a["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let top = names(&d["args"]);
+    for command in d["commands"].as_array().unwrap() {
+        let mut all = top.clone();
+        all.extend(names(&command["args"]));
+        let mut sorted = all.clone();
+        sorted.sort();
+        sorted.dedup();
+        if sorted.len() != all.len() {
+            return Err(format!(
+                "{}: argument names repeat: {all:?}",
+                command["name"]
+            ));
+        }
+        for arg in command["args"].as_array().into_iter().flatten() {
+            for key in ["conflicts_with", "requires"] {
+                for other in arg[key].as_array().into_iter().flatten() {
+                    if !all.iter().any(|n| n == other.as_str().unwrap()) {
+                        return Err(format!(
+                            "{}: {} names {other} in {key}",
+                            command["name"], arg["name"]
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn describe_validates_against_the_describe_schema() {
+    let d = describe();
+    assert_eq!(d["contract_version"], "1.0", "1.1 is declared by MILE-370");
+    validate("describe.schema.json", &d).unwrap_or_else(|e| panic!("describe fails: {e}"));
+    validate("describe.schema.json", &as_one_one(d.clone()))
+        .unwrap_or_else(|e| panic!("describe fails the 1.1 requirements: {e}"));
+    argument_names_resolve(&d).unwrap();
+    for command in d["commands"].as_array().unwrap() {
+        if command["profile"] == "exempt" {
+            assert_eq!(command["safe"], false, "{}", command["name"]);
+        }
+    }
+}
+
+#[test]
+fn the_describe_check_rejects_what_the_contract_forbids() {
+    let d = as_one_one(describe());
+    let broken = |edit: &dyn Fn(&mut Value)| {
+        let mut r = d.clone();
+        edit(&mut r);
+        validate("describe.schema.json", &r).is_err() || argument_names_resolve(&r).is_err()
+    };
+    let at = |name: &str| {
+        d["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|c| c["name"] == name)
+            .unwrap()
+    };
+    let (mcp, check, board) = (at("mcp"), at("check"), at("board"));
+    assert!(broken(&|r| {
+        r["commands"][mcp]
+            .as_object_mut()
+            .unwrap()
+            .remove("protocol");
+    }));
+    assert!(broken(&|r| {
+        r["commands"][check]
+            .as_object_mut()
+            .unwrap()
+            .remove("stdin");
+    }));
+    assert!(broken(&|r| {
+        r.as_object_mut().unwrap().remove("env");
+    }));
+    assert!(broken(&|r| {
+        r["commands"][check]["args"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("type");
+    }));
+    assert!(broken(
+        &|r| r["commands"][check]["args"][0]["kind"] = serde_json::json!("switch")
+    ));
+    assert!(broken(
+        &|r| r["commands"][board]["args"][3]["requires"] = serde_json::json!(["--nope"])
+    ));
+    assert!(broken(
+        &|r| r["commands"][check]["args"][0]["name"] = serde_json::json!("--config")
+    ));
+}

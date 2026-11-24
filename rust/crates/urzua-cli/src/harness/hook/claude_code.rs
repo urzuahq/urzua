@@ -41,7 +41,7 @@ pub const EVENTS: &[&str] = &[
 const QUESTION_TOOL: &str = "AskUserQuestion";
 /// The variable Claude Code sets to the program it runs under (`cli`, or an
 /// Agent SDK host's name), recorded with an approval.
-const HOST_ENV: &str = "CLAUDE_CODE_ENTRYPOINT";
+pub(super) const HOST_ENV: &str = "CLAUDE_CODE_ENTRYPOINT";
 /// The variable Claude Code sets to the session's project for hook commands.
 pub const PROJECT_ENV: &str = "CLAUDE_PROJECT_DIR";
 

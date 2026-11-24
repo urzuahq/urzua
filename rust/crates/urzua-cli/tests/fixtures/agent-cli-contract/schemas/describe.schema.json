@@ -9,6 +9,39 @@
     "version": {"type": "string", "minLength": 1},
     "contract_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
     "system": {"enum": [0, 1, 2]},
+    "args": {"type": "array", "items": {"$ref": "#/$defs/arg"}},
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "means"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "means": {"type": "string"}
+        }
+      }
+    },
+    "config": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "format"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "format": {"enum": ["yaml", "json", "toml"]},
+          "schema": {"type": "object"}
+        }
+      }
+    },
+    "log": {
+      "description": "Null, or the one declared input that turns the log on: an arg or an env.",
+      "type": ["object", "null"],
+      "properties": {
+        "arg": {"type": "string", "minLength": 1},
+        "env": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
     "commands": {
       "type": "array",
       "items": {
@@ -16,13 +49,58 @@
         "required": ["name", "profile", "safe", "scopes", "metrics"],
         "properties": {
           "name": {"type": "string", "minLength": 1},
-          "profile": {"enum": ["base", "gate", "exempt"]},
+          "profile": {"enum": ["base", "gate", "run", "exempt"]},
           "kind": {"enum": ["lint", "format", "types", "test", "build", "records", "other"]},
           "safe": {"type": "boolean"},
           "scopes": {"type": "array", "items": {"type": "string"}},
-          "metrics": {"type": "array", "items": {"type": "string"}}
+          "metrics": {"type": "array", "items": {"type": "string"}},
+          "args": {"type": "array", "items": {"$ref": "#/$defs/arg"}},
+          "stdin": {
+            "type": ["object", "null"],
+            "required": ["format", "means"],
+            "properties": {
+              "format": {"enum": ["json", "text"]},
+              "means": {"type": "string"}
+            }
+          },
+          "example": {"type": "array", "items": {"type": "string"}},
+          "protocol": {"type": "string", "minLength": 1}
         }
       }
+    }
+  },
+  "if": {"properties": {"contract_version": {"const": "1.0"}}, "required": ["contract_version"]},
+  "else": {
+    "required": ["args", "env", "config", "log"],
+    "properties": {
+      "commands": {
+        "items": {
+          "required": ["args", "stdin"],
+          "if": {"properties": {"profile": {"const": "exempt"}}, "required": ["profile"]},
+          "then": {"required": ["protocol"]}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "arg": {
+      "type": "object",
+      "required": ["name", "kind", "required", "repeatable", "means"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["flag", "option", "positional"]},
+        "type": {"enum": ["string", "integer", "path"]},
+        "required": {"type": "boolean"},
+        "repeatable": {"type": "boolean"},
+        "means": {"type": "string"},
+        "values": {"type": "array", "items": {"type": "string"}},
+        "format": {"type": "string", "minLength": 1},
+        "conflicts_with": {"type": "array", "items": {"type": "string"}},
+        "requires": {"type": "array", "items": {"type": "string"}},
+        "after_separator": {"type": "boolean"}
+      },
+      "if": {"properties": {"kind": {"const": "flag"}}, "required": ["kind"]},
+      "else": {"required": ["type"]}
     }
   }
 }
