@@ -16,7 +16,7 @@ Every test of the rule built its citations without a tier, so two citations of o
 
 ## References
 
-Fixed in `rust/crates/urzua-core/src/rules/pin_attestation.rs`: `Pin` carries the entry's category, and `unpaired`, the change pairing in `unattested` and `collapsed` compare it, so a tier swap reports `pin-added-unattested` and `pin-removed`, cleared by `urzua fix --pin --apply --replace OLD=NEW`. The rows the pinning tools write still name a locator without its tier, so a row accounts for a locator in any tier; that is unchanged. The planted test is `a_pin_moved_to_another_tier_is_not_unchanged_observed_failing`; `SPEC-2` states that pins pair only within one tier.
+Fixed in `rust/crates/urzua-core/src/rules/pin_attestation.rs`: `Pin` carries the entry's category, and `unpaired`, the change pairing in `unattested` and `collapsed` compare it, so a tier swap reports `pin-added-unattested` and `pin-removed`, cleared by `urzua fix --pin --apply --replace OLD=NEW`. The rows the pinning tools write still name a locator without its tier, so a row accounts for a locator in any tier; that is unchanged and filed as `BUG-229`. The planted test is `a_pin_moved_to_another_tier_is_not_unchanged_observed_failing`; `SPEC-2` states that pins pair only within one tier.
 
 > **Revision log**
 >
