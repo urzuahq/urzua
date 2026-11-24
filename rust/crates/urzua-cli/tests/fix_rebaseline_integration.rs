@@ -1895,3 +1895,53 @@ fn a_prefix_lines_record_deleted_and_re_added_elsewhere_is_paired_by_its_stable_
     commit_all(&dir);
     assert_restore_refused(&dir, new);
 }
+
+#[test]
+fn fix_pin_removes_one_tier_of_a_file_cited_in_two_observed_failing() {
+    let both = |t: &str| {
+        let code = format!("code:src/a.rs@sha256:{}", sha256(V1));
+        t.replace(
+            &code,
+            &format!("{code}, test:src/a.rs@sha256:{}", sha256(V1)),
+        )
+    };
+    let dir = branched_with("remove-tier", both);
+    let remove = |name: &str| {
+        run_urzua(
+            &dir,
+            &[
+                "fix",
+                "--pin",
+                "--apply",
+                "--ids",
+                A,
+                "--remove",
+                name,
+                "--by",
+                "ana",
+                "--reason",
+                "the test tier no longer cites a.rs.",
+            ],
+        )
+    };
+    let out = remove("src/a.rs");
+    assert_ne!(json(&out)["status"], "applied", "{out:?}");
+    assert!(format!("{out:?}").contains("more than one tier"), "{out:?}");
+    let out = remove("test:src/a.rs");
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    let field = text
+        .lines()
+        .find(|l| l.starts_with("Realized-by:"))
+        .unwrap();
+    assert_eq!(
+        field,
+        format!(
+            "Realized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{}, test:t.rs'",
+            sha256(V1)
+        ),
+        "{text}"
+    );
+    commit_all(&dir);
+    assert!(unattested(&check_base(&dir)).is_empty());
+}
