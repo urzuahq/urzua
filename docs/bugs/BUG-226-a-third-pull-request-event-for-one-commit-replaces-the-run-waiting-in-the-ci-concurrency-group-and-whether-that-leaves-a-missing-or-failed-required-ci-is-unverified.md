@@ -20,8 +20,9 @@ That is a single observation. It does not show whether the missing check blocks 
 
 Possible remedies, none chosen and none verified on GitHub:
 
-- a group key that includes the event action for non-`synchronize` runs, so the third event lands in a group
-  of its own and replaces nothing;
+- a group key that includes the event action for non-`synchronize` runs, so a third event whose action differs from the
+  waiting run's lands in a group of its own and replaces nothing (two `labeled` events for one commit still
+  share a group);
 - GitHub's concurrency `queue` property, if it exists and queues instead of replacing the pending run
   (unverified).
 

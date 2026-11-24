@@ -26,7 +26,8 @@ here is a `record_type`; this is process, realized entirely in `.github/workflow
 
 `ci.yml` runs on `pull_request` (`opened`, `synchronize`, `reopened`, `labeled`, `unlabeled`),
 `merge_group` and `push` to `main`. `edited` is not listed: a title or body edit changes nothing the
-workflow checks, and a second event for the same commit cancelled a correct run (`BUG-222`). So an edit starts
+workflow checks, and under the old rule any second event for the same commit (in `BUG-222`, a `labeled` one)
+cancelled a correct run. So an edit starts
 no run and neither does a base-branch change (push a commit to re-check), and there is no `workflow_dispatch`: a manual
 run on a PR branch lands in its own concurrency group and can post a green `ci` over a failed changeset
 gate (`BUG-223`). It is deliberately unfiltered (no
