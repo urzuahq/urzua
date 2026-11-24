@@ -91,7 +91,7 @@ fn run_rule(config_path: Option<PathBuf>, id: &str) -> Result<ExitCode, Failure>
                 "'{id}' is not a rule this build ships; did you mean '{valid}'? (`urzua rules` lists them)"
             ),
             urzua_core::report::NextAction::runs_as_printed(
-                urzua_core::report::shell_command(&["urzua", "explain", "--rule", valid]),
+                ["urzua", "explain", "--rule", valid],
                 format!("explains '{valid}', the shipped rule nearest '{id}'"),
             ),
         ));

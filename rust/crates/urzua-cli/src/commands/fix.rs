@@ -224,12 +224,12 @@ fn unmatched_action(report: &FixReport, rebaseline: bool) -> Option<NextAction> 
 fn pending_action(rebaseline: bool) -> NextAction {
     if rebaseline {
         NextAction::runs_as_printed(
-            "urzua fix --rebaseline".to_string(),
+            ["urzua", "fix", "--rebaseline"],
             "lists the stale pins pending a re-pin, by repo-relative path".to_string(),
         )
     } else {
         NextAction::runs_as_printed(
-            "urzua fix".to_string(),
+            ["urzua", "fix"],
             "lists the repairs pending, each record by its repo-relative path".to_string(),
         )
     }

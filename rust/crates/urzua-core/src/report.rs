@@ -1093,14 +1093,16 @@ pub trait Report: serde::Serialize {
 }
 
 /// A report's top-level `next_action` and `next_action_reason` (`MILE-72`):
-/// a bare runnable command and the counts that justify it. Both keys are on
-/// every command's output, `null` together when there is nothing better than
-/// reading the findings.
+/// a runnable command and the counts that justify it. Every key is on every
+/// command's output, `null` together when there is nothing better than
+/// reading the findings. The command is held as its words and printed twice:
+/// as `next_action_argv`, and joined and quoted for a POSIX shell as
+/// `next_action`, so the two cannot disagree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NextAction {
-    pub command: String,
+    pub argv: Vec<String>,
     pub reason: String,
-    /// The placeholders in `command` the caller must replace before running
+    /// The placeholders in `argv` the caller must replace before running
     /// it, each a word written `<...>` (`next_action_inputs`). Empty when the
     /// command runs as printed.
     pub inputs: Vec<ActionInput>,
@@ -1108,20 +1110,48 @@ pub struct NextAction {
 
 impl NextAction {
     /// A command that runs as printed.
-    pub fn runs_as_printed(command: impl Into<String>, reason: impl Into<String>) -> Self {
+    pub fn runs_as_printed<W: Into<String>>(
+        argv: impl IntoIterator<Item = W>,
+        reason: impl Into<String>,
+    ) -> Self {
         NextAction {
-            command: command.into(),
+            argv: argv.into_iter().map(Into::into).collect(),
             reason: reason.into(),
             inputs: Vec::new(),
         }
     }
+
+    /// The command as one POSIX shell line: each word single-quoted when it
+    /// must be, so a placeholder prints as `'<what>'`.
+    pub fn command(&self) -> String {
+        shell_command(&self.argv)
+    }
+
+    /// Declares the word of `argv` equal to `placeholder` (the last one, if
+    /// it recurs) as an input the caller fills.
+    pub fn with_input(mut self, placeholder: &str, flag: &str, means: &str) -> Self {
+        let index = self
+            .argv
+            .iter()
+            .rposition(|w| w == placeholder)
+            .expect("an input's placeholder is a word of the command");
+        self.inputs.push(ActionInput {
+            placeholder: placeholder.to_string(),
+            index,
+            flag: flag.to_string(),
+            means: means.to_string(),
+        });
+        self
+    }
 }
 
-/// One value a `next_action` needs before it runs: the placeholder word as it
-/// appears in the command, the flag it belongs to and what to put there.
+/// One value a `next_action` needs before it runs: the placeholder word, the
+/// position in `next_action_argv` of the element that is exactly that word,
+/// the flag it belongs to and what to put there.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ActionInput {
     pub placeholder: String,
+    pub index: usize,
     pub flag: String,
     pub means: String,
 }
@@ -1174,15 +1204,7 @@ pub fn attested_apply(
     words.extend(["--apply", "--ids"].map(String::from));
     words.push(ids.join(","));
     words.extend(["--actor", "agent", "--reason", placeholder].map(String::from));
-    NextAction {
-        command: shell_command(&words),
-        reason,
-        inputs: vec![ActionInput {
-            placeholder: placeholder.to_string(),
-            flag: "--reason".to_string(),
-            means: means.to_string(),
-        }],
-    }
+    NextAction::runs_as_printed(words, reason).with_input(placeholder, "--reason", means)
 }
 
 /// The tools a finding's `run-command` action can lead to, in the order
@@ -1208,6 +1230,7 @@ const NEXT_ACTION_ORDER: [(&[&str], &str); 5] = [
 /// made of safe characters, single-quoted otherwise.
 fn shell_word(word: &str) -> String {
     let safe = !word.is_empty()
+        && !word.starts_with('#')
         && word
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "-_./=:@+#,".contains(c));
@@ -1223,10 +1246,10 @@ fn shell_word(word: &str) -> String {
 /// records, in first-seen order, in the first finding's argv; any other
 /// tool's findings carry the same argv, so the first stands for all. `None`
 /// when a record path holds a comma, which `--ids` could not carry.
-fn union_command(argvs: &[&Vec<String>]) -> Option<String> {
+fn union_command(argvs: &[&Vec<String>]) -> Option<Vec<String>> {
     let first = argvs.first()?;
     let Some(at) = first.iter().position(|w| w == "--ids") else {
-        return Some(shell_command(first));
+        return Some(first.to_vec());
     };
     let mut ids: Vec<&str> = Vec::new();
     for argv in argvs {
@@ -1241,7 +1264,7 @@ fn union_command(argvs: &[&Vec<String>]) -> Option<String> {
     }
     let mut words = first.to_vec();
     *words.get_mut(at + 1)? = ids.join(",");
-    Some(shell_command(&words))
+    Some(words)
 }
 
 /// `check`'s `next_action` (`MILE-72`): over the unwaived error and warning
@@ -1272,14 +1295,14 @@ pub fn next_action_for_findings(findings: &[Finding]) -> Option<NextAction> {
         if argvs.is_empty() {
             continue;
         }
-        let command = union_command(&argvs)?;
+        let argv = union_command(&argvs)?;
         let noun = if blocking.len() == 1 {
             "finding"
         } else {
             "findings"
         };
         return Some(NextAction::runs_as_printed(
-            command,
+            argv,
             format!("{verb} {} of {} {noun}", argvs.len(), blocking.len()),
         ));
     }
@@ -1293,7 +1316,7 @@ fn stage_untracked(notices: &[Notice]) -> Option<NextAction> {
     let paths = notice_records(notices, NOTICE_UNTRACKED_SKIPPED)?;
     let words = git_add(paths.iter().map(String::as_str));
     Some(NextAction::runs_as_printed(
-        shell_command(&words),
+        words,
         format!(
             "stages {} this run did not examine",
             plural(paths.len(), "untracked record")
@@ -1313,7 +1336,7 @@ fn unshallow(notices: &[Notice]) -> Option<NextAction> {
         })
         .then(|| {
             NextAction::runs_as_printed(
-                "git fetch --unshallow",
+                ["git", "fetch", "--unshallow"],
                 "fetches the full history that embodiment drift reads; a shallow clone hides drift",
             )
         })
@@ -1387,12 +1410,12 @@ pub struct CouldNotRun {
 
 impl CouldNotRun {
     /// The command that gets past this refusal, for `next_action`.
-    pub fn with_next_action(
+    pub fn with_next_action<W: Into<String>>(
         mut self,
-        command: impl Into<String>,
+        argv: impl IntoIterator<Item = W>,
         reason: impl Into<String>,
     ) -> Self {
-        self.next = Some(NextAction::runs_as_printed(command, reason));
+        self.next = Some(NextAction::runs_as_printed(argv, reason));
         self
     }
 
@@ -1952,13 +1975,13 @@ impl Report for NewReport {
         if self.stage {
             let words = git_add([path.as_str()]);
             return Some(NextAction::runs_as_printed(
-                shell_command(&words),
+                words,
                 format!("stages the new record: check examines only tracked records unless discovery.include_untracked is set{fill}"),
             ));
         }
         (!self.to_fill.is_empty()).then(|| {
             NextAction::runs_as_printed(
-                shell_command(&["urzua", "check", path.as_str()]),
+                ["urzua", "check", path.as_str()],
                 format!("checks the new record once you {fields} (listed in to_fill)"),
             )
         })
@@ -2068,7 +2091,7 @@ impl Report for FixReport {
                 words.push(ids.join(","));
                 words.extend(["--actor", "agent"].map(String::from));
                 Some(NextAction::runs_as_printed(
-                    shell_command(&words),
+                    words,
                     format!("writes {}", plural(self.repairs.len(), "repair")),
                 ))
             }
@@ -2092,7 +2115,7 @@ impl Report for FixReport {
                     .to_vec();
                 words.push(paths.join(","));
                 Some(NextAction::runs_as_printed(
-                    shell_command(&words),
+                    words,
                     format!(
                         "lists the stale pins of {} whose pinned file changed",
                         plural(paths.len(), "record")
@@ -2100,7 +2123,7 @@ impl Report for FixReport {
                 ))
             }
             FixStatus::Applied => Some(NextAction::runs_as_printed(
-                "urzua check",
+                ["urzua", "check"],
                 format!(
                     "re-checks the corpus after {}",
                     plural(self.repairs.len() + self.rebaselines.len(), "write")
@@ -2675,12 +2698,12 @@ mod tests {
         ];
         let n = next_action_for_findings(&all).unwrap();
         assert_eq!(
-            n.command,
+            n.command(),
             "urzua fix --apply --ids 'docs/adr/ADR-1-a.md,docs/adr/ADR-2 b.md'"
         );
         assert_eq!(n.reason, "repairs 3 of 5 findings");
         let n = next_action_for_findings(&all[..1]).unwrap();
-        assert_eq!(n.command, "urzua index --apply");
+        assert_eq!(n.command(), "urzua index --apply");
         assert_eq!(n.reason, "regenerates the index for 1 of 1 finding");
     }
 
@@ -2792,24 +2815,32 @@ impl Report for ConflictsReport {
             self.conflicts
                 .iter()
                 .filter(|c| c.outcome == o)
-                .map(|c| shell_word(&c.record.display().to_string()))
+                .map(|c| c.record.display().to_string())
                 .collect()
         };
         match self.status {
             ConflictsStatus::Resolvable => Some(NextAction::runs_as_printed(
-                "urzua fix --conflicts --apply --force --actor agent",
+                [
+                    "urzua",
+                    "fix",
+                    "--conflicts",
+                    "--apply",
+                    "--force",
+                    "--actor",
+                    "agent",
+                ],
                 format!(
                     "writes {}",
                     plural(records(ConflictOutcome::Resolvable).len(), "resolution")
                 ),
             )),
             ConflictsStatus::Resolved => Some(NextAction::runs_as_printed(
-                shell_command(&git_add(
+                git_add(
                     self.conflicts
                         .iter()
                         .filter(|c| c.outcome == ConflictOutcome::Resolved)
                         .map(|c| c.record.to_str().unwrap_or_default()),
-                )),
+                ),
                 "fix --conflicts does not stage: stage the resolved records, then continue the merge or rebase",
             )),
             ConflictsStatus::PartialFailure => {
@@ -2833,14 +2864,14 @@ impl Report for ConflictsReport {
                             .any(|f| f.error.contains("--ids entry"))
                             .then(|| {
                                 NextAction::runs_as_printed(
-                                    "urzua fix --conflicts",
+                                    ["urzua", "fix", "--conflicts"],
                                     "lists the unmerged records, each by its repo-relative path",
                                 )
                             })
                     });
                 }
                 (waiting > 0).then(|| NextAction::runs_as_printed(
-                    shell_command(&diff),
+                    diff,
                     format!(
                         "{} on pinned files that are still unmerged ({}). This shows their conflicts; resolve them in the files, then run `{}`, then `urzua fix --conflicts`",
                         if waiting == 1 { "1 record waits".to_string() } else { format!("{waiting} records wait") },
@@ -2872,7 +2903,7 @@ fn take_side_next_action(conflicts: &[Conflict]) -> Option<NextAction> {
     ];
     words.extend(records.iter().map(|r| format!(":/{r}")));
     Some(NextAction::runs_as_printed(
-        shell_command(&words),
+        words,
         format!(
             "{} cannot have its pins recomputed because a pinned file was merged by hand. This takes the merged-in side's version, whose pins are the base's; then `{}`, then re-pin each with a person's reason: `urzua fix --rebaseline --apply --ids {} --actor agent --reason \"<what the hand-merged code changed>\"`",
             if records.len() == 1 { "1 record".to_string() } else { format!("{} records", records.len()) },
@@ -2896,5 +2927,5 @@ fn unmerged_next_action(notices: &[Notice]) -> Option<NextAction> {
     notices
         .iter()
         .find(|n| n.subject == UNMERGED_RECORDS)
-        .map(|n| NextAction::runs_as_printed("urzua fix --conflicts", n.message.clone()))
+        .map(|n| NextAction::runs_as_printed(["urzua", "fix", "--conflicts"], n.message.clone()))
 }

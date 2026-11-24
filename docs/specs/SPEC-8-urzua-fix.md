@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.78'
+Version: '0.79'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:15a0ccd9af70c639718f7f619fe8eb1dec054ad4ce86c25cd7ba2a4885d5e211, code:rust/crates/urzua-core/src/fix.rs@sha256:c8c3ad750b4ff30be5b5323be74f8bc014179ea9a8ea1f383f454304f7f95e0b, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:c566717e9a2718d33baa126efd0950964814aa4d352e7f4b7df4d0c179a1711f, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:61720dd8c0c8bed908141c45df4f73e5d3964fe1ece93b57a1b55befa6afac65, code:rust/crates/urzua-core/src/fix.rs@sha256:c8c3ad750b4ff30be5b5323be74f8bc014179ea9a8ea1f383f454304f7f95e0b, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:ac8cb61dec86e05f89e4e58ba45e4d6d90822868859a6d5142c2f5ba38e96e7e, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -356,7 +356,7 @@ the same `PATHS` scoping.
   Detect marks such a record `creates_revision_log: true`, as does the applied entry. Detect and
   apply refuse the same records, writing nothing:
   - a record with no Markdown heading below its header has no body section a log can follow; the
-    refusal names it and `next_action` is a `printf` that appends a heading named after the file;
+    refusal names it and `next_action` is an `sh -c` command that appends a heading named after the file;
   - a record that ends inside an open code fence, where a new log would read as code; the refusal
     names the fence's line, with no `next_action`;
   - a record a committed copy of which had a log. The copies read: `HEAD`'s, then the copy at the
@@ -727,7 +727,7 @@ It works on any record of any type and status; no expiry period is needed.
   it cannot pin (a missing file, a scope that finds nothing) is listed under `not_pinned` with the reason.
 - A pin is of the working tree at the time of pinning. When a pinned file has uncommitted changes the report carries a
   `pin-uncommitted` warning notice naming it, so the file is committed with the record.
-- `urzua fix --pin --apply --ids <record,...> --actor agent --reason "<why this evidence carries the claim>"` pins them
+- `urzua fix --pin --apply --ids <record,...> --actor agent --reason '<why this evidence carries the claim>'` pins them
   and appends a `Pinned` row naming each locator and its hash.
 - `--replace OLD=NEW` (one record) moves a pin to another locator, a new scope or a renamed file: `OLD` is the pinned
   locator as `path` or `path#scope`, `NEW` the locator that replaces it (optionally `code:` or `test:`), hashed now. The
@@ -904,5 +904,8 @@ asserted by test, not assumed by convention.
 > | 2026-11-21 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` e34ae347e45e -> 741d74b614d4. Reason: BUG-213: a test is appended, a_prefix_lines_record_deleted_and_re_added_elsewhere_is_paired_by_its_stable_id; existing tests are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-21 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 741d74b614d4 -> c566717e9a27. Reason: BUG-213: the appended prefix-lines Stable-Id pairing test gained a comment explaining its long base body; existing tests are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-22 | Bumped to `0.78`. A re-pin keeps a scope's member kind suffix (`Type::name[fn]`) as written, and a scope naming a kind no member entry declares is refused like any unresolved scope. **Why:** `MILE-352` / `ADR-74` amendment of 2026-11-22, chosen by the maintainer (2026-11-22, AskUserQuestion answer to the orchestrating agent): question "MILE-352: ... How should a locator tell them apart? Any grammar change is an ADR-74 amendment you'd accept.", answer "Declared kind suffix (Recommended)". | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 07c6e30fd14e -> e7577259ef4e, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` c566717e9a27 -> ac8cb61dec86. Reason: Read the diff of each file against origin/main: fix.rs passes the pending-listing remedy as words instead of a string; the json helper checks every report agrees with its argv and the heading action is asserted as an sh -c command. The cited behavior is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.79`. Corrects two statements to match the code: the no-body `next_action` is an `sh -c` command, not a `printf`, and the `--pin --apply` form shows its `--reason` placeholder single-quoted, as `next_action` prints it. No behaviour changes. **Why:** review of the pull request for `MILE-367`, which builds every `next_action` from a list of words. | **structural** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 07c6e30fd14e -> 51c91dd1d9a5. Reason: Read the diff of rust/crates/urzua-cli/src/commands/fix.rs against main. rust/crates/urzua-cli/src/commands/fix.rs: adds refuse_usage and refuse_config, which the flag-combination refusals and the rule-off refusal use so they carry a kind, and the two CouldNotRun emitters name environment as the fallback; refuse itself is unchanged. The claims each record cites are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 51c91dd1d9a5 -> 15a0ccd9af70. Reason: Read the diff of rust/crates/urzua-cli/src/commands/fix.rs against main. rust/crates/urzua-cli/src/commands/fix.rs: Failure now carries a non-optional kind and has no conversion from a bare message, so a refusal states its kind where it is made; adds refuse_environment, usage_of and environment_of beside refuse_usage and refuse_config, and each refusal chooses one. The claims each record cites are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-cli/src/commands/fix.rs` (Realized-by) 15a0ccd9af70 and e7577259ef4e -> 61720dd8c0c8; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |

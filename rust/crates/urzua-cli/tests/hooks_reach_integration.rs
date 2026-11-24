@@ -241,7 +241,19 @@ fn the_chmod_fix_quotes_the_path() {
     std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o644)).unwrap();
     let check = pre_commit_check(&dir);
     let fix = check["fix"].as_str().unwrap();
-    assert!(fix.starts_with("chmod +x '"), "{fix}");
+    assert_eq!(
+        check["fix_argv"],
+        serde_json::json!(["chmod", "+x", hook.to_str().unwrap()])
+    );
+    assert_eq!(
+        common::posix_split(fix).unwrap(),
+        check["fix_argv"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w.as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]

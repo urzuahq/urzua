@@ -33,6 +33,11 @@
       {
         "check": "hook-wired",
         "fix": "urzua hooks install",
+        "fix_argv": [
+          "urzua",
+          "hooks",
+          "install"
+        ],
         "hook_layout": "default",
         "layer": "pre-commit",
         "message": "no pre-commit hook at <ROOT>/.git/hooks/pre-commit -- `urzua hooks install` adds one that runs urzua; CI remains the guarantee (ADR-71)",
@@ -42,6 +47,11 @@
       {
         "check": "hook-wired",
         "fix": "urzua hooks install",
+        "fix_argv": [
+          "urzua",
+          "hooks",
+          "install"
+        ],
         "hook_layout": "default",
         "layer": "pre-push",
         "message": "no pre-push hook at <ROOT>/.git/hooks/pre-push -- `urzua hooks install` adds one that runs urzua; CI remains the guarantee (ADR-71)",
@@ -50,6 +60,11 @@
       }
     ],
     "next_action": "urzua hooks install",
+    "next_action_argv": [
+      "urzua",
+      "hooks",
+      "install"
+    ],
     "next_action_inputs": [],
     "next_action_reason": "no pre-commit hook at <ROOT>/.git/hooks/pre-commit -- `urzua hooks install` adds one that runs urzua; CI remains the guarantee (ADR-71)",
     "status": "warn"

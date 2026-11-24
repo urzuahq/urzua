@@ -666,7 +666,7 @@ impl crate::report::Report for ReverifyReport {
                 ))
             }
             FixStatus::Applied => Some(NextAction::runs_as_printed(
-                "urzua check",
+                ["urzua", "check"],
                 "re-checks the corpus after the renewal",
             )),
             _ => None,

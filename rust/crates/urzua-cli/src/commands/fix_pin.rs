@@ -12,7 +12,7 @@ use urzua_core::fix::pin::PinnedEntry;
 use urzua_core::fix::{Attestation, PinRead};
 use urzua_core::locator::{parse_locator, Anchor, Locator};
 use urzua_core::record::Record;
-use urzua_core::report::{ActionInput, AttestationReport, FixFailure, NextAction, Notice, Report};
+use urzua_core::report::{AttestationReport, FixFailure, NextAction, Notice, Report};
 use urzua_core::reverify::{apply_reverify, review_locators, FirstPin, ReverifyPlan};
 
 use super::evidence_log::{evidence_log, with_evidence_log, EvidenceLog, LogHistory};
@@ -83,23 +83,32 @@ impl Report for PinReport {
             .iter()
             .map(|r| r.record.display().to_string())
             .collect();
-        Some(NextAction {
-            command: format!(
-                "urzua fix --pin --apply --ids {} --actor agent --reason \"{REASON_PLACEHOLDER}\"",
-                ids.join(",")
+        let joined = ids.join(",");
+        Some(
+            NextAction::runs_as_printed(
+                [
+                    "urzua",
+                    "fix",
+                    "--pin",
+                    "--apply",
+                    "--ids",
+                    joined.as_str(),
+                    "--actor",
+                    "agent",
+                    "--reason",
+                    REASON_PLACEHOLDER,
+                ],
+                format!(
+                    "{} record(s) have unpinned code or test locators",
+                    ids.len()
+                ),
+            )
+            .with_input(
+                REASON_PLACEHOLDER,
+                "--reason",
+                "why the pinned code or test carries the record's claim, one line without '|'",
             ),
-            reason: format!(
-                "{} record(s) have unpinned code or test locators",
-                ids.len()
-            ),
-            inputs: vec![ActionInput {
-                placeholder: REASON_PLACEHOLDER.to_string(),
-                flag: "--reason".to_string(),
-                means:
-                    "why the pinned code or test carries the record's claim, one line without '|'"
-                        .to_string(),
-            }],
-        })
+        )
     }
 }
 

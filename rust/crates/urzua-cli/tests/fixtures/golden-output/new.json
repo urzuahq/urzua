@@ -10,6 +10,12 @@
   "stdout": {
     "display_number": 4,
     "next_action": "git add -- :/docs/adr/ADR-4-golden-title.md",
+    "next_action_argv": [
+      "git",
+      "add",
+      "--",
+      ":/docs/adr/ADR-4-golden-title.md"
+    ],
     "next_action_inputs": [],
     "next_action_reason": "stages the new record: check examines only tracked records unless discovery.include_untracked is set; then fill the required Status, Embodiment (listed in to_fill), and run urzua check",
     "notices": [
