@@ -1071,7 +1071,7 @@ fn framework_wiring(
             config,
             HookState::InstalledStalePolicy,
             format!(
-                "{} carries the urzua stanza written with on_not_run: {baked}, but the configuration says {} -- run `urzua hooks uninstall && {INSTALL} --write-config`",
+                "{} carries the urzua stanza written with on_not_run: {baked}, but the configuration says {} -- run `urzua hooks uninstall`, and the next run names `{INSTALL} --write-config`",
                 config.display(),
                 decl.on_not_run.as_str()
             ),
