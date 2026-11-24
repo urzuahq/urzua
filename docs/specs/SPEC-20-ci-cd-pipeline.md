@@ -25,8 +25,9 @@ here is a `record_type`; this is process, realized entirely in `.github/workflow
 ## `ci.yml` and `checks.yml` — the PR/push gate
 
 `ci.yml` runs on `pull_request` (`opened`, `synchronize`, `reopened`, `labeled`, `unlabeled`),
-`merge_group` and `push` to `main`. `edited` is not listed, so a title or body edit starts no run and
-neither does a base-branch change (push a commit to re-check), and there is no `workflow_dispatch`: a manual
+`merge_group` and `push` to `main`. `edited` is not listed: a title or body edit changes nothing the
+workflow checks, and a second event for the same commit cancelled a correct run (`BUG-222`). So an edit starts
+no run and neither does a base-branch change (push a commit to re-check), and there is no `workflow_dispatch`: a manual
 run on a PR branch lands in its own concurrency group and can post a green `ci` over a failed changeset
 gate (`BUG-223`). It is deliberately unfiltered (no
 `branches:`/`paths:` restriction) — a filtered required check can fail to report on a PR that doesn't
@@ -95,8 +96,9 @@ nested inside a called workflow have unstable names (`ADR-95`).
   label is read from **the PR's current state, not from `github.event`** (`BUG-34`): a payload is a
   snapshot taken when the event fired, and a re-run replays the same stale snapshot. The job therefore
   always starts and reports why it skipped, rather than being skipped by a job-level `if:`. The
-  `labeled`/`unlabeled` triggers (`BUG-15`) start a fresh run promptly when a human labels a PR after
-  opening it.
+  `labeled`/`unlabeled` triggers (`BUG-15`) start a run when a human labels a PR after opening it. That
+  run cancels nothing and waits behind the run in progress for the same commit, so a label added mid-run
+  starts a second full run instead of cancelling the first (`BUG-222`).
 - **`release-invariants`**: the planted-violation cases and the invariants themselves, on a full-history
   checkout with tags (`BUG-93`). A manifest version ahead of the newest tag while fragments are pending
   fails, and so does a non-`major` fragment that opens a line with `Breaking:`.
@@ -107,8 +109,10 @@ nested inside a called workflow have unstable names (`ADR-95`).
   tag. Its version, sha256 and ref are bumped together by hand when a release is cut.
 
 Concurrency is workflow-level, so a new commit on a pull request cancels the whole superseded run, and no
-other event does. Whether a third event for one commit, queued behind a running and a waiting run, replaces
-the waiting run and leaves a failed required `ci` is unverified.
+other event does. GitHub's documented behaviour is that a queued run replaces the pending run in a group
+whatever `cancel-in-progress` says, so a third event for one commit, queued behind a running and a waiting
+run, replaces the waiting run. Only whether that leaves a failed or missing required `ci` is unverified
+(`BUG-226`).
 
 - **The install script** (`scripts/install.sh`, `MILE-217`) is how a user installs a release: it maps the
   platform to one of the two published targets, downloads `urzua-<target>.tar.gz` over https, and installs
@@ -317,5 +321,5 @@ replays the original payload.
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `scripts/install-test.sh` 7775c1f4517b -> deea59418d7d. Reason: scripts/install-test.sh gained a check that fails when a documented install command pipes a download into a shell; no installer behaviour or existing scenario changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `scripts/install-test.sh` deea59418d7d -> 23a366374a00. Reason: scripts/install-test.sh: the no-pipe scan's regex also matches a pipe into sudo and into a path-qualified or dash/zsh shell; no other line changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-23 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `scripts/install-test.sh` 23a366374a00 -> cd8b216d2a19. Reason: scripts/install-test.sh: the no-pipe scan also matches a pipe continued onto the next line, with a comment saying why a bare trailing pipe is not matched; no other line changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
-> | 2026-11-24 | Bumped to `0.26`. `ci.yml` no longer lists `edited` or `workflow_dispatch`, and only a new commit on a pull request cancels a run; a push to `main` is never cancelled and a base-branch change starts no run. **Why:** `BUG-222` (a same-commit sibling event cancelled a correct run, leaving a failed required `ci`) and `BUG-223` (a manual run could leave a green `ci` over a failed changeset gate); this spec described the pre-fix triggers. | **substantive** |
+> | 2026-11-24 | Bumped to `0.26`. `ci.yml` no longer lists `edited` or `workflow_dispatch`, and only a new commit on a pull request cancels a run; a push to `main` is never cancelled and a base-branch change starts no run. A later edit of the same day clarifies why `edited` is gone, that a `labeled` run waits behind the run in progress, and that the third-event case is tracked in `BUG-226`. **Why:** `BUG-222` (a same-commit sibling event cancelled a correct run, leaving a failed required `ci`) and `BUG-223` (a manual run could leave a green `ci` over a failed changeset gate); this spec described the pre-fix triggers. | **substantive** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` d967686a9762 -> d7e1bf9840e8. Reason: ci.yml: the pull_request types drop edited, workflow_dispatch is removed, and cancel-in-progress is true only for a pull_request synchronize event, with comments updated; no job, step or gate script changed, so the claim about the jobs this record cites still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
