@@ -528,7 +528,9 @@ fn remove(
             removal = Some(found);
             edited
         })?;
-    } else if let Ok(text) = urzua_io::read_to_string(&repo_root.join(&record.path)) {
+    } else {
+        let text = urzua_io::read_to_string(&repo_root.join(&record.path))
+            .map_err(|e| format!("could not read the record to find its items: {e}"))?;
         let fresh = reread(record, config, &text);
         removal = Some(urzua_core::fix::pin::locate_removal(
             &fresh, &text, field, &old,

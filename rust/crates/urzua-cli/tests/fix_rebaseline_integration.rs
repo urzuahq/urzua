@@ -2169,6 +2169,21 @@ fn fix_pin_remove_leaves_no_blank_line_in_a_crlf_folded_field_observed_failing()
 }
 
 #[test]
+fn fix_pin_remove_refuses_a_field_it_cannot_locate_instead_of_editing_the_item_observed_failing() {
+    let dir = pin_in_field_and_item("remove-quoted-key", COMMA_FIELD, COMMA_ITEM);
+    let quoted = std::fs::read_to_string(dir.join(A))
+        .unwrap()
+        .replace("Realized-by:", "\"Realized-by\":");
+    std::fs::write(dir.join(A), &quoted).unwrap();
+    commit_all(&dir);
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    let text = format!("{out:?}");
+    assert_ne!(json(&out)["status"], "applied", "{text}");
+    assert!(text.contains("cannot be located"), "{text}");
+    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), quoted);
+}
+
+#[test]
 fn fix_pin_replace_moves_the_field_copy_and_the_item_copy() {
     let dir = pin_in_field_and_item(
         "replace-both-copies",

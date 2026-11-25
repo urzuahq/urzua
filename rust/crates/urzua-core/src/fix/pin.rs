@@ -156,16 +156,23 @@ pub fn locate_removal(
             .take(e + 1 - s)
             .any(|l| !is_comment(l) && l.contains(&needle))
     });
-    match (in_field, items.split_first()) {
-        (Some(span), _) => Ok(Removal {
+    let field_holds = record
+        .header
+        .get(field)
+        .is_some_and(|v| v.contains(&needle));
+    match (in_field, field_holds, items.split_first()) {
+        (Some(span), _, _) => Ok(Removal {
             span,
             remaining: items,
         }),
-        (None, Some((first, rest))) => Ok(Removal {
+        (None, true, _) => Err(format!(
+            "'{needle}' is in {field}, but its lines in the record cannot be located (a quoted or flow-style key, for one); remove it from {field} by hand"
+        )),
+        (None, false, Some((first, rest))) => Ok(Removal {
             span: (first.1, first.1),
             remaining: rest.to_vec(),
         }),
-        (None, None) => Err(format!("'{needle}' is not in the record's evidence")),
+        (None, false, None) => Err(format!("'{needle}' is not in the record's evidence")),
     }
 }
 
