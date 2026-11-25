@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.196'
+Version: '0.197'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:221dcf5bd041ccba58ff7e9e6131150fd7c80ad872b6445e2b3a2ffa073428b1, code:rust/crates/urzua-core/src/rules.rs@sha256:960c264aaba685079377199b706a84320b0c402c052e6f891303bbb746dd504e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:2dfb5060f1e8bc86c9f8c3354435112c5519203e560609a9619bc83415c4c2d6, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
@@ -870,7 +870,7 @@ outside the repository has no relative form and is named as given.
 
 ### Next action (`MILE-72`)
 
-Maintainer decision, 2026-11-14. Every command's JSON, not only `check`'s, carries two top-level keys
+Maintainer decision, 2026-11-14. Every command that prints a report, not only `check`, carries two top-level keys
 beside `status`: `next_action`, a bare runnable command string (`urzua fix --apply`, never a sentence
 and never a `suggested_action` object), and `next_action_reason`, a short sentence built only from
 counts and the command's verb. Both are always present, and both are `null` together or both strings:
@@ -878,6 +878,29 @@ there is no `next_action` without its reason. `null` means nothing is better tha
 They are additive; no existing key moves. `ADR-73` keeps `next_action` a string and distinct from
 `suggested_action`, which is per finding; this derives from the findings' `run-command` actions and
 does not replace them. `urzua mcp` tools return the same reports and so carry the same keys.
+
+Scope: a command that prints a report carries the keys; a command whose output is not a report does not.
+These print none, so their output has neither key: `urzua describe`, whose answer is the published agent
+CLI contract's `describe` object (RFC-4 section 6 of that contract, at `v1.1.0-rc.4`: "`describe` does
+not list itself. Its answer is not a report, so it fits no profile."); `urzua harness hook`, which prints
+an adapter's own hook output; `urzua harness record`, which prints no report of its own, only the reports of the
+commands its steps run (`urzua new`, `urzua fix`, `urzua check`, `urzua reverify`), relayed on stdout
+with the keys those reports carry; `urzua hooks run`, which prints nothing on stdout when it runs and
+reports on stderr, except that an unknown hook name prints a `not-run` report on stdout, through the
+same emitter as every report, with both keys `null`; and `urzua mcp`,
+a JSON-RPC stream whose tool results are reports and carry the keys, as above. The maintainer decided
+this on 2026-11-24, in the agent session that built this pull request; the answer is not recorded in
+the repository or the pull request, so it cannot be checked there. Asked: "MILE-72 says every command's JSON output carries `next_action`. The agent
+CLI contract (RFC-4 section 6, rc.4) says `describe`'s answer is not a report, and `next_action` is
+required only of reports. Do you agree that `next_action` applies to commands that print a report, and
+that `describe` and the three harness commands (hook, record, run) don't print one?" They answered:
+"Yes". The question listed `urzua harness run` in error, and the maintainer then decided that it
+carries no keys: asked "#647 is green and reviewed. Its last open point: `urzua harness run` prints
+its verdict as a report, so under your rule ("next_action applies to commands that print a report")
+it keeps `next_action`, always null. My earlier question had wrongly said it prints no report. OK to
+keep it that way and merge #647?", they answered "No" (this too in the agent session, not recorded in
+the repository or the pull request). Until `MILE-372` removes them, the verdict of `urzua harness
+run` still prints both keys, always `null`.
 
 - `check` and `audit` (the same report). Over the unwaived findings of severity `error` or `warning`
   (a waived finding and an `info` finding never count), the tool is the first of the following that
@@ -907,7 +930,7 @@ does not replace them. `urzua mcp` tools return the same reports and so carry th
   type there, the same greenfield command when there is nothing to adopt, and `null` when adopt cannot
   write a config (`SPEC-5`). Every other `init` and `doctor` report is `null`.
 - Every other command (`graph`, `explain`, `export`, `index`, `rules`, `new`,
-  `waive`, `reverify`, `migrate`, `roadmap`, `refs`, the harness commands) and every other `not-run`
+  `waive`, `reverify`, `migrate`, `roadmap`, `refs`, the harness commands that print a report) and every other `not-run`
   report, including a panic, emit both keys as `null` until a later decision gives them a derivation.
 
 #### Amendment (2026-11-24): the command is built from words (`MILE-367`)
@@ -1732,3 +1755,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-24 | Bumped to `0.195`. Every `next_action` is built from its words and printed beside `next_action_argv` (always present, `null` exactly when `next_action` is); each `next_action_inputs` entry gains `index`; a placeholder is single-quoted in every report; a command that needed a shell construct is an `sh -c` argument vector. Additive to the report's keys; the placeholder quoting of `fix --pin`'s and `explain --types`' actions changes. **Why:** `MILE-367`, the published agent CLI contract's version 1.1 requires the array, the index and one quoting. | **substantive** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 4299b921cd08 -> 221dcf5bd041. Reason: Read the diff of each file against origin/main: check.rs passes the rule-name correction, git fetch and git fetch --unshallow remedies as words. The cited behavior is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-24 | Bumped to `0.196`. `diff.pin-changed-unattested` pairs pins only within one tier, so a pin moved from `code:` to `test:` is reported; it does not report a base pin left over that the head still pins in the same tier at the same hash, at any site, with no copy left unpinned: an exact duplicate the head collapsed is not a removal. A changed hash, a removal of the last copy, a copy of another tier, a pin taken off a kept copy and an added duplicate are still reported. **Why:** `BUG-227`, collapsing a duplicated evidence line could be cleared only by a `--remove` row claiming an un-pin that never happened; `BUG-228`, a tier swap at one hash passed as unchanged. | **substantive** |
+> | 2026-11-24 | Bumped to `0.197`. `next_action` and `next_action_reason` apply to every command that prints a report, not to every command: `describe`, `harness hook`, `harness record`, `hooks run` and `mcp`'s own stream print none and carry neither key; `harness run` prints a verdict that still carries both, always `null`, until `MILE-372` removes them (the maintainer decided it carries none; see section Next action); `hooks run` prints a `not-run` report only for an unknown hook. **Why:** `MILE-72` read "every command"; `urzua describe` (`MILE-359`) answers with a contract object that is not a report (RFC-4 section 6 of the agent CLI contract, `v1.1.0-rc.4`: "Its answer is not a report, so it fits no profile."). The maintainer decided this in the agent session that built this pull request, 2026-11-24; the answer is not recorded in the repository or the pull request. Asked: "MILE-72 says every command's JSON output carries `next_action`. The agent CLI contract (RFC-4 section 6, rc.4) says `describe`'s answer is not a report, and `next_action` is required only of reports. Do you agree that `next_action` applies to commands that print a report, and that `describe` and the three harness commands (hook, record, run) don't print one?" They answered: "Yes". | **substantive** |

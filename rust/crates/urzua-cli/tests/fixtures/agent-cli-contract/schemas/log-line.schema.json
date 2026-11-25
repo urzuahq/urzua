@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/urzuahq/agent-cli-kit/main/schemas/log-line.schema.json",
+  "title": "One line of a tool's log",
+  "type": "object",
+  "required": ["time", "level", "message"],
+  "properties": {
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$"
+    },
+    "level": {"enum": ["debug", "info", "warning", "error"]},
+    "message": {"type": "string"}
+  }
+}

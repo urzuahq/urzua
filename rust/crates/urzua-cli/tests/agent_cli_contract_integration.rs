@@ -450,3 +450,472 @@ fn a_not_run_report_that_started_counts_zero_and_one_that_could_not_start_counts
     assert!(failed.get("files_examined").is_none());
     assert!(failed.get("examined").is_none());
 }
+
+fn describe() -> Value {
+    let out = common::urzua().arg("describe").output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    assert!(out.stderr.is_empty(), "describe writes nothing to stderr");
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+/// `describe` as a 1.1 tool would print it: the same object with the version
+/// raised, so the schema's 1.1 requirements (`args`, `env`, `config`, `log`,
+/// `stdin` and `protocol`) are checked although urzua still declares 1.0.
+fn as_one_one(mut d: Value) -> Value {
+    d["contract_version"] = serde_json::json!("1.1");
+    d
+}
+
+/// What the schema cannot state and the contract's runner checks: names are
+/// unique within a command together with the top-level `args`, and each name in
+/// `conflicts_with`, `requires`, `requires_any` and `required_unless` is one of
+/// them, and an argument with `required_unless` is not `required`.
+fn argument_names_resolve(d: &Value) -> Result<(), String> {
+    let names = |args: &Value| -> Vec<String> {
+        args.as_array()
+            .into_iter()
+            .flatten()
+            .map(|a| a["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let top = names(&d["args"]);
+    for command in d["commands"].as_array().unwrap() {
+        let mut all = top.clone();
+        all.extend(names(&command["args"]));
+        let mut sorted = all.clone();
+        sorted.sort();
+        sorted.dedup();
+        if sorted.len() != all.len() {
+            return Err(format!(
+                "{}: argument names repeat: {all:?}",
+                command["name"]
+            ));
+        }
+        for arg in command["args"].as_array().into_iter().flatten() {
+            if !arg["required_unless"].is_null() && arg["required"] == true {
+                return Err(format!(
+                    "{}: {} is required and has required_unless",
+                    command["name"], arg["name"]
+                ));
+            }
+            for key in [
+                "conflicts_with",
+                "requires",
+                "requires_any",
+                "required_unless",
+            ] {
+                for other in arg[key].as_array().into_iter().flatten() {
+                    if !all.iter().any(|n| n == other.as_str().unwrap()) {
+                        return Err(format!(
+                            "{}: {} names {other} in {key}",
+                            command["name"], arg["name"]
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn describe_validates_against_the_describe_schema() {
+    let d = describe();
+    assert_eq!(d["contract_version"], "1.0", "1.1 is declared by MILE-370");
+    validate("describe.schema.json", &d).unwrap_or_else(|e| panic!("describe fails: {e}"));
+    validate("describe.schema.json", &as_one_one(d.clone()))
+        .unwrap_or_else(|e| panic!("describe fails the 1.1 requirements: {e}"));
+    argument_names_resolve(&d).unwrap();
+    for command in d["commands"].as_array().unwrap() {
+        if command["profile"] == "exempt" {
+            assert_eq!(command["safe"], false, "{}", command["name"]);
+        }
+    }
+}
+
+#[test]
+fn the_describe_check_rejects_what_the_contract_forbids() {
+    let d = as_one_one(describe());
+    let broken = |edit: &dyn Fn(&mut Value)| {
+        let mut r = d.clone();
+        edit(&mut r);
+        validate("describe.schema.json", &r).is_err() || argument_names_resolve(&r).is_err()
+    };
+    let at = |name: &str| {
+        d["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|c| c["name"] == name)
+            .unwrap()
+    };
+    let (mcp, check, board) = (at("mcp"), at("check"), at("board"));
+    assert!(broken(&|r| {
+        r["commands"][mcp]
+            .as_object_mut()
+            .unwrap()
+            .remove("protocol");
+    }));
+    assert!(broken(&|r| {
+        r["commands"][check]
+            .as_object_mut()
+            .unwrap()
+            .remove("stdin");
+    }));
+    assert!(broken(&|r| {
+        r.as_object_mut().unwrap().remove("env");
+    }));
+    assert!(broken(&|r| {
+        r["commands"][check]["args"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("type");
+    }));
+    assert!(broken(
+        &|r| r["commands"][check]["args"][0]["kind"] = serde_json::json!("switch")
+    ));
+    assert!(broken(
+        &|r| r["commands"][board]["args"][3]["requires"] = serde_json::json!(["--nope"])
+    ));
+    assert!(broken(
+        &|r| r["commands"][check]["args"][0]["name"] = serde_json::json!("--config")
+    ));
+    let explain = at("explain");
+    assert!(broken(&|r| r["commands"][explain]["args"][0]
+        ["required_unless"] =
+        serde_json::json!(["--nope"])));
+    assert!(broken(&|r| r["commands"][explain]["args"][0]
+        ["requires_any"] =
+        serde_json::json!("--rule")));
+    assert!(broken(
+        &|r| r["commands"][explain]["args"][0]["required"] = serde_json::json!(true)
+    ));
+}
+
+/// The words that give a described argument a value it accepts.
+fn tokens(arg: &Value) -> Vec<String> {
+    let value = arg["values"][0]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            if arg["type"] == "integer" {
+                "0".into()
+            } else {
+                "x".into()
+            }
+        });
+    let name = arg["name"].as_str().unwrap().to_string();
+    match arg["kind"].as_str().unwrap() {
+        "positional" => vec![value],
+        "flag" => vec![name],
+        _ => vec![name, value],
+    }
+}
+
+/// The command at `words`, with every required argument but `except`, then `extra`.
+fn invocation(command: &Value, except: &[&str], extra: &[&Value]) -> Vec<String> {
+    let mut argv: Vec<String> = command["name"]
+        .as_str()
+        .unwrap()
+        .split(' ')
+        .map(String::from)
+        .collect();
+    for arg in command["args"].as_array().unwrap() {
+        let name = arg["name"].as_str().unwrap();
+        if arg["required"] == true
+            && !except.contains(&name)
+            && !extra.iter().any(|e| e["name"] == name)
+        {
+            argv.extend(tokens(arg));
+        }
+    }
+    for arg in extra {
+        argv.extend(tokens(arg));
+    }
+    argv
+}
+
+/// stdout's report, or stderr's for `mcp`, which keeps stdout for protocol frames.
+fn refused(dir: &Path, argv: &[String]) -> Result<(), String> {
+    let out = common::urzua()
+        .args(argv)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let text = if out.stdout.is_empty() {
+        &out.stderr
+    } else {
+        &out.stdout
+    };
+    let report: Value = serde_json::from_slice(text).unwrap_or(Value::Null);
+    if out.status.code() == Some(2) && report["status"] == "not-run" {
+        Ok(())
+    } else {
+        Err(format!(
+            "{argv:?} was not refused: exit {:?}, {}",
+            out.status.code(),
+            String::from_utf8_lossy(text)
+        ))
+    }
+}
+
+fn arg_of<'a>(command: &'a Value, name: &str) -> &'a Value {
+    command["args"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == name)
+        .unwrap()
+}
+
+/// Whether `text` names `name` as a whole word: `--types` does not name `--type`.
+fn names_whole(text: &str, name: &str) -> bool {
+    let word = format!(
+        r"(?:^|[^a-z0-9_-]){}(?:$|[^a-z0-9_-])",
+        regex::escape(&name.to_lowercase())
+    );
+    regex::Regex::new(&word).unwrap().is_match(text)
+}
+
+#[test]
+fn a_longer_name_does_not_name_a_shorter_one() {
+    assert!(!names_whole("--full goes with --types", "--type"));
+    assert!(names_whole(
+        "cannot be combined with paths or --base",
+        "--base"
+    ));
+    assert!(names_whole("with paths or", "paths"));
+    assert!(!names_whole("--stdin-path", "--stdin"));
+}
+
+/// A refusal whose error names both arguments (`paths` is written `PATHS`), so
+/// it refuses the pair and not some other mistake in the probe.
+fn refused_naming(dir: &Path, argv: &[String], names: &[&str]) -> Result<(), String> {
+    refused(dir, argv)?;
+    let out = common::urzua()
+        .args(argv)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&[out.stdout, out.stderr].concat()).to_lowercase();
+    if names.iter().all(|n| names_whole(&text, n)) {
+        Ok(())
+    } else {
+        Err(format!("{argv:?} was refused for another reason: {text}"))
+    }
+}
+
+/// `args`, plus what they require and the first name of each `requires_any`
+/// (so that a probe reaches the relation it tests), less `except`.
+fn with_companions<'a>(command: &'a Value, args: &[&'a Value], except: &str) -> Vec<&'a Value> {
+    let mut all: Vec<&Value> = args.to_vec();
+    let mut i = 0;
+    while i < all.len() {
+        let mut next: Vec<&str> = all[i]["requires"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|n| n.as_str().unwrap())
+            .collect();
+        if let Some(first) = all[i]["requires_any"].get(0) {
+            next.push(first.as_str().unwrap());
+        }
+        for name in next {
+            if name != except && !all.iter().any(|x| x["name"] == name) {
+                all.push(arg_of(command, name));
+            }
+        }
+        i += 1;
+    }
+    all
+}
+
+/// Every declared `conflicts_with` and `requires` is refused by the binary:
+/// both arguments together, or the argument without what it requires, is a
+/// `not-run`. A relation `describe` declares and the command accepts fails here.
+#[test]
+fn every_declared_relation_is_refused() {
+    let dir = fixture_corpus();
+    let d = describe();
+    let mut accepted = Vec::new();
+    for command in d["commands"].as_array().unwrap() {
+        for arg in command["args"].as_array().unwrap() {
+            for other in arg["conflicts_with"].as_array().into_iter().flatten() {
+                let other = arg_of(command, other.as_str().unwrap());
+                let argv = invocation(command, &[], &with_companions(command, &[arg, other], ""));
+                let names = [
+                    arg["name"].as_str().unwrap(),
+                    other["name"].as_str().unwrap(),
+                ];
+                accepted.extend(refused_naming(&dir, &argv, &names).err());
+            }
+            if let Some(first) = arg["requires_any"].get(0) {
+                let first = first.as_str().unwrap();
+                let argv = invocation(command, &[], &with_companions(command, &[arg], first));
+                let mut names = vec![arg["name"].as_str().unwrap()];
+                names.extend(
+                    arg["requires_any"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|n| n.as_str().unwrap()),
+                );
+                accepted.extend(refused_naming(&dir, &argv, &names).err());
+            }
+            if arg["required_unless"].is_array() {
+                let argv = invocation(command, &[arg["name"].as_str().unwrap()], &[]);
+                let names = [arg["name"].as_str().unwrap()];
+                accepted.extend(refused_naming(&dir, &argv, &names).err());
+            }
+            for needed in arg["requires"].as_array().into_iter().flatten() {
+                let needed = needed.as_str().unwrap();
+                let argv = invocation(
+                    command,
+                    &[needed],
+                    &with_companions(command, &[arg], needed),
+                );
+                let names = [arg["name"].as_str().unwrap(), needed];
+                accepted.extend(refused_naming(&dir, &argv, &names).err());
+            }
+        }
+    }
+    assert!(accepted.is_empty(), "{}", accepted.join("\n"));
+}
+
+/// `--as-of` is declared on exactly the commands that accept it: every other
+/// command refuses it, and each declaring command runs with it.
+#[test]
+fn as_of_is_declared_where_it_is_accepted() {
+    let dir = fixture_corpus();
+    let d = describe();
+    let as_of = serde_json::json!({"name": "--as-of", "kind": "option", "type": "string", "values": ["2026-01-01"]});
+    for command in d["commands"].as_array().unwrap() {
+        let declared = command["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["name"] == "--as-of");
+        let argv = with_example(command, &[&as_of]);
+        if declared {
+            let out = common::urzua()
+                .args(&argv)
+                .current_dir(&dir)
+                .stdin(std::process::Stdio::null())
+                .output()
+                .unwrap();
+            let text = String::from_utf8_lossy(&out.stdout);
+            assert!(
+                !text.contains("--as-of is not accepted"),
+                "{argv:?}: {text}"
+            );
+        } else {
+            let out = common::urzua()
+                .args(&argv)
+                .current_dir(&dir)
+                .stdin(std::process::Stdio::null())
+                .output()
+                .unwrap();
+            let text = [out.stdout, out.stderr].concat();
+            assert!(
+                String::from_utf8_lossy(&text).contains("--as-of is not accepted"),
+                "{argv:?} accepted --as-of"
+            );
+        }
+    }
+}
+
+/// The command's `example`, as arguments.
+fn example(command: &Value) -> Vec<String> {
+    command["example"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect()
+}
+
+/// The command run as its `example` (or with its required arguments when it
+/// has none), then `extra`.
+fn with_example(command: &Value, extra: &[&Value]) -> Vec<String> {
+    let example = example(command);
+    if example.is_empty() {
+        return invocation(command, &[], extra);
+    }
+    let mut argv: Vec<String> = command["name"]
+        .as_str()
+        .unwrap()
+        .split(' ')
+        .map(String::from)
+        .collect();
+    argv.extend(example);
+    for arg in extra {
+        argv.extend(tokens(arg));
+    }
+    argv
+}
+
+fn stdout_of(dir: &Path, argv: &[String]) -> (Option<i32>, Vec<u8>) {
+    let out = common::urzua()
+        .args(argv)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    (out.status.code(), out.stdout)
+}
+
+/// A safe command declares `--config` exactly when it reads the file it names:
+/// pointing it at a missing file changes its answer. `rules`, which reads no
+/// configuration and does not declare it, answers the same. A command refused
+/// before it reads anything (`import`, `migrate schema` without `--field`)
+/// says nothing either way.
+#[test]
+fn config_is_declared_where_it_is_read() {
+    let dir = fixture_corpus();
+    let d = describe();
+    let missing = serde_json::json!({"name": "--config", "kind": "option", "type": "path", "values": ["no/such/config.yaml"]});
+    for command in d["commands"].as_array().unwrap() {
+        if command["safe"] != true || command["profile"] == "exempt" {
+            continue;
+        }
+        let declared = command["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["name"] == "--config");
+        let plain = with_example(command, &[]);
+        if refused(&dir, &plain).is_ok() {
+            continue;
+        }
+        let argv = with_example(command, &[&missing]);
+        let changed = stdout_of(&dir, &plain) != stdout_of(&dir, &argv);
+        assert_eq!(changed, declared, "{argv:?}");
+    }
+}
+
+/// Every argument declared `required` is refused when left out, by an error
+/// that names it.
+#[test]
+fn every_required_argument_is_refused_when_missing() {
+    let dir = fixture_corpus();
+    let d = describe();
+    let mut accepted = Vec::new();
+    for command in d["commands"].as_array().unwrap() {
+        for arg in command["args"].as_array().unwrap() {
+            if arg["required"] != true {
+                continue;
+            }
+            let name = arg["name"].as_str().unwrap();
+            let argv = invocation(command, &[name], &[]);
+            let shown = if arg["kind"] == "positional" {
+                name.to_uppercase()
+            } else {
+                name.to_string()
+            };
+            accepted.extend(refused_naming(&dir, &argv, &[shown.as_str(), shown.as_str()]).err());
+        }
+    }
+    assert!(accepted.is_empty(), "{}", accepted.join("\n"));
+}

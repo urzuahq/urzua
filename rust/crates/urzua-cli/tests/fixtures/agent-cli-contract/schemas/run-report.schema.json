@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/urzuahq/agent-cli-kit/main/schemas/run-report.schema.json",
+  "title": "Report (run profile)",
+  "allOf": [
+    {"$ref": "gate-report.schema.json"},
+    {
+      "type": "object",
+      "properties": {
+        "status": {"enum": ["pass", "warn", "fail", "not-run"]},
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "kind", "status", "duration_ms", "examined"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "kind": {"enum": ["lint", "format", "types", "test", "build", "records", "other"]},
+              "status": {"enum": ["pass", "warn", "fail", "skipped", "not-run"]},
+              "duration_ms": {"type": "integer", "minimum": 0},
+              "examined": {
+                "type": "object",
+                "additionalProperties": {"type": "integer", "minimum": 0}
+              },
+              "rerun": {"type": ["string", "null"]},
+              "output_tail": {"type": "string", "maxLength": 4000},
+              "output": {"type": "string", "minLength": 1},
+              "suppressed": {
+                "description": "Findings left out of the verdict, as a count per severity.",
+                "type": "object",
+                "properties": {
+                  "error": {"type": "integer", "minimum": 0},
+                  "warning": {"type": "integer", "minimum": 0},
+                  "info": {"type": "integer", "minimum": 0}
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "trigger": {"type": ["string", "null"], "pattern": "^(commit|push|ci|merge)$"},
+        "commit": {"$ref": "#/$defs/hash_or_null"},
+        "tree": {"$ref": "#/$defs/hash_or_null"},
+        "scope": {
+          "type": ["object", "null"],
+          "required": ["kind"],
+          "properties": {
+            "kind": {"enum": ["staged", "changed", "affected", "all", "named"]},
+            "files": {"type": "array", "items": {"type": "string"}},
+            "packages": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "receipt": {"type": ["string", "null"]}
+      },
+      "if": {"properties": {"status": {"const": "not-run"}}, "required": ["status"]},
+      "else": {"required": ["checks"]}
+    }
+  ],
+  "$defs": {
+    "hash_or_null": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    }
+  }
+}

@@ -31,7 +31,11 @@
       "items": {"type": "string"}
     },
     "error": {"type": "string"},
-    "error_kind": {"enum": ["usage", "config", "environment", "internal"]},
+    "error_kinds": {
+      "description": "Every kind of reason the command could not run, in this order, each once.",
+      "type": "array",
+      "items": {"enum": ["usage", "config", "environment", "internal"]}
+    },
     "notices": {
       "type": "array",
       "items": {
@@ -58,7 +62,7 @@
       "then": {"properties": {"status": {"const": "not-run"}}}
     },
     {
-      "if": {"required": ["error_kind"]},
+      "if": {"required": ["error_kinds"]},
       "then": {"properties": {"status": {"const": "not-run"}}}
     },
     {

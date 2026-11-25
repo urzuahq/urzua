@@ -1,0 +1,60 @@
+# `urzua describe`
+
+```text
+urzua describe
+```
+
+`describe` prints one JSON object that says how to call urzua: every command, every argument each
+command takes, the environment variables and the configuration file urzua reads. An agent or a
+consuming gate reads it instead of `--help`. It follows the `describe` shape of the published agent
+CLI contract (its RFC-4, section 6) and validates against that contract's `describe.schema.json`.
+
+It is not a report: it has no `status` and no `next_action` keys, and it exits 0. If it cannot
+describe the command line it prints a `not-run` report and exits 2, like any other command. It reads
+no configuration and no records, so it answers in any directory.
+
+## Top level
+
+| Key | Value |
+|---|---|
+| `name` | `urzua` |
+| `version` | The binary's version, the same as `urzua --version` prints after the name. |
+| `contract_version` | The contract version urzua conforms to: `1.0`. It moves to `1.1` once urzua meets every rule of 1.1 (`MILE-370`); the inputs below are printed already. |
+| `system` | `0`: urzua's own work is deterministic. |
+| `args` | `[]`. No option is accepted and honoured by every command, so each is declared on the commands that take it: `--as-of` on `check`, `audit`, `fix`, `reverify` and `waive`, and `--config` on every command but `rules`, `import`, `harness adapters`, `harness hook` and `harness record`, which never read it. |
+| `env` | `{name, means}` for each environment variable that changes what urzua does. `PATH` and `HOME` are not listed: urzua only uses them to find programs and the home directory. |
+| `config` | `[{"path": ".urzua/config.yaml", "format": "yaml"}]`. No schema is given; the configuration is validated by `urzua doctor` and on every load. |
+| `log` | `null`: urzua has no diagnostic log. |
+| `commands` | One entry per command that runs, below. |
+
+## A command
+
+| Key | Value |
+|---|---|
+| `name` | The full path, words separated by one space: `migrate ids`, `harness run edit`. A group such as `harness` is not listed, only the commands under it, and `describe` does not list itself. |
+| `profile` | `gate` for `check` and `audit`, whose reports carry `blocking`, `findings` and `examined`; `exempt` for a command that speaks a host's protocol; `base` for every other. |
+| `kind` | `records`, on `check` and `audit`. |
+| `safe` | `true` only for a command that writes nothing whatever its arguments. A command whose `--apply` writes is not safe. A safe command that is slow with no arguments has a quick `example` where one exists; `audit` has none and runs every declared rule. |
+| `scopes` | `paths` for a command that takes record paths, `base-ref` for `check --base`. |
+| `metrics` | `files` for `check` and `audit`, the count in their `examined`. |
+| `args` | Each argument: `name` (`--base`, or a positional's name), `kind` (`flag`, `option` or `positional`), `type` (`string`, `integer` or `path`; a flag has none), `required`, `repeatable`, `means`, and where they apply `values`, `format` (`date` for `YYYY-MM-DD`), `conflicts_with`, `requires` and `after_separator`. |
+| `stdin` | `null`, or `{format, means}` for a command that reads standard input: `check` and `fix` with `--stdin-path`, `init` on a terminal, and the exempt commands except `hooks run`, which reads none and has `stdin` `null`. |
+| `example` | For a safe command that needs arguments to do real work, the arguments of one quick run, where one exists: `migrate schema` is safe and needs `--field`, but has none, since any field would name a record field the engine never hardcodes ([ADR-108](../adr/ADR-108-urzua-describe-states-each-command-s-inputs-from-the-clap-definitions-and-a-per-command-table-at-contract-version-1-0-until-every-1-1-piece-ships.md)). |
+| `protocol` | On an exempt command: `mcp` (`urzua mcp`), `harness-hook` (`harness hook`), `harness-run` (each `harness run` event, a neutral request on stdin and a verdict on stdout) and `git-hook` (`hooks run`). A reader that does not know the word does not call the command. |
+
+## How it is kept true
+
+Every argument is read from the same definitions that parse the command line, so a flag cannot be
+added without appearing here. What the parser cannot know, a command's profile, whether it is safe,
+what it reads on stdin and its example, is stated once per command, and a command added without that
+entry makes `describe` fail its tests (and print `not-run` if it ever shipped). The tests also fail
+when an argument has no help text to use as its `means`, and when the source reads an `URZUA_`
+variable that `env` does not list.
+
+`conflicts_with` and `requires` include the relations a command refuses in its own code, not only
+those declared to the parser: `check --stdin-path` conflicts with `paths` and `--base`, `fix --force`
+requires `--apply`, `--as-of` conflicts with `--apply`. A test runs each declared pair and expects it
+refused. A rule of the form "needs one of two" (`fix --apply` needs `--ids` or `--force`) or "required
+unless another is given" (`explain <path>`) has no field in the contract: it is stated in the
+argument's `means`, and the argument is declared with the weaker reading (`required: false`, no
+`requires`).

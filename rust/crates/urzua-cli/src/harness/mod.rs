@@ -17,6 +17,7 @@ mod block;
 mod bundle;
 mod gate;
 mod hook;
+pub(crate) use hook::ADAPTER_ENV;
 mod json;
 mod limits;
 mod lock;
