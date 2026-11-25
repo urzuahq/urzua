@@ -649,7 +649,7 @@ fn merge_without_commit(dir: &Path) {
     );
 }
 
-fn check_scope(dir: &Path, base: &str) -> (Vec<String>, Vec<String>) {
+fn check_scope(dir: &Path, base: &str) -> (Option<i32>, Vec<String>, Vec<String>) {
     let out = common::urzua()
         .args(["check", "--base", base])
         .current_dir(dir)
@@ -674,7 +674,11 @@ fn check_scope(dir: &Path, base: &str) -> (Vec<String>, Vec<String>) {
         .collect::<Vec<_>>();
     let mut rules = rules;
     rules.sort();
-    (strings(&report["scope"]["changed_paths"]), rules)
+    (
+        out.status.code(),
+        strings(&report["scope"]["changed_paths"]),
+        rules,
+    )
 }
 
 /// A merge pending in the working tree is judged as CI judges the committed merge against the
@@ -695,7 +699,7 @@ fn check_against_merge_head_mid_merge_matches_the_committed_merge_against_main()
     common::git(&dir, &["checkout", "-q", "-b", "side"]);
     std::fs::write(
         dir.join("docs/adr/ADR-a.md"),
-        "---\nStatus: Draft\n---\n# R\nbranch\n",
+        "---\nDate: 2026-01-01\n---\n# R\nbranch\n",
     )
     .unwrap();
     common::git(&dir, &["commit", "-qam", "branch", "--no-verify"]);
@@ -722,5 +726,7 @@ fn check_against_merge_head_mid_merge_matches_the_committed_merge_against_main()
     common::git(&dir, &["commit", "-q", "--no-verify", "-m", "merge"]);
     let committed = check_scope(&dir, "main");
     assert_eq!(pending, committed);
-    assert_eq!(pending.0, vec!["docs/adr/ADR-a.md".to_string()]);
+    assert_eq!(pending.0, Some(1), "the planted missing Status blocks");
+    assert_eq!(pending.1, vec!["docs/adr/ADR-a.md".to_string()]);
+    assert!(!pending.2.is_empty(), "the findings compared are not empty");
 }
