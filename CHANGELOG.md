@@ -4,6 +4,29 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.15 (2026-11-25)
+
+### Features
+
+- Every command's JSON now carries `next_action_argv`, the next action as an array of words with no quoting (`null` exactly when `next_action` is). `next_action` is those words joined and quoted for a POSIX shell, so a placeholder is single-quoted everywhere (`urzua explain --type '<name>'`, and the `--reason` of `fix --pin`, which was double-quoted). Each `next_action_inputs` entry gains `index`, the position of its placeholder in the array. A `doctor` check's `fix` is printed beside `fix_argv` and is always one command: a hook with two blocks is fixed by `urzua hooks install`, and a hook without the execute bit by `chmod +x`, not by a `&&` chain. The heading that `fix` offers to append to a record is an `sh -c` command rather than a shell redirection. When a report cannot be serialised, the fallback not-run envelope now carries `next_action` and `next_action_argv` (`null`).
+- Every `not-run` report that states a cause in `error` now carries `error_kinds`, an array holding the kind of its cause (`usage`, `config`, `environment` or `internal`), as the published agent CLI contract `v1.1.0-rc.4` defines it. urzua stops at the first cause, so the array always holds one kind. `urzua mcp` reports a configuration it cannot load as `config`, as `check` does. `migrate ids --apply`'s `not-run` carries neither `error` nor `error_kinds` yet (`BUG-237`). A usage error's `error` names the argument in one sentence, without the parser's `Usage:` block. A panic reports its text under `error` with `error_kinds` `["internal"]`, and the `panic` key is gone. `make conform` runs the contract's conformance runner against a built binary, with `--require-run`.
+- New command `urzua describe` prints one JSON object that says how to call urzua: every command with its full-path name, profile, whether it is safe to run, what it reads on standard input, and each argument's kind, type, whether it is required or repeatable, its meaning, accepted values and the arguments it requires, requires one of, is required unless, or conflicts with; `--config` and `--as-of` are declared on the commands that take them; also the environment variables urzua reads and its configuration file. It follows the `describe` shape of the published agent CLI contract and declares contract version `1.0`. Twenty-one arguments that had no help text now have one in `--help`, and `migrate schema` refuses a missing `--report` or `--field` at parse time, naming it.
+
+### Fixes
+
+- `urzua check --base <ref>` run in the middle of a merge now takes the merge base against the pending merge commit (`HEAD` and every line of `MERGE_HEAD`), so `--base MERGE_HEAD` reports what the committed merge will report against the branch merged in. It used the merge base with the old tip, which charged every commit that came in to the merge.
+- The documented install commands no longer pipe the install script into `sh`. They save it with `curl -o urzua-install.sh` and run it only if the download succeeded, so a failed download exits non-zero (`22`) instead of exiting `0` with nothing installed.
+
+#### `urzua check --base` no longer reports `pin-removed` when a record collapses an exact duplicate evidence citation, the same tier, locator and hash cited twice, into one. The head still pins it, so no row is needed. A changed hash, the removal of a pin's last copy, a copy of another tier, a copy kept with its pin taken off and a duplicate added in the head are still reported.
+
+`diff.pin-changed-unattested` compares a citation's tier: a pin moved from `code:` to `test:` at the same hash was treated as unchanged and is now reported as added and removed, cleared with `urzua fix --pin --apply --replace OLD=NEW`.
+
+`urzua fix --pin --remove OLD` and `--replace OLD=NEW` accept `OLD` with its tier (`code:src/a.rs`, `test:src/a.rs`). On a record citing one file in two tiers at the same hash they refused with "pinned at more than one hash"; a bare `OLD` matching two tiers is now refused naming both spellings.
+
+#### `fix --pin --remove` edits the evidence field only, reads a folded field, and names the items that still cite the pin
+
+`urzua fix --pin --remove OLD` removes the pin from the `Realized-by` field only. A Done-means item that cites the same pin keeps it, and the report lists each such item under `still_cited_by_items` as `{item, line, locator}`; a pin cited only in items is removed from the first item that cites it, and the others are listed, as before. It also removes an entry from a folded (`>-`) `Realized-by` field, which it used to refuse. When a bare `OLD` is cited in two tiers, the refusal names the spelling of each tier it is cited in (`spec:` and `record:` included), not always `code:` and `test:`.
+
 ## 0.4.14 (2026-11-23)
 
 ### Features
