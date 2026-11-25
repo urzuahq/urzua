@@ -44,6 +44,18 @@ struct PinEntryReport {
     /// Whether the record has no revision log and the write creates one.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     creates_revision_log: bool,
+    /// Done-means items that still cite a removed pin: `--remove` edits the
+    /// evidence field only.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    still_cited_by_items: Vec<ItemCopy>,
+}
+
+/// A Done-means item whose evidence clause cites the pin.
+#[derive(serde::Serialize)]
+struct ItemCopy {
+    item: usize,
+    line: usize,
+    locator: String,
 }
 
 #[derive(serde::Serialize)]
@@ -180,7 +192,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
     for record in selected {
         let dispatch = |write: Option<&Write<'_>>| match (args.replace, args.remove) {
             (Some(spec), _) => replace(record, config, &read, spec, write),
-            (_, Some(old)) => remove(record, config, old, write),
+            (_, Some(old)) => remove(record, config, repo_root, old, write),
             _ => first_pins(record, config, &read, write, !args.ids.is_empty()),
         };
         let outcome = planned_outcome(
@@ -383,6 +395,7 @@ fn first_pins(
             .collect(),
         not_pinned,
         creates_revision_log: false,
+        still_cited_by_items: Vec::new(),
     }))
 }
 
@@ -415,7 +428,16 @@ fn pinned_entry(record: &Record, config: &Config, name: &str) -> Result<PinnedEn
         .collect();
     match found.first() {
         Some(e) if found.iter().all(|f| f == e) => Ok(e.clone()),
-        Some(e) if found.iter().any(|f| f.category != e.category) => Err(format!("'{name}' is cited in more than one tier: name the one to change as `code:{name}` or `test:{name}`")),
+        Some(e) if found.iter().any(|f| f.category != e.category) => {
+            let mut tiers: Vec<&str> = found.iter().map(|f| f.category.as_str()).collect();
+            tiers.sort_by_key(|t| urzua_core::locator::CATEGORIES.iter().position(|c| c == t));
+            tiers.dedup();
+            let spellings: Vec<String> = tiers.iter().map(|t| format!("`{t}:{name}`")).collect();
+            Err(format!(
+                "'{name}' is cited in more than one tier: name the one to change as {}",
+                spellings.join(" or ")
+            ))
+        }
         Some(_) => Err(format!("'{name}' is pinned at more than one hash: re-pin with `urzua fix --rebaseline` first")),
         None => Err(format!("the record has no pinned locator '{name}' (name it as `path` or `path#scope`, without the pin)")),
     }
@@ -467,28 +489,68 @@ fn replace(
         pins: vec![old.text(), new.text()],
         not_pinned: Vec::new(),
         creates_revision_log: false,
+        still_cited_by_items: Vec::new(),
     }))
+}
+
+/// `record` as `text` reads it, with its Done-means items.
+fn reread(record: &Record, config: &Config, text: &str) -> Record {
+    let mut fresh = Record::parse_declared(config, record.path.clone(), &record.record_type, text);
+    urzua_core::rules::attach_done_items_to(&mut fresh, config, text);
+    fresh
 }
 
 fn remove(
     record: &Record,
     config: &Config,
+    repo_root: &std::path::Path,
     old_name: &str,
     write: Option<&Write<'_>>,
 ) -> Result<Option<PinEntryReport>, String> {
     let old = pinned_entry(record, config, old_name.trim())?;
+    let field = urzua_core::rules::relation_field_name(
+        config,
+        &record.record_type,
+        urzua_core::config::RelationRole::EmbodimentLocator,
+    );
+    let mut removal = None;
     if let Some(w) = write {
         let (id, shape) = log_shape(config, record);
         w.apply(record, |text, ctx| {
-            urzua_core::fix::pin::apply_remove(text, &old, ctx, &id, &shape)
+            let found = urzua_core::fix::pin::locate_removal(
+                &reread(record, config, text),
+                text,
+                field,
+                &old,
+            )?;
+            let edited =
+                urzua_core::fix::pin::apply_remove(text, &old, found.span, ctx, &id, &shape);
+            removal = Some(found);
+            edited
         })?;
+    } else {
+        let text = urzua_io::read_to_string(&repo_root.join(&record.path))
+            .map_err(|e| format!("could not read the record to find its items: {e}"))?;
+        let fresh = reread(record, config, &text);
+        removal = Some(urzua_core::fix::pin::locate_removal(
+            &fresh, &text, field, &old,
+        )?);
     }
+    let remaining = removal.map(|r| r.remaining).unwrap_or_default();
     Ok(Some(PinEntryReport {
         record: record.path.clone(),
         action: "remove",
         pins: vec![old.text()],
         not_pinned: Vec::new(),
         creates_revision_log: false,
+        still_cited_by_items: remaining
+            .into_iter()
+            .map(|(item, line)| ItemCopy {
+                item,
+                line,
+                locator: old.text(),
+            })
+            .collect(),
     }))
 }
 

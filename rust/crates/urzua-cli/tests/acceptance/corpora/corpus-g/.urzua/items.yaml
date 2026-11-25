@@ -1,0 +1,31 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status, Embodiment, Realized-by]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Accepted, Planned]
+      success: [Accepted]
+      delivery:
+        delivered_tiers: [Implemented, Verified]
+        unevidenced_tiers: ["Not started"]
+        not_done: [Planned]
+        set_status: Accepted
+        items:
+          section: "Done means"
+          clause_separator: " — "
+          evidence_marker: "evidence:"
+          waiver_marker: "waived:"
+          partial_status: "Planned"
+          resolving_tiers: [Specified, Implemented, Verified]
+          waiver_categories:
+            - {name: not-applicable}
+    sections:
+      from: headings
+      required:
+        - {name: Done means}
+rules:
+  embodiment.consistency: warn

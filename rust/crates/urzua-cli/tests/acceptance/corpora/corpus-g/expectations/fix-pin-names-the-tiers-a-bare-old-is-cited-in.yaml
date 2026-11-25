@@ -1,0 +1,15 @@
+id: fix-pin-names-the-tiers-a-bare-old-is-cited-in
+corpus: corpus-g
+bugs: [BUG-231]
+# The record cites src/cache.rs as spec and as record, not as code or test. A bare OLD is
+# refused, and the refusal offers the spellings of the tiers found, not code: and test:.
+commits:
+  - write:
+      records/ADR-0016-spec-and-record.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: spec:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222, record:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n---\n# ADR-0016 — Spec and record\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+invocation: [fix, --pin, --apply, --ids, records/ADR-0016-spec-and-record.md, --remove, "src/cache.rs", --by, ana, --actor, agent, --reason, "the spec tier no longer cites cache.rs."]
+expect_exit: 1
+expect_stdout_contains:
+  - "`spec:src/cache.rs` or `record:src/cache.rs`"
+expect_json:
+  - {at: /status, equals: partial-failure}
+mutation_exempt: fix --pin writes a record and runs no rule, so there is no rule to switch off.

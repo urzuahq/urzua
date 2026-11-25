@@ -1945,3 +1945,262 @@ fn fix_pin_removes_one_tier_of_a_file_cited_in_two_observed_failing() {
     commit_all(&dir);
     assert!(unattested(&check_base(&dir)).is_empty());
 }
+
+#[test]
+fn fix_pin_refusal_names_only_the_tiers_a_file_is_cited_in_observed_failing() {
+    let s = sha256("s\n");
+    let dir = branched_with("remove-tier-spelling", |t| {
+        t.replace(
+            "spec:docs/s.md,",
+            &format!("spec:docs/s.md@sha256:{s}, record:docs/s.md@sha256:{s},"),
+        )
+    });
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--pin",
+            "--apply",
+            "--ids",
+            A,
+            "--remove",
+            "docs/s.md",
+            "--by",
+            "ana",
+            "--reason",
+            "the spec tier no longer cites it.",
+        ],
+    );
+    let text = format!("{out:?}");
+    assert!(text.contains("more than one tier"), "{text}");
+    assert!(text.contains("spec:docs/s.md"), "{text}");
+    assert!(text.contains("record:docs/s.md"), "{text}");
+    assert!(!text.contains("code:docs/s.md"), "{text}");
+    assert!(!text.contains("test:docs/s.md"), "{text}");
+}
+
+const ITEMS_CONFIG: &str = "schema_version: 2\nrules: {embodiment.consistency: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    statuses:\n      values: [Planned, Done]\n      success: [Done]\n      delivery:\n        delivered_tiers: [Implemented, Verified]\n        unevidenced_tiers: [\"Not started\"]\n        not_done: [Planned]\n        set_status: Done\n        items:\n          section: \"Done means\"\n          clause_separator: \" — \"\n          evidence_marker: \"evidence:\"\n          waiver_marker: \"waived:\"\n          partial_status: \"Planned\"\n          resolving_tiers: [Specified, Implemented, Verified]\n          waiver_categories:\n            - {name: not-applicable}\n    sections:\n      from: headings\n      required:\n        - {name: Done means}\n";
+
+/// One record whose `Realized-by` field (written as `Realized-by:{field}`) and whose Done-means item both cite
+/// `src/a.rs` pinned at its current hash.
+fn pin_in_field_and_item(name: &str, field: &str, item: &str) -> common::TempDir {
+    let h = sha256(V1);
+    let (field, item) = (field.replace("HASH", &h), item.replace("HASH", &h));
+    let dir = branched_with(name, |t| {
+        let head = t.split("> **Revision log**").next().unwrap();
+        let log = &t[head.len()..];
+        let head = head
+            .lines()
+            .map(|l| {
+                if l.starts_with("Realized-by:") {
+                    format!("Realized-by:{field}")
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("{head}\n## Done means\n\n- Criterion — evidence: {item}\n\n{log}")
+    });
+    std::fs::write(dir.join(".urzua/config.yaml"), ITEMS_CONFIG).unwrap();
+    commit_all(&dir);
+    dir
+}
+
+fn pin_edit(dir: &Path, flag: &str, arg: &str) -> std::process::Output {
+    run_urzua(
+        dir,
+        &[
+            "fix",
+            "--pin",
+            "--apply",
+            "--ids",
+            A,
+            flag,
+            arg,
+            "--by",
+            "ana",
+            "--actor",
+            "agent",
+            "--reason",
+            "the field no longer cites this file.",
+        ],
+    )
+}
+
+fn field_and_item(dir: &Path) -> (String, String) {
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    let pick = |p: &str| text.lines().find(|l| l.starts_with(p)).unwrap().to_string();
+    (pick("Realized-by:"), pick("- Criterion"))
+}
+
+#[test]
+fn fix_pin_remove_keeps_the_item_copy_of_a_pin_in_the_middle_of_the_field() {
+    let dir = pin_in_field_and_item(
+        "remove-field-copy",
+        " 'spec:docs/s.md, code:src/a.rs@sha256:HASH, test:t.rs'",
+        "test:t.rs, code:src/a.rs@sha256:HASH",
+    );
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let (field, item) = field_and_item(&dir);
+    assert_eq!(field, "Realized-by: 'spec:docs/s.md, test:t.rs'");
+    assert_eq!(
+        item,
+        format!(
+            "- Criterion — evidence: test:t.rs, code:src/a.rs@sha256:{}",
+            sha256(V1)
+        )
+    );
+    commit_all(&dir);
+    assert!(unattested(&check_base(&dir)).is_empty());
+}
+
+const COMMA_FIELD: &str = " 'code:src/a.rs@sha256:HASH, test:t.rs'";
+const COMMA_ITEM: &str = "test:t.rs, code:src/a.rs@sha256:HASH";
+
+#[test]
+fn fix_pin_remove_edits_the_field_when_the_item_copy_has_the_other_comma_observed_failing() {
+    let dir = pin_in_field_and_item("remove-other-comma", COMMA_FIELD, COMMA_ITEM);
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    let report = json(&out);
+    assert_eq!(report["status"], "applied", "{out:?}");
+    let (field, item) = field_and_item(&dir);
+    assert_eq!(field, "Realized-by: 'test:t.rs'");
+    assert_eq!(
+        item,
+        format!(
+            "- Criterion — evidence: test:t.rs, code:src/a.rs@sha256:{}",
+            sha256(V1)
+        )
+    );
+    let still = &report["records"][0]["still_cited_by_items"];
+    assert_eq!(still[0]["item"], 1, "{report}");
+    assert!(still[0]["line"].as_u64().unwrap() > 5, "{report}");
+    assert_eq!(
+        still[0]["locator"],
+        format!("code:src/a.rs@sha256:{}", sha256(V1)),
+        "{report}"
+    );
+}
+
+#[test]
+fn fix_pin_remove_reads_a_folded_field_observed_failing() {
+    let dir = pin_in_field_and_item(
+        "remove-folded",
+        " >-\n  code:src/a.rs@sha256:HASH,\n  test:t.rs",
+        COMMA_ITEM,
+    );
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(text.contains("Realized-by: >-\n  test:t.rs\n---"), "{text}");
+    assert!(text.contains(&format!("code:src/a.rs@sha256:{}", sha256(V1))));
+    commit_all(&dir);
+    assert!(unattested(&check_base(&dir)).is_empty());
+}
+
+#[test]
+fn fix_pin_remove_takes_an_item_only_pin_from_the_first_item_and_names_the_rest_observed_failing() {
+    let dir = pin_in_field_and_item(
+        "remove-items-only",
+        " 'test:t.rs'",
+        "test:t.rs, code:src/a.rs@sha256:HASH\n- Second — evidence: code:src/a.rs@sha256:HASH, test:t.rs",
+    );
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    let report = json(&out);
+    assert_eq!(report["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(
+        text.contains("- Criterion — evidence: test:t.rs\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "- Second — evidence: code:src/a.rs@sha256:{}, test:t.rs",
+            sha256(V1)
+        )),
+        "{text}"
+    );
+    let still = &report["records"][0]["still_cited_by_items"];
+    assert_eq!(still.as_array().unwrap().len(), 1, "{report}");
+    assert_eq!(still[0]["item"], 2, "{report}");
+}
+
+#[test]
+fn fix_pin_remove_leaves_a_comment_line_in_the_field_alone_observed_failing() {
+    let dir = pin_in_field_and_item(
+        "remove-comment",
+        " code:src/a.rs@sha256:HASH, test:t.rs\n# was code:src/a.rs@sha256:HASH, then moved",
+        COMMA_ITEM,
+    );
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(text.contains("Realized-by: test:t.rs\n"), "{text}");
+    assert!(
+        text.contains(&format!(
+            "# was code:src/a.rs@sha256:{}, then moved\n",
+            sha256(V1)
+        )),
+        "{text}"
+    );
+}
+
+#[test]
+fn fix_pin_remove_leaves_no_blank_line_in_a_crlf_folded_field_observed_failing() {
+    let dir = pin_in_field_and_item(
+        "remove-crlf",
+        " >-\n  code:src/a.rs@sha256:HASH,\n  test:t.rs",
+        COMMA_ITEM,
+    );
+    let crlf = std::fs::read_to_string(dir.join(A))
+        .unwrap()
+        .replace('\n', "\r\n");
+    std::fs::write(dir.join(A), crlf).unwrap();
+    commit_all(&dir);
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(
+        text.contains("Realized-by: >-\r\n  test:t.rs\r\n---"),
+        "{text:?}"
+    );
+}
+
+#[test]
+fn fix_pin_remove_refuses_a_field_it_cannot_locate_instead_of_editing_the_item_observed_failing() {
+    let dir = pin_in_field_and_item("remove-quoted-key", COMMA_FIELD, COMMA_ITEM);
+    let quoted = std::fs::read_to_string(dir.join(A))
+        .unwrap()
+        .replace("Realized-by:", "\"Realized-by\":");
+    std::fs::write(dir.join(A), &quoted).unwrap();
+    commit_all(&dir);
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    let text = format!("{out:?}");
+    assert_ne!(json(&out)["status"], "applied", "{text}");
+    assert!(text.contains("cannot be located"), "{text}");
+    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), quoted);
+}
+
+#[test]
+fn fix_pin_replace_moves_the_field_copy_and_the_item_copy() {
+    let dir = pin_in_field_and_item(
+        "replace-both-copies",
+        " 'spec:docs/s.md, code:src/a.rs@sha256:HASH, test:t.rs'",
+        "test:t.rs, code:src/a.rs@sha256:HASH",
+    );
+    std::fs::write(dir.join("src/b.rs"), "fn b() {}\n").unwrap();
+    commit_all(&dir);
+    let out = pin_edit(&dir, "--replace", "src/a.rs=src/b.rs");
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let (field, item) = field_and_item(&dir);
+    assert!(
+        field.contains("code:src/b.rs@sha256:") && !field.contains("src/a.rs"),
+        "{field}"
+    );
+    assert!(
+        item.contains("code:src/b.rs@sha256:") && !item.contains("src/a.rs"),
+        "{item}"
+    );
+}
