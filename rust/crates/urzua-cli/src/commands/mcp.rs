@@ -115,23 +115,24 @@ pub fn run(config: Option<PathBuf>, root: Option<PathBuf>) -> ExitCode {
                 ),
             }
         }
-        Err(message) => could_not_start(FailureKind::Environment, &message),
+        Err(failure) => could_not_start(failure.kind, &failure.message),
     }
 }
 
 /// Resolves the root, then proves the configuration loads, so a server that
 /// cannot read the corpus fails at start rather than on its first call.
-fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, String> {
+fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, Failure> {
     // A relative `--config` means relative to where the server was launched.
     let config = config
         .map(std::path::absolute)
         .transpose()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Failure::environment(e.to_string()))?;
     if let Some(root) = root {
-        std::env::set_current_dir(&root)
-            .map_err(|e| format!("could not use {} as the root: {e}", root.display()))?;
+        std::env::set_current_dir(&root).map_err(|e| {
+            Failure::environment(format!("could not use {} as the root: {e}", root.display()))
+        })?;
     }
-    let ws = Workspace::open(&[], config.clone()).map_err(|e| e.to_string())?;
+    let ws = Workspace::open(&[], config.clone())?;
     let max_line_bytes = ws
         .config
         .harness

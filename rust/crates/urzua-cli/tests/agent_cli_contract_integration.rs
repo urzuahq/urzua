@@ -782,15 +782,28 @@ fn a_longer_name_does_not_name_a_shorter_one() {
 /// A refusal whose error names both arguments (`paths` is written `PATHS`), so
 /// it refuses the pair and not some other mistake in the probe.
 fn refused_naming(dir: &Path, argv: &[String], names: &[&str]) -> Result<(), String> {
-    refused_naming_some(dir, argv, names, false)
+    refused(dir, argv)?;
+    let out = common::urzua()
+        .args(argv)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&[out.stdout, out.stderr].concat()).to_lowercase();
+    if names.iter().all(|n| names_whole(&text, n)) {
+        Ok(())
+    } else {
+        Err(format!("{argv:?} was refused for another reason: {text}"))
+    }
 }
 
-/// As `refused_naming`, but one of `names` is enough when `any` is set.
-fn refused_naming_some(
+/// `argv` is refused and its error names both arguments of a pair `command`
+/// declares as conflicting: the probed pair, or one a companion brought in.
+fn refused_for_a_declared_conflict(
     dir: &Path,
+    command: &Value,
     argv: &[String],
-    names: &[&str],
-    any: bool,
+    probed: &[&str],
 ) -> Result<(), String> {
     refused(dir, argv)?;
     let out = common::urzua()
@@ -800,12 +813,32 @@ fn refused_naming_some(
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&[out.stdout, out.stderr].concat()).to_lowercase();
-    if names.iter().all(|n| names_whole(&text, n))
-        || (any && names.iter().any(|n| names_whole(&text, n)))
+    let declared = command["args"].as_array().unwrap().iter().flat_map(|a| {
+        let name = a["name"].as_str().unwrap();
+        a["conflicts_with"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(move |o| (name, o.as_str().unwrap()))
+    });
+    let named = |n: &str| names_whole(&text, n);
+    // A positional's value is in `argv`, not its name.
+    let given = |n: &str| {
+        if n.starts_with('-') {
+            argv.iter().any(|x| x == n)
+        } else {
+            probed.contains(&n)
+        }
+    };
+    if declared
+        .filter(|(a, b)| given(a) && given(b))
+        .any(|(a, b)| named(a) && named(b))
     {
         Ok(())
     } else {
-        Err(format!("{argv:?} was refused for another reason: {text}"))
+        Err(format!(
+            "{argv:?} ({probed:?}) was not refused for a declared conflict: {text}"
+        ))
     }
 }
 
@@ -851,9 +884,11 @@ fn every_declared_relation_is_refused() {
                     arg["name"].as_str().unwrap(),
                     other["name"].as_str().unwrap(),
                 ];
-                // A companion one of them requires may conflict first, and the
-                // one-sentence error names only the pair the parser met.
-                accepted.extend(refused_naming_some(&dir, &argv, &names, true).err());
+                // A companion one of them requires may conflict first, so the
+                // error may name another pair, but only a pair `describe`
+                // declares as conflicting counts as this refusal.
+                accepted
+                    .extend(refused_for_a_declared_conflict(&dir, command, &argv, &names).err());
             }
             if let Some(first) = arg["requires_any"].get(0) {
                 let first = first.as_str().unwrap();

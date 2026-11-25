@@ -539,6 +539,29 @@ fn a_server_that_cannot_read_the_corpus_exits_2_with_json_on_stderr_and_nothing_
     assert_eq!(stderr["status"], "not-run");
 }
 
+/// A configuration that does not load is a `config` failure, as `check` reports it.
+#[test]
+fn a_server_whose_configuration_is_invalid_reports_the_config_kind_observed_failing() {
+    let dir = fixture("badconfig");
+    std::fs::write(dir.join(".urzua/config.yaml"), "record_types: [\n").unwrap();
+    let (replies, out) = session(&dir, &[]);
+    assert!(replies.is_empty());
+    assert_eq!(out.status.code(), Some(2));
+    let stderr: Value = serde_json::from_slice(&out.stderr).unwrap();
+    let check = common::urzua()
+        .arg("check")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let check: Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(
+        check["error_kinds"],
+        serde_json::json!(["config"]),
+        "{check}"
+    );
+    assert_eq!(stderr["error_kinds"], check["error_kinds"], "{stderr}");
+}
+
 #[test]
 fn root_selects_the_repository_and_as_of_is_refused() {
     let dir = fixture("root");
