@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::record::Record;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{
     CouldNotRun, IndexOutcome, IndexReport, IndexResult, IndexStatus, Notice, NoticeSeverity,
 };
@@ -21,7 +22,7 @@ use crate::session::{Session, Workspace};
 pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
     let workspace = match Workspace::open(&[], config_path) {
         Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
     let config = &workspace.config;
     let authority = config.authority.clone();
@@ -29,7 +30,8 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         .enabled_rule_opts::<urzua_core::rules::IndexOpts>(urzua_core::rules::RULE_INDEX_FRESHNESS)
         .map_or_else(Vec::new, |o| o.indexes);
     if specs.is_empty() {
-        return emit(&CouldNotRun::from(
+        return emit(&CouldNotRun::new(
+            FailureKind::Config,
             "urzua index: no index is declared; enable index.freshness with an `indexes` list",
         ));
     }
@@ -43,12 +45,12 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         .and_then(Session::refusing_escaping_records)
     {
         Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
 
     let artifacts = match crate::discovery::read_index_artifacts(&repo_root, &specs) {
         Ok(a) => a,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+        Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
     };
 
     let results: Vec<IndexResult> = artifacts

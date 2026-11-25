@@ -58,17 +58,22 @@ pub(crate) fn default_config_path(repo_root: &Path) -> PathBuf {
 }
 
 pub(crate) fn load_config(path: &PathBuf) -> Result<Config, Failure> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("could not read config at {}: {e}", path.display()))?;
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        Failure::of(
+            urzua_core::report::FailureKind::Config,
+            format!("could not read config at {}: {e}", path.display()),
+        )
+    })?;
     urzua_core::config::parse(&content).map_err(|e| match e {
         // The structured form rides along so a could-not-run report can carry
         // `{found, supported, current, migration}` (`ADR-77`).
         urzua_core::config::ConfigError::SchemaVersionOutOfWindow(v) => Failure {
             message: v.to_string(),
+            kind: urzua_core::report::FailureKind::Config,
             schema_version: Some(Box::new(v)),
             next: None,
         },
-        other => Failure::from(other.to_string()),
+        other => Failure::of(urzua_core::report::FailureKind::Config, other.to_string()),
     })
 }
 

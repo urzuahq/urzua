@@ -11,6 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::RecordTypeConfig;
+use urzua_core::report::FailingAs;
 use urzua_core::report::{
     CouldNotRun, Failure, Notice, NoticeSeverity, ReportStatus, WaiveDraft, WaiveFindings,
     WaiveReport, WaiveStatus,
@@ -58,7 +59,7 @@ pub struct WaiveArgs {
 pub fn run(config_path: Option<PathBuf>, args: WaiveArgs) -> ExitCode {
     match execute(config_path, args) {
         Ok(report) => emit(&report),
-        Err(e) => emit(&CouldNotRun::from(e)),
+        Err(e) => emit(&CouldNotRun::from_failure(e)),
     }
 }
 
@@ -90,10 +91,11 @@ fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport,
         from_report: _,
     } = args;
     let ctx = open_ctx(config_path.clone(), by)?;
-    let filters = filters(&ctx.session.repo_root, rules, &paths)?;
+    let filters = filters(&ctx.session.repo_root, rules, &paths)
+        .failing(urzua_core::report::FailureKind::Usage)?;
     let report = check::execute(config_path.clone(), CheckArgs::default())?;
     if report.status == ReportStatus::NotRun {
-        return Err("`urzua check` established nothing (no rule examined a record), so there is no report to draft from".into());
+        return Err(Failure::environment("`urzua check` established nothing (no rule examined a record), so there is no report to draft from"));
     }
     let today = urzua_io::today();
     let waivers = urzua_core::waiver::load_suppressions(&ctx.session.records, &ctx.st);
@@ -115,14 +117,18 @@ fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport,
         let (_lock, mut numbering) = number(&ctx, apply, &mut notices)?;
         let (groups, resolved) = settle(&ctx, &numbering, config_path, plan.groups)?;
         skipped.extend(resolved);
-        let mut built = build(&ctx, &numbering, &groups)?;
+        let mut built = build(&ctx, &numbering, &groups)
+            .failing(urzua_core::report::FailureKind::Environment)?;
         if apply {
             error = write_all(&ctx, &mut numbering, &groups, &mut built).err();
         }
         drafts = built.into_iter().map(|b| b.draft).collect();
     }
+    let status = status_of(error.as_deref(), &drafts);
+    let error_kind = (status == WaiveStatus::NotRun && error.is_some())
+        .then_some(urzua_core::report::FailureKind::Environment);
     Ok(WaiveReport {
-        status: status_of(error.as_deref(), &drafts),
+        status,
         mode: if apply { "apply" } else { "dry-run" },
         pending_value: ctx.pending.value,
         pending_source: ctx.pending.source,
@@ -130,6 +136,7 @@ fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport,
         skipped,
         unmatched_filters: plan.unmatched,
         error,
+        error_kind,
         notices,
     })
 }
@@ -171,7 +178,8 @@ fn number(
             &session.config.new,
             &mut pull,
             &mut notices,
-        )?
+        )
+        .failing(urzua_core::report::FailureKind::Environment)?
     } else {
         None
     };
@@ -182,7 +190,8 @@ fn number(
         &session.config.new,
         &mut pull,
         &mut notices,
-    )?;
+    )
+    .failing(urzua_core::report::FailureKind::Environment)?;
     for n in &notices {
         eprintln!("urzua: {}", n.message);
     }
@@ -195,20 +204,23 @@ fn number(
 fn open_ctx(config_path: Option<PathBuf>, by: Option<String>) -> Result<Ctx, Failure> {
     let session = Session::open(config_path)?;
     let type_name = session.config.suppression_type().to_string();
-    let type_config = lookup_record_type(&session.config, &type_name, &session.config_path)?;
+    let type_config = lookup_record_type(&session.config, &type_name, &session.config_path)
+        .failing(urzua_core::report::FailureKind::Config)?;
     let template_path = session
         .repo_root
         .join(".urzua/templates")
         .join(format!("{type_name}.md"));
     let template = urzua_io::read_to_string(&template_path).ok();
     let mut st = SuppressionType::from_config(&session.config);
-    require_fields_admitted(&type_name, type_config, st.reason_field())?;
+    require_fields_admitted(&type_name, type_config, st.reason_field())
+        .failing(urzua_core::report::FailureKind::Config)?;
     if let Some(text) = &template {
         st = st.with_template(text);
     }
-    let pending = waive::choose_pending(&st)?;
+    let pending = waive::choose_pending(&st).failing(urzua_core::report::FailureKind::Config)?;
     let identity = urzua_io::resolve_identity(by.as_deref(), &session.repo_root)
-        .map_err(|e| format!("could not resolve an identity: {e}"))?;
+        .map_err(|e| format!("could not resolve an identity: {e}"))
+        .failing(urzua_core::report::FailureKind::Usage)?;
     let mut notices = Vec::new();
     if let Some(warning) = identity.warning {
         eprintln!("urzua: {warning}");
@@ -399,7 +411,8 @@ fn judged_with(
     config_path: Option<PathBuf>,
     groups: &[Group],
 ) -> Result<Vec<urzua_core::report::Finding>, Failure> {
-    let added = build(ctx, numbering, groups)?
+    let added = build(ctx, numbering, groups)
+        .failing(urzua_core::report::FailureKind::Environment)?
         .into_iter()
         .map(|b| (b.path, b.content))
         .collect();
@@ -480,7 +493,9 @@ fn write_all(
         built,
         &mut |b| write_new_record(gate, root, &dir, &root.join(&b.path), &b.content),
         &mut |from| {
-            *numbering = number(ctx, false, &mut Vec::new())?.1;
+            *numbering = number(ctx, false, &mut Vec::new())
+                .map_err(|f| f.message)?
+                .1;
             build(ctx, numbering, &groups[from..])
         },
     )

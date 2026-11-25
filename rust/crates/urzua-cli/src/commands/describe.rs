@@ -294,9 +294,10 @@ pub fn run(cli: Command) -> ExitCode {
             let _ = writeln!(std::io::stdout().lock(), "{text}");
             ExitCode::SUCCESS
         }
-        Err(e) => crate::emit(&urzua_core::report::CouldNotRun::from(format!(
-            "urzua describe could not describe the command line: {e}"
-        ))),
+        Err(e) => crate::emit(&urzua_core::report::CouldNotRun::new(
+            urzua_core::report::FailureKind::Internal,
+            format!("urzua describe could not describe the command line: {e}"),
+        )),
     }
 }
 

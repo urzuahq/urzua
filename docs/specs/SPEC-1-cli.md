@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.58'
+Version: '0.59'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -271,8 +271,16 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 - **`--help`/`--version` are the one stated plain-text exception** — clap's own output, never
   JSON-wrapped, matching `cargo`'s own convention that help/version generation is never gated behind
   a machine-format flag.
+- **A `not-run` report carries `error_kinds`** (the published agent CLI contract's key, from `v1.1.0-rc.4`): an
+  array of the kinds that apply, from `usage`, `config`, `environment` and `internal`. urzua refuses at the first
+  cause it meets, so the array holds exactly one kind, and the singular `error_kind` is never printed. A `Failure` is built with its kind where the refusal is made, there is no conversion from a bare message, and
+  a `CouldNotRun` is built from one, so a refusal without a kind does not compile and no emitter supplies a default. The `harness` and `hooks` reports that print
+  `"status": "not-run"` with `problems` carry the key too. A usage error's `error` is one sentence naming the
+  argument, built from the parser's error kind and context, with no `Usage:` block and no line break. A run
+  that examined nothing and says `not-run` for that reason is not an error and carries no `error_kinds`.
 - **A `std::panic::set_hook` covers the one gap `Report`/`emit()` can't reach**: an unexpected panic
-  prints a minimal ad hoc JSON object to stdout before the process exits, instead of Rust's default
+  prints a minimal ad hoc JSON object to stdout, with the text, on one line, under `error` (not `panic`) and `error_kinds`
+  `["internal"]`, before the process exits 2, instead of Rust's default
   raw-text-to-stderr behavior. Not routed through `Notice`/`Report` — a panic is a lower-level escape
   hatch, not another instance of the five-command contract.
 
@@ -492,3 +500,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-569) 564b30f48e0f -> 9eda7e0bcd3d. Reason: Read the diff of main.rs: the Command enum gains a Describe variant with its doc comment, dispatch gains its arm (commands::describe::run with Cli::command()) and command_name its name; 21 existing arguments gain a one-line doc comment (help text, used as describe's means). No existing argument, default or dispatch path changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-24 | Bumped to `0.58`. `describe`'s top-level `args` is empty: `--config` and `--as-of` are declared on the commands that accept them, and relations refused in code are declared as `conflicts_with` and `requires`. **Why:** the published agent CLI contract's maintainers, answering review on pull request #647: top-level means every command accepts it, and describe states the interface, not how the parser is built. | **substantive** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-570) 9eda7e0bcd3d -> 5b3a6c876fa4. Reason: Read the diff of main.rs: one doc comment on explain's path argument gains a sentence saying it is required unless --rule, --types, --type or --full is given (describe's means); no argument, default or dispatch path changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.59`. A `not-run` report gains `error_kinds`, an array holding the one kind of its cause (`usage`, `config`, `environment` or `internal`); a refusal states its kind where it is made, since `Failure` has no conversion from a bare message, so an argument error noticed deep in a command (an unknown rule id, a record type that does not exist, a reason that is too short, a batch over `max_batch`) is `usage` and no emitter supplies a default; `waive --apply`'s `not-run` report and the `harness` and `hooks` reports that print `not-run` carry it too; a usage error's `error` names its argument in one sentence without the parser's `Usage:` block; the panic report prints its text on one line under `error`, not `panic`, with `error_kinds` `["internal"]`. The `panic` key is replaced, as `MILE-365` says; no other key is renamed or removed. **Why:** `MILE-365`, one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted ("I accept RFC, and yes allow option can be outside rule", the contract's RFC-4, revision row of 2026-11-24); the contract's `v1.1.0-rc.4` replaced `error_kind` with the array `error_kinds`, an amendment its maintainer chose as "A list of kinds" (the same record, revision row of 2026-11-24). | **substantive** |

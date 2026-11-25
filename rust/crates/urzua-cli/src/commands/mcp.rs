@@ -11,6 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
 
 use serde_json::{Map, Value};
+use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, Failure};
 use urzua_mcp::{Host, Param, ParamKind, ToolResult, ToolSpec};
 
@@ -108,26 +109,30 @@ pub fn run(config: Option<PathBuf>, root: Option<PathBuf>) -> ExitCode {
                 max,
             ) {
                 Ok(()) => ExitCode::SUCCESS,
-                Err(e) => could_not_start(&format!("the stdio transport failed: {e}")),
+                Err(e) => could_not_start(
+                    FailureKind::Environment,
+                    &format!("the stdio transport failed: {e}"),
+                ),
             }
         }
-        Err(message) => could_not_start(&message),
+        Err(failure) => could_not_start(failure.kind, &failure.message),
     }
 }
 
 /// Resolves the root, then proves the configuration loads, so a server that
 /// cannot read the corpus fails at start rather than on its first call.
-fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, String> {
+fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, Failure> {
     // A relative `--config` means relative to where the server was launched.
     let config = config
         .map(std::path::absolute)
         .transpose()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Failure::environment(e.to_string()))?;
     if let Some(root) = root {
-        std::env::set_current_dir(&root)
-            .map_err(|e| format!("could not use {} as the root: {e}", root.display()))?;
+        std::env::set_current_dir(&root).map_err(|e| {
+            Failure::environment(format!("could not use {} as the root: {e}", root.display()))
+        })?;
     }
-    let ws = Workspace::open(&[], config.clone()).map_err(|e| e.to_string())?;
+    let ws = Workspace::open(&[], config.clone())?;
     let max_line_bytes = ws
         .config
         .harness
@@ -143,8 +148,8 @@ fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, Strin
 }
 
 /// Stdout carries protocol frames only, so a start failure is JSON on stderr.
-pub(crate) fn could_not_start(message: &str) -> ExitCode {
-    let report = CouldNotRun::from(message.to_string());
+pub(crate) fn could_not_start(kind: FailureKind, message: &str) -> ExitCode {
+    let report = CouldNotRun::new(kind, message.to_string());
     let _ = writeln!(
         std::io::stderr().lock(),
         "{}",
@@ -242,7 +247,7 @@ impl Server {
             .find(|r| r.id.as_deref() == Some(id.as_str()))
         else {
             let message = format!("no record has the id `{id}`; urzua_list_records lists the ids");
-            return outcome::<CouldNotRun>(Err(message.into()));
+            return outcome::<CouldNotRun>(Err(Failure::of(FailureKind::Usage, message)));
         };
         let edges: Vec<_> = graph
             .edges
@@ -286,7 +291,10 @@ fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResu
                 .is_ok_and(|v| v.get("status").and_then(Value::as_str) == Some("not-run"));
             (value, not_run)
         }
-        Err(failure) => (crate::report_value(&CouldNotRun::from(failure)), true),
+        Err(failure) => (
+            crate::report_value(&CouldNotRun::from_failure(failure)),
+            true,
+        ),
     };
     match value {
         Ok(report) => ToolResult { report, is_error },
@@ -296,6 +304,7 @@ fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResu
             report: serde_json::json!({
                 "status": "not-run",
                 "error": message,
+                "error_kinds": ["internal"],
                 "next_action": null,
                 "next_action_argv": null,
                 "next_action_reason": null,

@@ -15,6 +15,8 @@ use std::process::ExitCode;
 use urzua_core::config::LocatorKind;
 use urzua_core::harness::nearest_name;
 use urzua_core::locator::{self, FileText};
+use urzua_core::report::FailingAs;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{
     CoverageExplanation, ExplainReport, FindingSeverity, Notice, NoticeSeverity, Report,
     ReportStatus, ScopeExplanation,
@@ -32,7 +34,7 @@ pub fn run(config_path: Option<PathBuf>, path: Option<String>, rule: Option<Stri
         (Some(path), None) => emit_or_not_run(build(config_path, path).map(|report| emit(&report))),
         (None, Some(rule)) => emit_or_not_run(run_rule(config_path, &rule)),
         // clap rejects both and neither before this is reached.
-        _ => emit_or_not_run(Err("give a path, or --rule <rule-id>".to_string().into())),
+        _ => emit_or_not_run(Err(Failure::usage("give a path, or --rule <rule-id>"))),
     }
 }
 
@@ -79,12 +81,12 @@ impl Report for ExplainRuleReport {
 fn run_rule(config_path: Option<PathBuf>, id: &str) -> Result<ExitCode, Failure> {
     let Some(def) = rule_def(id) else {
         let Some(valid) = nearest_name(id, RULE_TABLE.iter().map(|d| d.id)) else {
-            return Err(format!(
+            return Err(Failure::usage(format!(
                 "'{id}' is not a rule this build ships (`urzua rules` lists them)"
-            )
-            .into());
+            )));
         };
         return Err(Failure::with_next(
+            FailureKind::Usage,
             format!(
                 "'{id}' is not a rule this build ships; did you mean '{valid}'? (`urzua rules` lists them)"
             ),
@@ -144,16 +146,18 @@ pub(crate) fn build(config_path: Option<PathBuf>, path: String) -> Result<Explai
         repo_root,
         ..
     } = Session::open(config_path)?;
-    let parsed = locator::parse_locator(&path).map_err(|e| format!("'{path}': {e}"))?;
+    let parsed = locator::parse_locator(&path)
+        .map_err(|e| format!("'{path}': {e}"))
+        .failing(urzua_core::report::FailureKind::Usage)?;
     if parsed.anchor.is_some() {
-        return Err(format!(
+        return Err(Failure::usage(format!(
             "'{path}' carries an anchor; give `path` or `path#scope`, the pin is printed for you"
-        )
-        .into());
+        )));
     }
     crate::file_texts::FileTexts::new(repo_root.clone(), &config)
         .confined(&parsed.path)
-        .map_err(|e| format!("'{path}': {e}"))?;
+        .map_err(|e| format!("'{path}': {e}"))
+        .failing(urzua_core::report::FailureKind::Usage)?;
     let governing_records = urzua_core::graph::explain(&records, &parsed.path, &config);
     let (population, notice) = urzua_core::graph::read_population(&records, &config, "explain");
     let mut notices: Vec<Notice> = notice.into_iter().collect();
@@ -166,10 +170,14 @@ pub(crate) fn build(config_path: Option<PathBuf>, path: String) -> Result<Explai
                 &parsed,
                 governing_records.is_empty(),
                 &mut notices,
-            )?,
+            )
+            .failing(urzua_core::report::FailureKind::Environment)?,
         ),
         Some(scope) => (
-            Some(explain_scope(&repo_root, &config, &parsed, scope)?),
+            Some(
+                explain_scope(&repo_root, &config, &parsed, scope)
+                    .failing(urzua_core::report::FailureKind::Usage)?,
+            ),
             None,
         ),
     };
@@ -191,11 +199,10 @@ pub(crate) fn build(config_path: Option<PathBuf>, path: String) -> Result<Explai
         } else {
             String::new()
         };
-        return Err(format!(
+        return Err(Failure::usage(format!(
             "'{}' is not a file or directory in this repository and no record cites it as evidence{hint}",
             parsed.path
-        )
-        .into());
+        )));
     }
 
     Ok(ExplainReport {

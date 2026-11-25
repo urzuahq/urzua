@@ -313,13 +313,30 @@ fn the_vendored_copy_matches_its_own_checksums() {
 #[test]
 fn every_vendored_schema_uses_only_the_contract_keywords_and_every_pattern_compiles() {
     let mut found = std::collections::BTreeSet::new();
+    let mut walked = Vec::new();
     for entry in std::fs::read_dir(schema_dir()).unwrap() {
         let name = entry.unwrap().file_name().into_string().unwrap();
         if name.ends_with(".schema.json") {
             let root = load(&name);
             keywords_of(&root, &root, &mut found);
+            walked.push(name);
         }
     }
+    walked.sort();
+    assert_eq!(
+        walked,
+        [
+            "describe",
+            "finding",
+            "gate-report",
+            "log-line",
+            "receipt",
+            "report",
+            "run-report"
+        ]
+        .map(|n| format!("{n}.schema.json")),
+        "the walk covers each of the contract's seven schemas"
+    );
     let outside: Vec<&String> = found
         .iter()
         .filter(|k| !CONTRACT_KEYWORDS.contains(&k.as_str()))
@@ -449,6 +466,79 @@ fn a_not_run_report_that_started_counts_zero_and_one_that_could_not_start_counts
     assert!(failed.get("error").is_some());
     assert!(failed.get("files_examined").is_none());
     assert!(failed.get("examined").is_none());
+}
+
+fn no_repository() -> common::TempDir {
+    common::TempDir::new("urzua-contract-bare")
+}
+
+fn run_with_env(dir: &Path, args: &[&str], env: (&str, &str)) -> (Value, i32) {
+    let out = common::urzua()
+        .args(args)
+        .env(env.0, env.1)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    let json = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("stdout of {args:?} is not JSON ({e}): {out:?}"));
+    (json, out.status.code().unwrap())
+}
+
+fn assert_not_run_of_kind(report: &Value, code: i32, kind: &str, what: &str) {
+    assert_eq!(code, 2, "{what}: {report}");
+    assert_eq!(report["status"], "not-run", "{what}: {report}");
+    assert_eq!(
+        report["error_kinds"],
+        serde_json::json!([kind]),
+        "{what}: {report}"
+    );
+    assert!(report.get("error_kind").is_none(), "{what}: {report}");
+    assert!(report["error"].is_string(), "{what}: {report}");
+    validate("report.schema.json", report)
+        .unwrap_or_else(|e| panic!("{what}: fails the report schema: {e}"));
+}
+
+#[test]
+fn every_not_run_report_carries_the_error_kind_of_its_cause() {
+    let dir = fixture_corpus();
+
+    let (usage, code) = run(&dir, &["check", "--no-such-flag"]);
+    assert_not_run_of_kind(&usage, code, "usage", "a wrong argument");
+
+    std::fs::write(dir.join(".urzua/config.yaml"), "rules: [unterminated\n").unwrap();
+    let (config, code) = run(&dir, &["check"]);
+    assert_not_run_of_kind(&config, code, "config", "an unreadable configuration");
+
+    let bare = no_repository();
+    let (environment, code) = run(&bare, &["check"]);
+    assert_not_run_of_kind(&environment, code, "environment", "a missing repository");
+
+    let (internal, code) = run_with_env(&dir, &["check"], ("URZUA_TEST_PANIC", "1"));
+    assert_not_run_of_kind(&internal, code, "internal", "a forced internal failure");
+    assert!(internal.get("panic").is_none(), "no panic key: {internal}");
+}
+
+#[test]
+fn a_usage_error_names_its_argument_in_one_sentence_without_the_parsers_usage_block() {
+    let dir = fixture_corpus();
+    for args in [
+        &["check", "--no-such-flag"][..],
+        &["explain"][..],
+        &["check", "--fail-on", "sideways"][..],
+        &["frobnicate"][..],
+    ] {
+        let (report, code) = run(&dir, args);
+        assert_not_run_of_kind(&report, code, "usage", &format!("{args:?}"));
+        let error = report["error"].as_str().unwrap();
+        assert!(!error.contains("Usage:"), "{args:?}: {error:?}");
+        assert!(!error.contains('\n'), "{args:?}: {error:?}");
+        assert!(!error.trim().is_empty(), "{args:?}");
+    }
+    let (report, _) = run(&dir, &["check", "--no-such-flag"]);
+    assert!(
+        report["error"].as_str().unwrap().contains("--no-such-flag"),
+        "names the argument: {report}"
+    );
 }
 
 fn describe() -> Value {
@@ -707,6 +797,51 @@ fn refused_naming(dir: &Path, argv: &[String], names: &[&str]) -> Result<(), Str
     }
 }
 
+/// `argv` is refused and its error names both arguments of a pair `command`
+/// declares as conflicting: the probed pair, or one a companion brought in.
+fn refused_for_a_declared_conflict(
+    dir: &Path,
+    command: &Value,
+    argv: &[String],
+    probed: &[&str],
+) -> Result<(), String> {
+    refused(dir, argv)?;
+    let out = common::urzua()
+        .args(argv)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&[out.stdout, out.stderr].concat()).to_lowercase();
+    let declared = command["args"].as_array().unwrap().iter().flat_map(|a| {
+        let name = a["name"].as_str().unwrap();
+        a["conflicts_with"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(move |o| (name, o.as_str().unwrap()))
+    });
+    let named = |n: &str| names_whole(&text, n);
+    // A positional's value is in `argv`, not its name.
+    let given = |n: &str| {
+        if n.starts_with('-') {
+            argv.iter().any(|x| x == n)
+        } else {
+            probed.contains(&n)
+        }
+    };
+    if declared
+        .filter(|(a, b)| given(a) && given(b))
+        .any(|(a, b)| named(a) && named(b))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "{argv:?} ({probed:?}) was not refused for a declared conflict: {text}"
+        ))
+    }
+}
+
 /// `args`, plus what they require and the first name of each `requires_any`
 /// (so that a probe reaches the relation it tests), less `except`.
 fn with_companions<'a>(command: &'a Value, args: &[&'a Value], except: &str) -> Vec<&'a Value> {
@@ -749,7 +884,11 @@ fn every_declared_relation_is_refused() {
                     arg["name"].as_str().unwrap(),
                     other["name"].as_str().unwrap(),
                 ];
-                accepted.extend(refused_naming(&dir, &argv, &names).err());
+                // A companion one of them requires may conflict first, so the
+                // error may name another pair, but only a pair `describe`
+                // declares as conflicting counts as this refusal.
+                accepted
+                    .extend(refused_for_a_declared_conflict(&dir, command, &argv, &names).err());
             }
             if let Some(first) = arg["requires_any"].get(0) {
                 let first = first.as_str().unwrap();
@@ -776,8 +915,8 @@ fn every_declared_relation_is_refused() {
                     &[needed],
                     &with_companions(command, &[arg], needed),
                 );
-                let names = [arg["name"].as_str().unwrap(), needed];
-                accepted.extend(refused_naming(&dir, &argv, &names).err());
+                // The error names the argument that is missing, not the one that required it.
+                accepted.extend(refused_naming(&dir, &argv, &[needed]).err());
             }
         }
     }
@@ -908,7 +1047,20 @@ fn every_required_argument_is_refused_when_missing() {
                 continue;
             }
             let name = arg["name"].as_str().unwrap();
-            let argv = invocation(command, &[name], &[]);
+            // A later positional given alone would fill this one's place.
+            let omitted: Vec<&str> = if arg["kind"] == "positional" {
+                command["args"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .skip_while(|a| a["name"] != name)
+                    .filter(|a| a["kind"] == "positional")
+                    .map(|a| a["name"].as_str().unwrap())
+                    .collect()
+            } else {
+                vec![name]
+            };
+            let argv = invocation(command, &omitted, &[]);
             let shown = if arg["kind"] == "positional" {
                 name.to_uppercase()
             } else {

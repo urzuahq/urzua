@@ -13,7 +13,9 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::{FailOn, HookManaged, HookOnNotRun, HooksDecl};
-use urzua_core::report::{CouldNotRun, NextAction, Notice, NoticeSeverity, Report};
+use urzua_core::report::FailingAs;
+use urzua_core::report::FailureKind;
+use urzua_core::report::{CouldNotRun, Failure, NextAction, Notice, NoticeSeverity, Report};
 
 use crate::emit;
 use crate::session::Workspace;
@@ -1459,6 +1461,13 @@ struct HooksReport {
     /// pre-commit framework and the config does not yet run urzua.
     #[serde(skip_serializing_if = "Option::is_none")]
     stanza: Option<String>,
+    /// Set with `status` `not-run`: why the run refused (the published agent CLI contract).
+    #[serde(
+        rename = "error_kinds",
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "urzua_core::report::optional_error_kinds"
+    )]
+    error_kind: Option<FailureKind>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     problems: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -1491,6 +1500,7 @@ impl HooksReport {
             items: Vec::new(),
             stanza: None,
             problems: Vec::new(),
+            error_kind: None,
             notices: Vec::new(),
             next: None,
             exit: 0,
@@ -1523,18 +1533,19 @@ impl HooksReport {
     /// Nothing was written because the run refused.
     fn refuse(&mut self, why: String) {
         self.status = "not-run";
+        self.error_kind = Some(FailureKind::Environment);
         self.exit = 2;
         self.problems.push(why);
     }
 }
 
-fn not_run(message: impl Into<String>) -> ExitCode {
-    emit(&CouldNotRun::from(message.into()))
+fn not_run(failure: Failure) -> ExitCode {
+    emit(&CouldNotRun::from_failure(failure))
 }
 
-fn open(config: Option<PathBuf>) -> Result<(Workspace, Layout), String> {
-    let ws = Workspace::open(&[PathBuf::from(".")], config).map_err(|e| e.message)?;
-    let layout = detect(&ws.repo_root)?;
+fn open(config: Option<PathBuf>) -> Result<(Workspace, Layout), Failure> {
+    let ws = Workspace::open(&[PathBuf::from(".")], config)?;
+    let layout = detect(&ws.repo_root).failing(urzua_core::report::FailureKind::Environment)?;
     Ok((ws, layout))
 }
 
@@ -1577,7 +1588,7 @@ pub fn run_install(config: Option<PathBuf>, dry_run: bool, write_config: bool) -
     let decl = &ws.config.hooks;
     let off = match unpointed(&ws.repo_root, decl) {
         Ok(o) => o,
-        Err(m) => return not_run(m),
+        Err(m) => return not_run(Failure::environment(m)),
     };
     let Some(off) = off else {
         let mut guarded = HooksReport::new("install", dry_run, &layout);
@@ -2272,10 +2283,10 @@ pub fn run_hook(config: Option<PathBuf>, hook: String) -> ExitCode {
     };
     let decl = &ws.config.hooks;
     let Some(args) = decl.args(&hook) else {
-        return not_run(format!(
+        return not_run(Failure::usage(format!(
             "'{hook}' is not a hook urzua runs; the hooks are {}",
             HOOKS.join(", ")
-        ));
+        )));
     };
     let shown = format!("urzua {}", args.join(" "));
     let exe = match std::env::current_exe() {

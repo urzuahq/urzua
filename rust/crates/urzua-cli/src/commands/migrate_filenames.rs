@@ -10,6 +10,7 @@ use std::process::ExitCode;
 use urzua_core::migrate_filenames::{
     plan, Citation, FilenamePlan, PlanInput, Rename, Skipped, StalePin, Unrewritten,
 };
+use urzua_core::report::FailingAs;
 use urzua_core::report::{
     census, Failure, Notice, NoticeSeverity, Outcome as Examined, Population, PopulationUnit,
     Report,
@@ -109,7 +110,8 @@ fn run_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, Fail
     );
     let notices = notices_for(&planned, apply);
     let results = if apply && !planned.renames.is_empty() {
-        let _lock = urzua_io::FixLock::acquire(&session.repo_root)?;
+        let _lock = urzua_io::FixLock::acquire(&session.repo_root)
+            .failing(urzua_core::report::FailureKind::Environment)?;
         gated_plan(session.config.authority.as_ref(), &planned)
             .unwrap_or_else(|| write_plan(&session.repo_root, &planned, &rewritable))
     } else {

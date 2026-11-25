@@ -12,6 +12,7 @@ use std::process::{Child, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 use urzua_core::config::HookManaged;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, NextAction, Notice, NoticeSeverity, Report};
 
 use super::hooks::{allowed_roots, random_hex, resolve, HOOKS};
@@ -114,6 +115,13 @@ struct VerifyReport {
     action: &'static str,
     run: bool,
     hooks: Vec<HookRun>,
+    /// Set with `status` `not-run`: why the run refused (the published agent CLI contract).
+    #[serde(
+        rename = "error_kinds",
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "urzua_core::report::optional_error_kinds"
+    )]
+    error_kind: Option<FailureKind>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     problems: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -160,21 +168,24 @@ pub fn run_verify(
 ) -> ExitCode {
     let ws = match Workspace::open(&[PathBuf::from(".")], config) {
         Ok(ws) => ws,
-        Err(e) => return emit(&CouldNotRun::from(e.message)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
     let hooks: Vec<&str> = match &hook {
         Some(h) if HOOKS.contains(&h.as_str()) => vec![h.as_str()],
         Some(h) => {
-            return emit(&CouldNotRun::from(format!(
-                "'{h}' is not a hook urzua verifies; the hooks are {}",
-                HOOKS.join(", ")
-            )))
+            return emit(&CouldNotRun::new(
+                FailureKind::Usage,
+                format!(
+                    "'{h}' is not a hook urzua verifies; the hooks are {}",
+                    HOOKS.join(", ")
+                ),
+            ))
         }
         None => HOOKS.to_vec(),
     };
     let (hooks_dir, git_dir) = match dirs(&ws.repo_root) {
         Ok(d) => d,
-        Err(m) => return emit(&CouldNotRun::from(m)),
+        Err(m) => return emit(&CouldNotRun::new(FailureKind::Environment, m)),
     };
     let mut report = VerifyReport {
         status: "ok",
@@ -182,6 +193,7 @@ pub fn run_verify(
         run,
         hooks: Vec::new(),
         problems: Vec::new(),
+        error_kind: None,
         notices: Vec::new(),
         exit: 0,
     };
@@ -193,6 +205,7 @@ pub fn run_verify(
         explain(&mut report, &ws, &hooks, &hooks_dir);
     } else if outside && !allow_outside {
         report.status = "not-run";
+        report.error_kind = Some(FailureKind::Environment);
         report.exit = 2;
         report.problems.push(format!(
             "git runs this repository's hooks from {}, outside the repository and its git directory; nothing was run -- pass --allow-outside to run hooks from there",
@@ -209,7 +222,7 @@ pub fn run_verify(
             );
         }
         if let Err(m) = run_all(&mut report, &ws, &hooks, &hooks_dir, &git_dir) {
-            return emit(&CouldNotRun::from(m));
+            return emit(&CouldNotRun::new(FailureKind::Environment, m));
         }
     }
     emit(&report)

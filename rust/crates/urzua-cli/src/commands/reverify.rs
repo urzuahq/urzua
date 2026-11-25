@@ -24,9 +24,9 @@ use urzua_core::reverify::{
 use urzua_core::rules::{self, ClaimExpiredOpts, ClaimSkip};
 
 use crate::commands::fix::{
-    back_pointer_evidence, excused_evidence_notice, identity_notices, into_failures, refuse,
-    repo_relative_ids, resolve_attestation, rule_enabled, validate_reason, Refusal,
-    ResolvedAttestation,
+    back_pointer_evidence, environment_of, excused_evidence_notice, identity_notices,
+    into_failures, refuse, refuse_config, refuse_usage, repo_relative_ids, resolve_attestation,
+    rule_enabled, usage_of, validate_reason, Refusal, ResolvedAttestation,
 };
 use crate::discovery::{ClaimMeasures, DriftedRecords};
 use crate::emit;
@@ -56,7 +56,7 @@ struct Reviewed {
 }
 
 pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
-    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from(e)))
+    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from_failure(e)))
 }
 
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
@@ -75,16 +75,16 @@ fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<E
             .attestation
             .reason
             .check(&reason)
-            .map_err(|e| refuse(format!("urzua reverify --apply: {e}")))?;
+            .map_err(|e| refuse_usage(format!("urzua reverify --apply: {e}")))?;
     }
     if !rule_enabled(&config, rules::RULE_EMBODIMENT_CLAIM_EXPIRED) {
-        return Err(refuse(
+        return Err(refuse_config(
             "urzua reverify renews the claims that embodiment.claim-expired judges, and that rule is off or undeclared in the configuration: declare it (ADR-97) first",
         ));
     }
     let opts: ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
     if args.apply && !args.force && args.ids.len() > opts.max_batch {
-        return Err(refuse(format!(
+        return Err(refuse_usage(format!(
             "urzua reverify --apply names {} records, more than max_batch of {}: name at most {} and run another batch with its own reason",
             args.ids.len(),
             opts.max_batch,
@@ -94,7 +94,7 @@ fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<E
     let identity = if args.apply {
         Some(
             resolve_attestation(args.by.as_deref(), args.actor, &repo_root, &config)
-                .map_err(refuse)?,
+                .map_err(usage_of)?,
         )
     } else {
         None
@@ -103,7 +103,7 @@ fn run_checked(config_path: Option<PathBuf>, mut args: ReverifyArgs) -> Result<E
     // (as `fix --rebaseline` does): evidence edited between a review and the
     // lock would otherwise be hashed stale and attested as current.
     let _lock = if args.apply {
-        Some(urzua_io::FixLock::acquire(&repo_root).map_err(refuse)?)
+        Some(urzua_io::FixLock::acquire(&repo_root).map_err(environment_of)?)
     } else {
         None
     };
@@ -193,7 +193,7 @@ fn gather_evidence(
     let (measures, drift) =
         crate::discovery::measure_claims_and_drift(repo_root, subset, config, now);
     let back_pointed =
-        back_pointer_evidence(repo_root, discovered, config, records).map_err(refuse)?;
+        back_pointer_evidence(repo_root, discovered, config, records).map_err(environment_of)?;
     let disagreeing = if rule_enabled(config, rules::RULE_EMBODIMENT_CONSISTENCY) {
         let judge = |drifted: &HashSet<PathBuf>, fresh: &HashSet<PathBuf>| {
             embodiment_disagreements(
@@ -285,7 +285,7 @@ fn apply_batch(
         mut failed,
     } = batch;
     if force && reviewed.len() > 1 {
-        return Err(refuse(format!(
+        return Err(refuse_usage(format!(
             "urzua reverify --force is refused when it selects more than one record ({} selected): it lifts max_batch for a single record and never batches",
             reviewed.len()
         )));
@@ -318,7 +318,7 @@ fn apply_batch(
 /// they are reported; the validated `--reason` (empty when none applies).
 fn check_usage(args: &ReverifyArgs) -> Result<String, Refusal> {
     if args.apply && args.ids.is_empty() && !args.force {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua reverify --apply: pass --ids <record,...> or --force (never the default)",
         ));
     }
@@ -328,7 +328,7 @@ fn check_usage(args: &ReverifyArgs) -> Result<String, Refusal> {
             || args.reason.is_some()
             || args.actor != ActorKind::Unspecified)
     {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua reverify --force, --by, --actor and --reason belong to --apply: without it nothing is written, so they would be ignored (--ids alone narrows the review)",
         ));
     }
@@ -337,7 +337,7 @@ fn check_usage(args: &ReverifyArgs) -> Result<String, Refusal> {
         args.reason.as_deref(),
         "urzua reverify --apply: pass --reason <what you checked>; a renewal with no reason is a rubber stamp",
     )
-    .map_err(refuse)
+    .map_err(environment_of)
 }
 
 /// The records a review covers, and a failure for each `--ids` entry that names

@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records records-base roadmap rule-table rule-table-check ci test-no-leak release-guard release-invariants knope-pin nextest-pin ci-gate-test knope-closes-compat gate-action-test install-script-test hooks-install hooks-auto \
+.PHONY: help build check test fmt fmt-check lint clean records records-base roadmap rule-table rule-table-check ci test-no-leak release-guard release-invariants knope-pin nextest-pin ci-gate-test knope-closes-compat gate-action-test install-script-test conform hooks-install hooks-auto \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint deny rust-clean
 
 help: ## Show available commands
@@ -38,6 +38,14 @@ ci: fmt-check lint deny rust-build test-no-leak records records-base rule-table-
 
 gate-action-test: ## Test the reusable CI gate action's scripts (recorded fixtures, no network)
 	.github/actions/urzua-gate/test.sh
+
+CONFORM_BIN ?= $(RUST_DIR)/target/release/urzua
+CONFORM_SCHEMAS := $(RUST_DIR)/crates/urzua-cli/tests/fixtures/agent-cli-contract/schemas
+
+conform: ## Run the published agent CLI contract's runner against the built binary (CONFORM_KIT=<checkout at the commit in the vendored VERSION file>)
+	@test -n "$(CONFORM_KIT)" || { echo "conform: set CONFORM_KIT to a checkout of the contract at the commit named in $(CONFORM_SCHEMAS)/../VERSION" >&2; exit 2; }
+	@test -x "$(CONFORM_BIN)" || { echo "conform: $(CONFORM_BIN) is not built; run make rust-build, or set CONFORM_BIN" >&2; exit 2; }
+	python3 "$(CONFORM_KIT)/scripts/conform.py" "$(CONFORM_BIN)" --schemas "$(CONFORM_SCHEMAS)" --require-run
 
 install-script-test: ## Test scripts/install.sh under bash and dash (stubbed curl, wget, gh and uname, no network)
 	scripts/install-test.sh

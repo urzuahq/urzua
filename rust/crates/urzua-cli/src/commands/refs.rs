@@ -15,6 +15,7 @@ use std::process::{Command, ExitCode, Stdio};
 
 use urzua_core::config::RuleLevel;
 use urzua_core::refs_snapshot::RefsSnapshot;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{
     CouldNotRun, Notice, NoticeSeverity, RefsRefreshOutcome, RefsRefreshReport, ReportStatus,
 };
@@ -36,7 +37,7 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
         repo_root, config, ..
     } = match Workspace::open(&[], config_path) {
         Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+        Err(e) => return emit(&CouldNotRun::from_failure(e)),
     };
     let Some(refs) = config
         .rules
@@ -44,7 +45,7 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
         .filter(|s| s.level != RuleLevel::Off)
         .and_then(|s| s.issue_refs.clone())
     else {
-        return emit(&CouldNotRun::from(
+        return emit(&CouldNotRun::new(FailureKind::Config,
             "urzua refs refresh: no snapshot is declared; enable citation.issue-exists with an `issue_refs` option",
         ));
     };
@@ -64,7 +65,7 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
     let (issues, pulls) =
         match collect_numbers(&Curl, &base, &refs.repository, token.as_deref(), workers) {
             Ok(found) => found,
-            Err(e) => return emit(&CouldNotRun::from(e)),
+            Err(e) => return emit(&CouldNotRun::new(FailureKind::Environment, e)),
         };
     let snapshot = RefsSnapshot::new(&refs.repository, &urzua_io::today(), issues, pulls);
     let mut text = serde_json::to_string_pretty(&snapshot).expect("snapshot serializes");
@@ -79,10 +80,10 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
     };
     if outcome != RefsRefreshOutcome::Current {
         if let Err(e) = write_atomically(&repo_root, &path, &text) {
-            return emit(&CouldNotRun::from(format!(
-                "could not write {}: {e}",
-                refs.snapshot
-            )));
+            return emit(&CouldNotRun::new(
+                FailureKind::Environment,
+                format!("could not write {}: {e}", refs.snapshot),
+            ));
         }
     }
     let mut notices = Vec::new();

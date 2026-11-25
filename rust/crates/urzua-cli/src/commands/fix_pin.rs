@@ -16,7 +16,10 @@ use urzua_core::report::{AttestationReport, FixFailure, NextAction, Notice, Repo
 use urzua_core::reverify::{apply_reverify, review_locators, FirstPin, ReverifyPlan};
 
 use super::evidence_log::{evidence_log, with_evidence_log, EvidenceLog, LogHistory};
-use super::fix::{refuse, repo_relative_ids, resolve_attestation, validate_reason, Refusal};
+use super::fix::{
+    environment_of, refuse, refuse_environment, refuse_usage, repo_relative_ids,
+    resolve_attestation, usage_of, validate_reason, Refusal,
+};
 use crate::emit;
 use crate::session::Session;
 
@@ -134,12 +137,12 @@ fn unknown_ids(ids: &[String], selected: &[&Record]) -> Vec<FixFailure> {
 
 pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<ExitCode, Refusal> {
     if (args.replace.is_some() || args.remove.is_some()) && args.ids.len() != 1 {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --pin --replace/--remove changes one record: name it with --ids <record>",
         ));
     }
     if args.replace.is_some() && args.remove.is_some() {
-        return Err(refuse(
+        return Err(refuse_usage(
             "urzua fix --pin takes --replace or --remove, not both",
         ));
     }
@@ -148,7 +151,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         args.reason,
         "urzua fix --pin --apply: pass --reason <why this evidence carries the claim>; a pin without a reason attests nothing",
     )
-    .map_err(refuse)?;
+    .map_err(usage_of)?;
     let session = Session::open(config_path).map_err(refuse)?;
     let (repo_root, config) = (&session.repo_root, &session.config);
     let ids = repo_relative_ids(repo_root, args.ids);
@@ -158,15 +161,15 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
             .attestation
             .reason
             .check(&reason)
-            .map_err(|e| refuse(format!("urzua fix --pin --apply: {e}")))?;
+            .map_err(|e| refuse_usage(format!("urzua fix --pin --apply: {e}")))?;
     }
     let identity = if args.apply {
-        Some(resolve_attestation(args.by, args.actor, repo_root, config).map_err(refuse)?)
+        Some(resolve_attestation(args.by, args.actor, repo_root, config).map_err(usage_of)?)
     } else {
         None
     };
     let _lock = if args.apply {
-        Some(urzua_io::FixLock::acquire(repo_root).map_err(refuse)?)
+        Some(urzua_io::FixLock::acquire(repo_root).map_err(environment_of)?)
     } else {
         None
     };
@@ -181,7 +184,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
     let mut done = Vec::new();
     let mut notices: Vec<Notice> = Vec::new();
     let history = LogHistory::resolve(repo_root, args.base)
-        .map_err(|e| refuse(format!("urzua fix --pin: {e}")))?;
+        .map_err(|e| refuse_environment(format!("urzua fix --pin: {e}")))?;
     let write = identity.as_ref().map(|w| Write {
         history: &history,
         session: &session,

@@ -1394,6 +1394,8 @@ impl Report for CheckReport {
 pub struct CouldNotRun {
     pub status: ReportStatus,
     pub error: String,
+    #[serde(rename = "error_kinds", serialize_with = "error_kinds")]
+    pub error_kind: FailureKind,
     /// Present when the config's `schema_version` is outside the window this
     /// build reads (`ADR-77`): the same facts `error` states, as data an agent
     /// can branch on.
@@ -1418,15 +1420,23 @@ impl CouldNotRun {
         self
     }
 
-    pub fn from(error: impl Into<Failure>) -> Self {
+    /// A could-not-run of a stated kind.
+    pub fn new(kind: FailureKind, message: impl Into<String>) -> Self {
+        Self::from_failure(Failure::of(kind, message))
+    }
+
+    /// From a failure, which already carries its kind.
+    pub fn from_failure(error: Failure) -> Self {
         let Failure {
             message,
+            kind,
             schema_version,
             next,
-        } = error.into();
+        } = error;
         CouldNotRun {
             status: ReportStatus::NotRun,
             error: message,
+            error_kind: kind,
             schema_version_error: schema_version.map(|boxed| *boxed),
             notices: Vec::new(),
             next: next.map(|boxed| *boxed),
@@ -1434,13 +1444,48 @@ impl CouldNotRun {
     }
 }
 
+/// Why a command could not run, as the published agent CLI contract defines
+/// the four kinds: the one entry of the report's `error_kinds`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FailureKind {
+    /// The arguments were wrong.
+    Usage,
+    /// The configuration could not be loaded or is invalid.
+    Config,
+    /// Something outside the tool is missing: a repository, a program, a file.
+    Environment,
+    /// The tool itself failed.
+    Internal,
+}
+
+/// The contract's `error_kinds` is a list of every kind that applies; urzua
+/// refuses at the first cause it meets, so the list always holds one.
+pub fn error_kinds<S: serde::Serializer>(kind: &FailureKind, s: S) -> Result<S::Ok, S::Error> {
+    serde::Serialize::serialize(&[kind], s)
+}
+
+/// `error_kinds` for a report that carries a kind only when it is `not-run`;
+/// the field is skipped when `None`.
+pub fn optional_error_kinds<S: serde::Serializer>(
+    kind: &Option<FailureKind>,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    match kind {
+        Some(kind) => error_kinds(kind, s),
+        None => s.serialize_none(),
+    }
+}
+
 /// Why a command could not run: a message, and the structured form of the
-/// cause when it has one. Every `String` error converts into it, so a command
-/// that only has a sentence is unchanged; the config loader is the one source
+/// cause when it has one, with its kind; the config loader is the one source
 /// of the structured part (`ADR-77`).
 #[derive(Debug, Clone)]
 pub struct Failure {
     pub message: String,
+    /// Stated where the refusal is made: there is no conversion from a bare
+    /// message, so a failure without a kind does not compile.
+    pub kind: FailureKind,
     /// Boxed so a `Result<_, Failure>` stays small on the success path.
     pub schema_version: Option<Box<crate::schema_version::SchemaVersionError>>,
     /// The command that removes the cause, when one does.
@@ -1449,40 +1494,56 @@ pub struct Failure {
 
 impl Failure {
     /// A failure whose cause `next` removes.
-    pub fn with_next(message: impl Into<String>, next: NextAction) -> Self {
+    pub fn with_next(kind: FailureKind, message: impl Into<String>, next: NextAction) -> Self {
         Failure {
             message: message.into(),
+            kind,
             schema_version: None,
             next: Some(Box::new(next)),
         }
     }
 }
 
-impl std::fmt::Display for Failure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
+impl Failure {
+    pub fn usage(message: impl Into<String>) -> Self {
+        Self::of(FailureKind::Usage, message)
     }
-}
+    pub fn config(message: impl Into<String>) -> Self {
+        Self::of(FailureKind::Config, message)
+    }
+    pub fn environment(message: impl Into<String>) -> Self {
+        Self::of(FailureKind::Environment, message)
+    }
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::of(FailureKind::Internal, message)
+    }
 
-impl From<String> for Failure {
-    fn from(message: String) -> Self {
+    /// A failure whose kind is known where it arises.
+    pub fn of(kind: FailureKind, message: impl Into<String>) -> Self {
         Failure {
-            message,
+            message: message.into(),
+            kind,
             schema_version: None,
             next: None,
         }
     }
 }
 
-impl From<&str> for Failure {
-    fn from(message: &str) -> Self {
-        Failure::from(message.to_string())
+/// Names the kind of an error as it becomes a `Failure`, at the place the
+/// refusal is made.
+pub trait FailingAs<T> {
+    fn failing(self, kind: FailureKind) -> Result<T, Failure>;
+}
+
+impl<T, E: std::fmt::Display> FailingAs<T> for Result<T, E> {
+    fn failing(self, kind: FailureKind) -> Result<T, Failure> {
+        self.map_err(|e| Failure::of(kind, e.to_string()))
     }
 }
 
-impl From<Failure> for String {
-    fn from(failure: Failure) -> Self {
-        failure.message
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
     }
 }
 
@@ -1805,6 +1866,13 @@ pub struct WaiveReport {
     /// says which were written.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Present exactly when `status` is `not-run` and `error` is set.
+    #[serde(
+        rename = "error_kinds",
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "optional_error_kinds"
+    )]
+    pub error_kind: Option<FailureKind>,
     /// What the run said beyond its drafts: the identity it used in place of
     /// `--by`, and what numbering reported (a failed pull-request fetch, a
     /// missing directory). The same text is on stderr; stderr is not the
@@ -2607,10 +2675,10 @@ mod tests {
     /// directions.
     #[test]
     fn notices_never_move_a_not_run_exit_code() {
-        let without_notices = CouldNotRun::from("could not run");
+        let without_notices = CouldNotRun::new(FailureKind::Internal, "could not run");
         let with_notices = CouldNotRun {
             notices: vec![warning_notice()],
-            ..CouldNotRun::from("could not run")
+            ..CouldNotRun::new(FailureKind::Internal, "could not run")
         };
         assert_eq!(
             Report::exit_code(&without_notices),

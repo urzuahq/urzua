@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::header::HeaderShape;
+use urzua_core::report::FailureKind;
 use urzua_core::report::{CouldNotRun, Notice, NoticeSeverity, ReportStatus};
 use yaml_serde::{Mapping, Value};
 
@@ -641,7 +642,7 @@ pub(crate) fn run_interactive(ctx: &InitContext, dir: Option<&Path>) -> ExitCode
     let selection = prompt_selection(&mut stdin.lock(), &mut std::io::stderr());
     match selection {
         Ok(types) => run(ctx, &types, dir),
-        Err(why) => emit(&CouldNotRun::from(why)),
+        Err(why) => emit(&CouldNotRun::new(FailureKind::Usage, why)),
     }
 }
 
@@ -651,11 +652,11 @@ pub(crate) fn run_interactive(ctx: &InitContext, dir: Option<&Path>) -> ExitCode
 pub(crate) fn run(ctx: &InitContext, types: &[String], dir: Option<&Path>) -> ExitCode {
     let profiles = match select_profiles(types) {
         Ok(p) => p,
-        Err(why) => return emit(&CouldNotRun::from(why)),
+        Err(why) => return emit(&CouldNotRun::new(FailureKind::Usage, why)),
     };
     let root = match layout_root(dir) {
         Ok(r) => r,
-        Err(why) => return emit(&CouldNotRun::from(why)),
+        Err(why) => return emit(&CouldNotRun::new(FailureKind::Usage, why)),
     };
     let layouts = layouts(&profiles, &root);
     let proposed = proposed_for(&layouts, ctx.discovered);
@@ -663,7 +664,7 @@ pub(crate) fn run(ctx: &InitContext, types: &[String], dir: Option<&Path>) -> Ex
     // The file written must load: greenfield output is the product's first
     // sixty seconds, and a config `check` refuses is the worst outcome.
     if let Err(e) = urzua_core::config::parse(&rendered) {
-        return emit(&CouldNotRun::from(format!(
+        return emit(&CouldNotRun::new(FailureKind::Internal, format!(
             "greenfield generated a config that does not load ({e}); this is a bug in `urzua init`, nothing was written"
         )));
     }
@@ -695,7 +696,7 @@ pub(crate) fn run(ctx: &InitContext, types: &[String], dir: Option<&Path>) -> Ex
             ));
             written = false;
         } else {
-            return emit(&CouldNotRun::from(format!(
+            return emit(&CouldNotRun::new(FailureKind::Environment, format!(
                 "{} already exists and differs from what --types would write -- refusing to overwrite. Edit it directly, or remove it to re-run init.",
                 ctx.config_path.display()
             )));
@@ -704,11 +705,11 @@ pub(crate) fn run(ctx: &InitContext, types: &[String], dir: Option<&Path>) -> Ex
 
     let templates = match write_templates(ctx.repo_root, &profiles, ctx.dry_run) {
         Ok(t) => t,
-        Err(why) => return emit(&CouldNotRun::from(why)),
+        Err(why) => return emit(&CouldNotRun::new(FailureKind::Environment, why)),
     };
     let directories = match write_directories(ctx.repo_root, &layouts, ctx.dry_run) {
         Ok(d) => d,
-        Err(why) => return emit(&CouldNotRun::from(why)),
+        Err(why) => return emit(&CouldNotRun::new(FailureKind::Environment, why)),
     };
     if written {
         if let Err(why) = crate::commands::init::write_config(
@@ -717,7 +718,7 @@ pub(crate) fn run(ctx: &InitContext, types: &[String], dir: Option<&Path>) -> Ex
             ctx.explicit_config,
             &rendered,
         ) {
-            return emit(&CouldNotRun::from(why));
+            return emit(&CouldNotRun::new(FailureKind::Environment, why));
         }
     }
     emit(&InitReport {
