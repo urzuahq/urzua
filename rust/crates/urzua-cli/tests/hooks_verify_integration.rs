@@ -608,14 +608,19 @@ fn pre_commit_base(name: &str, merging: bool) -> String {
         std::fs::write(dir.join("main.txt"), "main\n").unwrap();
         common::git(&dir, &["add", "-A"]);
         common::git(&dir, &["commit", "-q", "--no-verify", "-m", "main"]);
-        common::git(&dir, &["merge", "-q", "--no-ff", "--no-commit", "side"]);
+        merge_without_commit(&dir);
     }
     let out = std::process::Command::new("bash")
         .arg(repo_root().join(".git-hooks/pre-commit"))
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     std::fs::read_to_string(dir.join(".git/check-args")).unwrap()
 }
 
@@ -629,4 +634,93 @@ fn pre_commit_hook_judges_a_merge_against_the_branch_merged_in() {
         pre_commit_base("plain-base", false).trim(),
         "check --base HEAD"
     );
+}
+
+fn merge_without_commit(dir: &Path) {
+    let out = common::isolated_git()
+        .args(["merge", "-q", "--no-ff", "--no-commit", "side"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+fn check_scope(dir: &Path, base: &str) -> (Vec<String>, Vec<String>) {
+    let out = common::urzua()
+        .args(["check", "--base", base])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let strings = |v: &serde_json::Value| -> Vec<String> {
+        let mut all: Vec<String> = v
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap_or_default().to_string())
+            .collect();
+        all.sort();
+        all
+    };
+    let rules = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| format!("{} {}", f["rule"], f["message"]))
+        .collect::<Vec<_>>();
+    let mut rules = rules;
+    rules.sort();
+    (strings(&report["scope"]["changed_paths"]), rules)
+}
+
+/// A merge pending in the working tree is judged as CI judges the committed merge against the
+/// branch merged in: the paths main gained since the fork are not charged to it.
+#[test]
+fn check_against_merge_head_mid_merge_matches_the_committed_merge_against_main() {
+    let dir = fixture("merge-scope", "");
+    for n in ["a", "b", "c"] {
+        std::fs::write(
+            dir.join(format!("docs/adr/ADR-{n}.md")),
+            "---\nStatus: Draft\n---\n# R\n",
+        )
+        .unwrap();
+    }
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "--no-verify", "-m", "records"]);
+    common::git(&dir, &["branch", "-M", "main"]);
+    common::git(&dir, &["checkout", "-q", "-b", "side"]);
+    std::fs::write(
+        dir.join("docs/adr/ADR-a.md"),
+        "---\nStatus: Draft\n---\n# R\nbranch\n",
+    )
+    .unwrap();
+    common::git(&dir, &["commit", "-qam", "branch", "--no-verify"]);
+    common::git(&dir, &["checkout", "-q", "main"]);
+    std::fs::write(
+        dir.join("docs/adr/ADR-b.md"),
+        "---\nStatus: Draft\n---\n# R\nmain\n",
+    )
+    .unwrap();
+    common::git(&dir, &["commit", "-qam", "main", "--no-verify"]);
+    common::git(&dir, &["checkout", "-q", "side"]);
+    // The branch is `side`; what it merges in is `main`.
+    let out = common::isolated_git()
+        .args(["merge", "-q", "--no-ff", "--no-commit", "main"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let pending = check_scope(&dir, "MERGE_HEAD");
+    common::git(&dir, &["commit", "-q", "--no-verify", "-m", "merge"]);
+    let committed = check_scope(&dir, "main");
+    assert_eq!(pending, committed);
+    assert_eq!(pending.0, vec!["docs/adr/ADR-a.md".to_string()]);
 }

@@ -16,7 +16,7 @@ No test of `hooks install` or `hooks run` runs the written hook during a merge, 
 
 ## References
 
-Open. This is an engine change: the installed hook, or `hooks run`, has to choose `MERGE_HEAD` as the base when it exists, and `SPEC-3`, `SPEC-15`, `docs/reference/commands.md` and `ADR-71` state the default and need the same change (`ADR-71` as an amendment, since it is decided). A configured `hooks.pre-commit` that names its own base is the adopter's choice and stays as written. Found while fixing `BUG-235`.
+Open. The merge-base half is fixed by `BUG-235` in the engine: `--base MERGE_HEAD` now gives CI's view mid-merge. What remains is the adopters' default, `--base HEAD`. This is an engine change: the installed hook, or `hooks run`, has to choose `MERGE_HEAD` as the base when it exists, and `SPEC-3`, `SPEC-15`, `docs/reference/commands.md` and `ADR-71` state the default and need the same change (`ADR-71` as an amendment, since it is decided). A configured `hooks.pre-commit` that names its own base is the adopter's choice and stays as written. Found while fixing `BUG-235`.
 
 > **Revision log**
 >
