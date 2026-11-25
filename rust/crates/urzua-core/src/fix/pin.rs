@@ -81,34 +81,70 @@ pub fn apply_replace(
     Ok(doc.to_string())
 }
 
-/// Removes the first copy of the pinned entry `old` (with its separating
-/// comma) from the evidence and appends the attributed row.
+/// The 1-based, inclusive line range of `field` in `record`'s header: from its
+/// own line to the line before the next field, or to the end of the header.
+/// `None` when the record has no such field.
+pub fn field_span(record: &crate::record::Record, field: &str) -> Option<(usize, usize)> {
+    let fields = &record.header.fields;
+    let start = fields.iter().find(|f| f.key.as_str() == field)?.line;
+    let next = fields.iter().map(|f| f.line).filter(|l| *l > start).min();
+    let end = match (next, record.header.region) {
+        (Some(n), _) => n - 1,
+        (None, Some((_, last))) => last,
+        (None, None) => start,
+    };
+    Some((start, end.max(start)))
+}
+
+/// Removes `needle` and its separating comma from `text`, whether the entries
+/// share a line or a folded field puts each on its own.
+fn remove_entry(text: &str, needle: &str) -> Option<String> {
+    let at = text.find(needle)?;
+    let (before, after) = (&text[..at], &text[at + needle.len()..]);
+    if let Some(kept) = before.trim_end().strip_suffix(',') {
+        return Some(format!("{kept}{after}"));
+    }
+    let rest = after.trim_start().strip_prefix(',')?;
+    let rest = rest.trim_start_matches([' ', '\t']);
+    match (before.rfind('\n'), rest.strip_prefix('\n')) {
+        (Some(nl), Some(next)) if before[nl + 1..].trim().is_empty() => {
+            Some(format!("{}{next}", &before[..=nl]))
+        }
+        _ => Some(format!("{before}{rest}")),
+    }
+}
+
+/// Removes the pinned entry `old` (with its separating comma) from the
+/// evidence field, the lines `field_span` names, and appends the attributed
+/// row. A copy in a Done-means item is not touched.
 pub fn apply_remove(
     content: &str,
     old: &PinnedEntry,
+    field_span: (usize, usize),
     (today, attestation, reason): (&str, &Attestation, &str),
     log_id: &crate::config::RevisionLogId,
     shape: &crate::config::RevisionLogShape,
 ) -> Result<String, String> {
-    let end = evidence_end(content);
-    let (head, tail) = content.split_at(end);
     let needle = old.text();
-    // The field precedes the body, so its copy is the first; a copy in a
-    // Done-means item (ADR-96) is the item's own criterion and stays.
-    let removed = head
-        .find(&needle)
-        .and_then(|at| {
-            let (before, after) = (&head[..at], &head[at + needle.len()..]);
-            if let Some(kept) = before.strip_suffix(", ") {
-                Some(format!("{kept}{after}"))
-            } else {
-                after.strip_prefix(", ").map(|rest| format!("{before}{rest}"))
-            }
-        })
-        .ok_or_else(|| {
+    let lines: Vec<&str> = content.split_inclusive('\n').collect();
+    let (start, end) = (field_span.0.max(1) - 1, field_span.1.min(lines.len()));
+    if start >= end {
+        return Err(format!("'{needle}' is not in the record's evidence field"));
+    }
+    let mut field = lines[start..end].concat();
+    if !field.contains(&needle) {
+        return Err(format!("'{needle}' is not in the record's evidence field"));
+    }
+    while field.contains(&needle) {
+        field = remove_entry(&field, &needle).ok_or_else(|| {
             format!("'{needle}' is not one of several evidence entries; remove a record's only locator by hand")
         })?;
-    let edited = format!("{removed}{tail}");
+    }
+    let edited = format!(
+        "{}{field}{}",
+        lines[..start].concat(),
+        lines[end..].concat()
+    );
     let row = format!(
         "{REMOVED_ROW_PREFIX}{}): `{}`@sha256:{}. {}",
         attestation.label(),

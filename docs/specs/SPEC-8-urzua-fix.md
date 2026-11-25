@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.81'
+Version: '0.82'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:e7577259ef4e79b7507e488f9ac6bceabd644810757f3020805f64749972f5f3, code:rust/crates/urzua-core/src/fix.rs@sha256:c8c3ad750b4ff30be5b5323be74f8bc014179ea9a8ea1f383f454304f7f95e0b, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e6f24e55efabbba2374281dee2bc7379c30ce99f60a80f7aea737014f6813572, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:e7577259ef4e79b7507e488f9ac6bceabd644810757f3020805f64749972f5f3, code:rust/crates/urzua-core/src/fix.rs@sha256:c8c3ad750b4ff30be5b5323be74f8bc014179ea9a8ea1f383f454304f7f95e0b, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e939866d9091955805f2a2d09fdafb7eddee5effd451aa9fe2f3ea24b5823321, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -733,8 +733,9 @@ It works on any record of any type and status; no expiry period is needed.
   locator as `path` or `path#scope`, prefixed with its tier (any evidence category: `spec:`, `code:`, `test:`, `record:`) when the record cites it in more than one
   (a bare `OLD` that matches two tiers is refused, naming the spelling of each tier it is cited in), `NEW` the locator that replaces it (optionally `code:` or `test:`), hashed now. The
   row names the old locator and hash and the new locator and hash, in full.
-- `--remove OLD` (one record), `OLD` named as for `--replace`, removes a pinned locator from the evidence, with a row naming it and its hash. It removes the first copy, the `Realized-by`
-  field's; the same pin in a Done-means item stays, since an item's evidence is its own criterion (`ADR-96`). `--replace` moves every copy. A record's
+- `--remove OLD` (one record), `OLD` named as for `--replace`, removes a pinned locator from the evidence, with a row naming it and its hash. It edits the `Realized-by` field only, folded
+  or not; the same pin in a Done-means item stays and the entry's `still_cited_by_items` names each item that cites it, and a pin cited
+  only in items is refused naming them, because withdrawing an item's evidence is an edit to that item (the maintainer, 2026-11-25, "Yes: field copy only"). `--replace` moves every copy. A record's
   only locator is removed by hand.
 
 Each write takes `--reason` (held to `attestation.reason`), an identity and `--actor`, takes the fix lock, re-reads the
@@ -913,3 +914,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-24 | Bumped to `0.81`. `OLD` may carry any evidence category, and the refusal of a bare `OLD` names the tiers it is cited in; `--remove` removes the `Realized-by` field's copy of a pin and leaves a Done-means item's copy, `--replace` moves both. **Why:** `BUG-231`, the refusal offered `code:` and `test:` for a file cited as `spec:` and `record:`, and `BUG-232`, `--remove` edited the item's copy and left the field's. | **substantive** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 099021e54fce -> 5915dc15c4bb. Reason: Read the diff of fix_rebaseline_integration.rs: it gains three tests and helpers for the refusal spellings and for --remove and --replace with a pin in a Done-means item; existing tests are unchanged and the spec's claims about them still hold. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 5915dc15c4bb -> e6f24e55efab. Reason: Read the diff since the last re-pin: cargo fmt reflowed the three new tests; no logic changed, and the spec's claims about them hold. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-25 | Bumped to `0.82`. `--remove` edits the evidence field's lines only, reads a folded field, reports the Done-means items that still cite the pin and refuses a pin cited only in items. **Why:** the maintainer's decision of 2026-11-25, given in the orchestrating agent's session and not recorded in the repository ("Yes: field copy only"); `BUG-232`, `BUG-233`. | **substantive** |
+> | 2026-11-25 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` e6f24e55efab -> e939866d9091. Reason: Read the diff of fix_rebaseline_integration.rs since the last re-pin: one test is renamed and three tests are added for a folded field, a pin cited only in items and the other comma shape; the existing tests are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

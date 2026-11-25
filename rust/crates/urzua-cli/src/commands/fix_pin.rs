@@ -44,6 +44,10 @@ struct PinEntryReport {
     /// Whether the record has no revision log and the write creates one.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     creates_revision_log: bool,
+    /// Done-means items that still cite a removed pin: `--remove` edits the
+    /// evidence field only.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    still_cited_by_items: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -383,6 +387,7 @@ fn first_pins(
             .collect(),
         not_pinned,
         creates_revision_log: false,
+        still_cited_by_items: Vec::new(),
     }))
 }
 
@@ -476,7 +481,34 @@ fn replace(
         pins: vec![old.text(), new.text()],
         not_pinned: Vec::new(),
         creates_revision_log: false,
+        still_cited_by_items: Vec::new(),
     }))
+}
+
+/// The Done-means items (`n`, first line) whose evidence clause cites `old`.
+fn items_citing(record: &Record, old: &PinnedEntry) -> Vec<(usize, usize)> {
+    let Some(items) = &record.items else {
+        return Vec::new();
+    };
+    items
+        .items
+        .iter()
+        .filter(|item| {
+            let Some(clause) = item.evidence.as_ref().filter(|c| c.valid) else {
+                return false;
+            };
+            urzua_core::locator::realized_by_locators(&clause.text)
+                .into_iter()
+                .any(|e| {
+                    e.category == old.category
+                        && e.parsed.is_ok_and(|l| {
+                            l.spelling == old.spelling
+                                && matches!(&l.anchor, Some(Anchor::Pin(h)) if *h == old.hash)
+                        })
+                })
+        })
+        .map(|item| (item.n, item.line))
+        .collect()
 }
 
 fn remove(
@@ -486,10 +518,30 @@ fn remove(
     write: Option<&Write<'_>>,
 ) -> Result<Option<PinEntryReport>, String> {
     let old = pinned_entry(record, config, old_name.trim())?;
+    let field = urzua_core::rules::relation_field_name(
+        config,
+        &record.record_type,
+        urzua_core::config::RelationRole::EmbodimentLocator,
+    );
+    let in_items = items_citing(record, &old);
+    let span = urzua_core::fix::pin::field_span(record, field).filter(|_| {
+        record
+            .header
+            .get(field)
+            .is_some_and(|v| v.contains(&old.text()))
+    });
+    let Some(span) = span else {
+        let names: Vec<String> = in_items.iter().map(|(n, _)| n.to_string()).collect();
+        return Err(format!(
+            "'{}' is cited only in Done-means item(s) {}, not in {field}: withdrawing it is an edit to that item, made by hand",
+            old.text(),
+            names.join(", ")
+        ));
+    };
     if let Some(w) = write {
         let (id, shape) = log_shape(config, record);
         w.apply(record, |text, ctx| {
-            urzua_core::fix::pin::apply_remove(text, &old, ctx, &id, &shape)
+            urzua_core::fix::pin::apply_remove(text, &old, span, ctx, &id, &shape)
         })?;
     }
     Ok(Some(PinEntryReport {
@@ -498,6 +550,10 @@ fn remove(
         pins: vec![old.text()],
         not_pinned: Vec::new(),
         creates_revision_log: false,
+        still_cited_by_items: in_items
+            .iter()
+            .map(|(n, line)| format!("item {n} (line {line}) still cites {}", old.text()))
+            .collect(),
     }))
 }
 

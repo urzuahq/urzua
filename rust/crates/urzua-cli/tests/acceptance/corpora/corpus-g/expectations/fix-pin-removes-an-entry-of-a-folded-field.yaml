@@ -1,0 +1,14 @@
+id: fix-pin-removes-an-entry-of-a-folded-field
+corpus: corpus-g
+bugs: [BUG-233]
+# The Realized-by field is a folded scalar, one entry per line. `--remove` takes the entry out of
+# the field; the old code looked only for ", " beside it and refused as if it were the only one.
+commits:
+  - write:
+      records/ADR-0018-folded.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: >-\n  code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222,\n  test:src/queue.rs\n---\n# ADR-0018 — Folded\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+invocation: [fix, --pin, --apply, --ids, records/ADR-0018-folded.md, --remove, "src/cache.rs", --by, ana, --actor, agent, --reason, "the folded field no longer cites cache.rs."]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: applied}
+  - {at: /failed, equals: []}
+mutation_exempt: fix --pin writes a record and runs no rule, so there is no rule to switch off.
