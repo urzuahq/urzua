@@ -555,14 +555,14 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "urzua-agdr"
-version = "0.4.14"
+version = "0.4.15"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "urzua-cli"
-version = "0.4.14"
+version = "0.4.15"
 dependencies = [
  "clap",
  "regex",
@@ -578,7 +578,7 @@ dependencies = [
 
 [[package]]
 name = "urzua-core"
-version = "0.4.14"
+version = "0.4.15"
 dependencies = [
  "cargo_metadata",
  "regex",
@@ -591,14 +591,14 @@ dependencies = [
 
 [[package]]
 name = "urzua-id"
-version = "0.4.14"
+version = "0.4.15"
 dependencies = [
  "ulid",
 ]
 
 [[package]]
 name = "urzua-io"
-version = "0.4.14"
+version = "0.4.15"
 dependencies = [
  "sha2",
  "thiserror",
@@ -606,7 +606,7 @@ dependencies = [
 
 [[package]]
 name = "urzua-mcp"
-version = "0.4.14"
+version = "0.4.15"
 dependencies = [
  "serde_json",
 ]
