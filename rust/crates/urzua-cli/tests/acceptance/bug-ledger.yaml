@@ -106,3 +106,5 @@
   reason: "a test fixture writing an abbreviated commit sha unquoted into YAML; it depends on the sha of a commit a test makes, which no fixed corpus run can produce, and drift_baseline_integration quotes the ref"
 - bug: BUG-225
   reason: "the fallback envelope printed when a report cannot be serialised; no input makes a report fail to serialise, so no corpus can reach it, and the main.rs unit test builds the envelope from a real serde error"
+- bug: BUG-235
+  reason: "a shell commit hook choosing its base during a merge; no urzua command over a corpus runs the hook, so a test of the script is the evidence"

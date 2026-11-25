@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Versioned hook, wired by `make hooks-install` (core.hooksPath=.git-hooks) and
 # performed by the first `make build`. Runs the diff-aware gate on what is
-# about to be committed: `urzua check --base HEAD` reports on records changed
-# since HEAD (staged and unstaged edits included) and enforces the diff.*
+# about to be committed: `urzua check --base HEAD` (`MERGE_HEAD` during a merge)
+# reports on records changed since that commit (staged and unstaged edits included) and enforces the diff.*
 # rules, the same gate CI runs against the PR base.
 #
 # ADR-71 / MILE-179: a layer that cannot run says so; it never reads as
@@ -29,9 +29,12 @@ not_run() {
 
 [ -x "$bin" ] || not_run "$bin is not built"
 
-echo "pre-commit: urzua check --base HEAD" >&2
+# A merge is judged against the branch merged in, as CI judges a PR against main.
+base=HEAD
+git rev-parse -q --verify MERGE_HEAD >/dev/null && base=MERGE_HEAD
+echo "pre-commit: urzua check --base $base" >&2
 cd "$root"
-out="$("$bin" check --base HEAD 2>&1)"
+out="$("$bin" check --base "$base" 2>&1)"
 code=$?
 case "$code" in
   0) exit 0 ;;

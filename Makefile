@@ -42,7 +42,7 @@ gate-action-test: ## Test the reusable CI gate action's scripts (recorded fixtur
 install-script-test: ## Test scripts/install.sh under bash and dash (stubbed curl, wget, gh and uname, no network)
 	scripts/install-test.sh
 
-hooks-install: ## Wire the versioned git hooks (core.hooksPath=.git-hooks): pre-commit (urzua check --base HEAD), pre-push (fmt + clippy + urzua check)
+hooks-install: ## Wire the versioned git hooks (core.hooksPath=.git-hooks): pre-commit (urzua check --base HEAD, or MERGE_HEAD during a merge), pre-push (fmt + clippy + urzua check)
 	@current="$$(git config --get core.hooksPath || true)"; \
 	if [ -n "$$current" ] && [ "$$current" != ".git-hooks" ]; then \
 	  echo "hooks-install: core.hooksPath is already '$$current'; not overriding it." >&2; \

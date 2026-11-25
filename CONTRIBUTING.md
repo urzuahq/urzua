@@ -15,7 +15,7 @@ make ci        # exactly what CI runs: fmt-check, clippy, build, test
 ```
 
 `core.hooksPath` is set per clone, so each fresh clone is wired once: `make build` or `urzua hooks install`
-(this repository's configuration names its hook directory, `hooks.path`). The first `make build` of a clone wires the versioned hooks: `pre-commit` runs `urzua check --base HEAD`
+(this repository's configuration names its hook directory, `hooks.path`). The first `make build` of a clone wires the versioned hooks: `pre-commit` runs `urzua check --base HEAD` (`MERGE_HEAD` during a merge, as CI judges a pull request against its base)
 and `pre-push` runs fmt, clippy and `urzua check`. `make hooks-install` does only the wiring. When
 the binary is not built, or `check` cannot run, the commit hook prints a `NOT RUN` banner on stderr
 and lets the commit through, because CI is the guarantee (ADR-71); blocking findings stop the

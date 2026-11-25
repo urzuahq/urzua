@@ -588,3 +588,45 @@ fn this_repositorys_hooks_declared_are_ok_and_reached() {
     assert_eq!(reached(&report, "pre-commit"), true, "{report}");
     assert_eq!(reached(&report, "pre-push"), true, "{report}");
 }
+
+/// The base this repository's pre-commit hook gives `check`, with a stub binary that records its
+/// arguments, in a repository that is left mid-merge or not.
+fn pre_commit_base(name: &str, merging: bool) -> String {
+    let dir = fixture(name, "");
+    write_exec(
+        &dir.join("rust/target/release/urzua"),
+        "#!/bin/sh\necho \"$@\" > \"$(git rev-parse --git-dir)/check-args\"\nexit 0\n",
+    );
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "--no-verify", "-m", "stub"]);
+    if merging {
+        common::git(&dir, &["checkout", "-q", "-b", "side"]);
+        std::fs::write(dir.join("side.txt"), "side\n").unwrap();
+        common::git(&dir, &["add", "-A"]);
+        common::git(&dir, &["commit", "-q", "--no-verify", "-m", "side"]);
+        common::git(&dir, &["checkout", "-q", "-"]);
+        std::fs::write(dir.join("main.txt"), "main\n").unwrap();
+        common::git(&dir, &["add", "-A"]);
+        common::git(&dir, &["commit", "-q", "--no-verify", "-m", "main"]);
+        common::git(&dir, &["merge", "-q", "--no-ff", "--no-commit", "side"]);
+    }
+    let out = std::process::Command::new("bash")
+        .arg(repo_root().join(".git-hooks/pre-commit"))
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    std::fs::read_to_string(dir.join(".git/check-args")).unwrap()
+}
+
+#[test]
+fn pre_commit_hook_judges_a_merge_against_the_branch_merged_in() {
+    assert_eq!(
+        pre_commit_base("merge-base", true).trim(),
+        "check --base MERGE_HEAD"
+    );
+    assert_eq!(
+        pre_commit_base("plain-base", false).trim(),
+        "check --base HEAD"
+    );
+}
