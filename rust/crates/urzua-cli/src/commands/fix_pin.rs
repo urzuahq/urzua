@@ -47,7 +47,15 @@ struct PinEntryReport {
     /// Done-means items that still cite a removed pin: `--remove` edits the
     /// evidence field only.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    still_cited_by_items: Vec<String>,
+    still_cited_by_items: Vec<ItemCopy>,
+}
+
+/// A Done-means item whose evidence clause cites the pin.
+#[derive(serde::Serialize)]
+struct ItemCopy {
+    item: usize,
+    line: usize,
+    locator: String,
 }
 
 #[derive(serde::Serialize)]
@@ -184,7 +192,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
     for record in selected {
         let dispatch = |write: Option<&Write<'_>>| match (args.replace, args.remove) {
             (Some(spec), _) => replace(record, config, &read, spec, write),
-            (_, Some(old)) => remove(record, config, old, write),
+            (_, Some(old)) => remove(record, config, repo_root, old, write),
             _ => first_pins(record, config, &read, write, !args.ids.is_empty()),
         };
         let outcome = planned_outcome(
@@ -485,35 +493,17 @@ fn replace(
     }))
 }
 
-/// The Done-means items (`n`, first line) whose evidence clause cites `old`.
-fn items_citing(record: &Record, old: &PinnedEntry) -> Vec<(usize, usize)> {
-    let Some(items) = &record.items else {
-        return Vec::new();
-    };
-    items
-        .items
-        .iter()
-        .filter(|item| {
-            let Some(clause) = item.evidence.as_ref().filter(|c| c.valid) else {
-                return false;
-            };
-            urzua_core::locator::realized_by_locators(&clause.text)
-                .into_iter()
-                .any(|e| {
-                    e.category == old.category
-                        && e.parsed.is_ok_and(|l| {
-                            l.spelling == old.spelling
-                                && matches!(&l.anchor, Some(Anchor::Pin(h)) if *h == old.hash)
-                        })
-                })
-        })
-        .map(|item| (item.n, item.line))
-        .collect()
+/// `record` as `text` reads it, with its Done-means items.
+fn reread(record: &Record, config: &Config, text: &str) -> Record {
+    let mut fresh = Record::parse_declared(config, record.path.clone(), &record.record_type, text);
+    urzua_core::rules::attach_done_items_to(&mut fresh, config, text);
+    fresh
 }
 
 fn remove(
     record: &Record,
     config: &Config,
+    repo_root: &std::path::Path,
     old_name: &str,
     write: Option<&Write<'_>>,
 ) -> Result<Option<PinEntryReport>, String> {
@@ -523,36 +513,41 @@ fn remove(
         &record.record_type,
         urzua_core::config::RelationRole::EmbodimentLocator,
     );
-    let in_items = items_citing(record, &old);
-    let span = urzua_core::fix::pin::field_span(record, field).filter(|_| {
-        record
-            .header
-            .get(field)
-            .is_some_and(|v| v.contains(&old.text()))
-    });
-    let Some(span) = span else {
-        let names: Vec<String> = in_items.iter().map(|(n, _)| n.to_string()).collect();
-        return Err(format!(
-            "'{}' is cited only in Done-means item(s) {}, not in {field}: withdrawing it is an edit to that item, made by hand",
-            old.text(),
-            names.join(", ")
-        ));
-    };
+    let mut removal = None;
     if let Some(w) = write {
         let (id, shape) = log_shape(config, record);
         w.apply(record, |text, ctx| {
-            urzua_core::fix::pin::apply_remove(text, &old, span, ctx, &id, &shape)
+            let found = urzua_core::fix::pin::locate_removal(
+                &reread(record, config, text),
+                text,
+                field,
+                &old,
+            )?;
+            let edited =
+                urzua_core::fix::pin::apply_remove(text, &old, found.span, ctx, &id, &shape);
+            removal = Some(found);
+            edited
         })?;
+    } else if let Ok(text) = urzua_io::read_to_string(&repo_root.join(&record.path)) {
+        let fresh = reread(record, config, &text);
+        removal = Some(urzua_core::fix::pin::locate_removal(
+            &fresh, &text, field, &old,
+        )?);
     }
+    let remaining = removal.map(|r| r.remaining).unwrap_or_default();
     Ok(Some(PinEntryReport {
         record: record.path.clone(),
         action: "remove",
         pins: vec![old.text()],
         not_pinned: Vec::new(),
         creates_revision_log: false,
-        still_cited_by_items: in_items
-            .iter()
-            .map(|(n, line)| format!("item {n} (line {line}) still cites {}", old.text()))
+        still_cited_by_items: remaining
+            .into_iter()
+            .map(|(item, line)| ItemCopy {
+                item,
+                line,
+                locator: old.text(),
+            })
             .collect(),
     }))
 }

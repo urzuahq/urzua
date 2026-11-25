@@ -1,16 +1,15 @@
 id: fix-pin-remove-leaves-a-done-means-items-copy-of-the-pin
 corpus: corpus-g
 bugs: [BUG-232]
-# src/cache.rs is pinned only in a Done-means item, not in the Realized-by field. `--remove`
-# means the field's copy, so it refuses and names the item; read without item parsing the pin is
-# not in the record's evidence at all, and the old code removed it from the item and applied.
+# src/cache.rs is pinned in the Realized-by field and again in a Done-means item. `--remove` takes
+# the field's copy and the report names the item that still cites it; the old code edited the item
+# (its copy has the `, <pin>` form) and reported nothing.
 commits:
   - write:
-      records/ADR-0017-item-copy.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: test:src/queue.rs\n---\n# ADR-0017 \u2014 Item copy\n\n## Done means\n\n- Criterion \u2014 evidence: test:src/queue.rs, code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+      records/ADR-0017-item-copy.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222, test:src/queue.rs\n---\n# ADR-0017 \u2014 Item copy\n\n## Done means\n\n- Criterion \u2014 evidence: test:src/queue.rs, code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
 invocation: [--config, .urzua/items.yaml, fix, --pin, --apply, --ids, records/ADR-0017-item-copy.md, --remove, "src/cache.rs", --by, ana, --actor, agent, --reason, "the field no longer cites cache.rs."]
-expect_exit: 1
-expect_stdout_contains:
-  - "cited only in Done-means item(s) 1"
+expect_exit: 0
 expect_json:
-  - {at: /status, equals: partial-failure}
+  - {at: /status, equals: applied}
+  - {at: /records/0/still_cited_by_items/0/item, equals: 1}
 mutation_exempt: fix --pin writes a record and runs no rule, so there is no rule to switch off.

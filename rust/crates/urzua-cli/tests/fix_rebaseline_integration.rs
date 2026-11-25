@@ -2074,8 +2074,14 @@ fn fix_pin_remove_edits_the_field_when_the_item_copy_has_the_other_comma_observe
             sha256(V1)
         )
     );
-    let still = report["records"][0]["still_cited_by_items"].to_string();
-    assert!(still.contains("item 1"), "{report}");
+    let still = &report["records"][0]["still_cited_by_items"];
+    assert_eq!(still[0]["item"], 1, "{report}");
+    assert!(still[0]["line"].as_u64().unwrap() > 5, "{report}");
+    assert_eq!(
+        still[0]["locator"],
+        format!("code:src/a.rs@sha256:{}", sha256(V1)),
+        "{report}"
+    );
 }
 
 #[test]
@@ -2090,18 +2096,76 @@ fn fix_pin_remove_reads_a_folded_field_observed_failing() {
     let text = std::fs::read_to_string(dir.join(A)).unwrap();
     assert!(text.contains("Realized-by: >-\n  test:t.rs\n---"), "{text}");
     assert!(text.contains(&format!("code:src/a.rs@sha256:{}", sha256(V1))));
+    commit_all(&dir);
+    assert!(unattested(&check_base(&dir)).is_empty());
 }
 
 #[test]
-fn fix_pin_remove_refuses_a_pin_cited_only_in_items_observed_failing() {
-    let dir = pin_in_field_and_item("remove-items-only", " 'test:t.rs'", COMMA_ITEM);
-    let before = std::fs::read_to_string(dir.join(A)).unwrap();
+fn fix_pin_remove_takes_an_item_only_pin_from_the_first_item_and_names_the_rest_observed_failing() {
+    let dir = pin_in_field_and_item(
+        "remove-items-only",
+        " 'test:t.rs'",
+        "test:t.rs, code:src/a.rs@sha256:HASH\n- Second — evidence: code:src/a.rs@sha256:HASH, test:t.rs",
+    );
     let out = pin_edit(&dir, "--remove", "src/a.rs");
-    let text = format!("{out:?}");
-    assert_ne!(json(&out)["status"], "applied", "{text}");
-    assert!(text.contains("only in Done-means item(s) 1"), "{text}");
-    assert!(text.contains("edit to that item"), "{text}");
-    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+    let report = json(&out);
+    assert_eq!(report["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(
+        text.contains("- Criterion — evidence: test:t.rs\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "- Second — evidence: code:src/a.rs@sha256:{}, test:t.rs",
+            sha256(V1)
+        )),
+        "{text}"
+    );
+    let still = &report["records"][0]["still_cited_by_items"];
+    assert_eq!(still.as_array().unwrap().len(), 1, "{report}");
+    assert_eq!(still[0]["item"], 2, "{report}");
+}
+
+#[test]
+fn fix_pin_remove_leaves_a_comment_line_in_the_field_alone_observed_failing() {
+    let dir = pin_in_field_and_item(
+        "remove-comment",
+        " code:src/a.rs@sha256:HASH, test:t.rs\n# was code:src/a.rs@sha256:HASH, then moved",
+        COMMA_ITEM,
+    );
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(text.contains("Realized-by: test:t.rs\n"), "{text}");
+    assert!(
+        text.contains(&format!(
+            "# was code:src/a.rs@sha256:{}, then moved\n",
+            sha256(V1)
+        )),
+        "{text}"
+    );
+}
+
+#[test]
+fn fix_pin_remove_leaves_no_blank_line_in_a_crlf_folded_field_observed_failing() {
+    let dir = pin_in_field_and_item(
+        "remove-crlf",
+        " >-\n  code:src/a.rs@sha256:HASH,\n  test:t.rs",
+        COMMA_ITEM,
+    );
+    let crlf = std::fs::read_to_string(dir.join(A))
+        .unwrap()
+        .replace('\n', "\r\n");
+    std::fs::write(dir.join(A), crlf).unwrap();
+    commit_all(&dir);
+    let out = pin_edit(&dir, "--remove", "src/a.rs");
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(
+        text.contains("Realized-by: >-\r\n  test:t.rs\r\n---"),
+        "{text:?}"
+    );
 }
 
 #[test]

@@ -81,12 +81,26 @@ pub fn apply_replace(
     Ok(doc.to_string())
 }
 
+/// Where `--remove` edits, and the Done-means items that still cite the pin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Removal {
+    /// The 1-based, inclusive line range edited.
+    pub span: (usize, usize),
+    /// `(item number, line)` of each item whose evidence clause cites the pin
+    /// and is not edited.
+    pub remaining: Vec<(usize, usize)>,
+}
+
 /// The 1-based, inclusive line range of `field` in `record`'s header: from its
 /// own line to the line before the next field, or to the end of the header.
-/// `None` when the record has no such field.
-pub fn field_span(record: &crate::record::Record, field: &str) -> Option<(usize, usize)> {
+/// The line is the header's best-effort one, so it is checked against `text`:
+/// `None` when the record has no such field or that line does not begin it.
+fn field_span(record: &crate::record::Record, text: &str, field: &str) -> Option<(usize, usize)> {
     let fields = &record.header.fields;
     let start = fields.iter().find(|f| f.key.as_str() == field)?.line;
+    if !text.lines().nth(start.checked_sub(1)?)?.contains(field) {
+        return None;
+    }
     let next = fields.iter().map(|f| f.line).filter(|l| *l > start).min();
     let end = match (next, record.header.region) {
         (Some(n), _) => n - 1,
@@ -96,17 +110,88 @@ pub fn field_span(record: &crate::record::Record, field: &str) -> Option<(usize,
     Some((start, end.max(start)))
 }
 
+fn is_comment(line: &str) -> bool {
+    line.trim_start().starts_with('#')
+}
+
+/// The Done-means items whose evidence clause cites `old`, as `(n, clause line)`.
+fn items_citing(record: &crate::record::Record, old: &PinnedEntry) -> Vec<(usize, usize)> {
+    let Some(items) = &record.items else {
+        return Vec::new();
+    };
+    items
+        .items
+        .iter()
+        .filter_map(|item| {
+            let clause = item.evidence.as_ref().filter(|c| c.valid)?;
+            crate::locator::realized_by_locators(&clause.text)
+                .into_iter()
+                .any(|e| {
+                    e.category == old.category
+                        && e.parsed.is_ok_and(|l| {
+                            l.spelling == old.spelling
+                                && matches!(&l.anchor, Some(crate::locator::Anchor::Pin(h)) if *h == old.hash)
+                        })
+                })
+                .then_some((item.n, clause.line))
+        })
+        .collect()
+}
+
+/// Where `--remove` of `old` edits in `text`, read as `record`. The evidence
+/// field's copy is the one removed, and a copy in a Done-means item stays: the
+/// maintainer's decision of 2026-11-25 (`BUG-232`). A pin the field does not
+/// hold is removed from the first item that cites it and the rest are named.
+pub fn locate_removal(
+    record: &crate::record::Record,
+    text: &str,
+    field: &str,
+    old: &PinnedEntry,
+) -> Result<Removal, String> {
+    let needle = old.text();
+    let items = items_citing(record, old);
+    let in_field = field_span(record, text, field).filter(|(s, e)| {
+        text.lines()
+            .skip(s - 1)
+            .take(e + 1 - s)
+            .any(|l| !is_comment(l) && l.contains(&needle))
+    });
+    match (in_field, items.split_first()) {
+        (Some(span), _) => Ok(Removal {
+            span,
+            remaining: items,
+        }),
+        (None, Some((first, rest))) => Ok(Removal {
+            span: (first.1, first.1),
+            remaining: rest.to_vec(),
+        }),
+        (None, None) => Err(format!("'{needle}' is not in the record's evidence")),
+    }
+}
+
 /// Removes `needle` and its separating comma from `text`, whether the entries
-/// share a line or a folded field puts each on its own.
+/// share a line or a folded field puts each on its own. A match on a comment
+/// line is not an entry.
 fn remove_entry(text: &str, needle: &str) -> Option<String> {
-    let at = text.find(needle)?;
+    let mut from = 0;
+    let at = loop {
+        let at = from + text[from..].find(needle)?;
+        let line_start = text[..at].rfind('\n').map_or(0, |n| n + 1);
+        if !is_comment(&text[line_start..]) {
+            break at;
+        }
+        from = at + needle.len();
+    };
     let (before, after) = (&text[..at], &text[at + needle.len()..]);
     if let Some(kept) = before.trim_end().strip_suffix(',') {
         return Some(format!("{kept}{after}"));
     }
     let rest = after.trim_start().strip_prefix(',')?;
     let rest = rest.trim_start_matches([' ', '\t']);
-    match (before.rfind('\n'), rest.strip_prefix('\n')) {
+    let next = rest
+        .strip_prefix("\r\n")
+        .or_else(|| rest.strip_prefix('\n'));
+    match (before.rfind('\n'), next) {
         (Some(nl), Some(next)) if before[nl + 1..].trim().is_empty() => {
             Some(format!("{}{next}", &before[..=nl]))
         }
@@ -114,31 +199,33 @@ fn remove_entry(text: &str, needle: &str) -> Option<String> {
     }
 }
 
-/// Removes the pinned entry `old` (with its separating comma) from the
-/// evidence field, the lines `field_span` names, and appends the attributed
-/// row. A copy in a Done-means item is not touched.
+/// Removes the pinned entry `old` (with its separating comma) from the lines
+/// `span` names, and appends the attributed row.
 pub fn apply_remove(
     content: &str,
     old: &PinnedEntry,
-    field_span: (usize, usize),
+    span: (usize, usize),
     (today, attestation, reason): (&str, &Attestation, &str),
     log_id: &crate::config::RevisionLogId,
     shape: &crate::config::RevisionLogShape,
 ) -> Result<String, String> {
     let needle = old.text();
     let lines: Vec<&str> = content.split_inclusive('\n').collect();
-    let (start, end) = (field_span.0.max(1) - 1, field_span.1.min(lines.len()));
+    let (start, end) = (span.0.max(1) - 1, span.1.min(lines.len()));
+    let not_there = || format!("'{needle}' is not in the lines it is removed from");
     if start >= end {
-        return Err(format!("'{needle}' is not in the record's evidence field"));
+        return Err(not_there());
     }
     let mut field = lines[start..end].concat();
     if !field.contains(&needle) {
-        return Err(format!("'{needle}' is not in the record's evidence field"));
+        return Err(not_there());
     }
-    while field.contains(&needle) {
-        field = remove_entry(&field, &needle).ok_or_else(|| {
-            format!("'{needle}' is not one of several evidence entries; remove a record's only locator by hand")
-        })?;
+    let sole = || {
+        format!("'{needle}' is not one of several evidence entries; remove a record's only locator by hand")
+    };
+    field = remove_entry(&field, &needle).ok_or_else(sole)?;
+    while let Some(next) = remove_entry(&field, &needle) {
+        field = next;
     }
     let edited = format!(
         "{}{field}{}",
