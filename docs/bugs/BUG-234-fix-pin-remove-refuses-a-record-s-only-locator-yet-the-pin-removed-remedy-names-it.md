@@ -12,6 +12,8 @@ Realized-by:
 
 It predates `BUG-232` and is not changed by it.
 
+The same dead end has a second route: `fix --pin --remove` refuses a pin whose evidence field it cannot locate (a quoted key) and tells the user to remove the pin by hand, which is the hand removal that raises the `pin-removed` finding naming `--remove`.
+
 ## Why nothing caught it
 
 The refusal and the remedy were written in different places, and no test follows the remedy of a `pin-removed` finding for a record whose removed pin was its only entry.
@@ -24,3 +26,4 @@ Open. The fix is a decision: either `--remove` removes a sole entry, leaving the
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-25 | Added the second route into the dead end: the `--remove` refusal for a field it cannot locate tells the user to remove the pin by hand. | **structural** |
