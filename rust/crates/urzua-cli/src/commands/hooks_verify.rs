@@ -116,7 +116,11 @@ struct VerifyReport {
     run: bool,
     hooks: Vec<HookRun>,
     /// Set with `status` `not-run`: why the run refused (the published agent CLI contract).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "error_kinds",
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "urzua_core::report::optional_error_kinds"
+    )]
     error_kind: Option<FailureKind>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     problems: Vec<String>,

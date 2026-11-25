@@ -355,8 +355,9 @@ fn frontmatter_fields(yaml_text: &str, mapping: &yaml_serde::Mapping) -> Vec<Hea
         .collect()
 }
 
-/// Best-effort line lookup for a top-level YAML key, for diagnostics only --
-/// parsing correctness never depends on this succeeding. A flow-style
+/// Best-effort line lookup for a top-level YAML key -- parsing correctness never
+/// depends on this succeeding. A caller that edits at the line (`fix --pin
+/// --remove`) checks that the line holds the key before it does. A flow-style
 /// mapping (`{a: 1, b: 2}` on one line) falls back to the block's first
 /// content line via the caller's default.
 fn find_key_line(yaml_text: &str, key: &str) -> Option<usize> {

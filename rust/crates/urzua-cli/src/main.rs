@@ -178,7 +178,9 @@ enum Command {
     New {
         /// Record type, as configured in .urzua/config.yaml (e.g. adr, rfc, spec).
         record_type: String,
+        /// The record's title, written into its heading and filename.
         title: Option<String>,
+        /// The author named in the record; defaults to the git identity.
         #[arg(long)]
         by: Option<String>,
     },
@@ -228,6 +230,7 @@ enum Command {
         /// --stdin-path.
         #[arg(long, value_name = "FILE")]
         actors: Option<PathBuf>,
+        /// Record files or directories to check; with none, every governed record.
         paths: Vec<PathBuf>,
     },
 
@@ -247,7 +250,8 @@ enum Command {
     )]
     Explain {
         /// A file, directory, glob or `path#scope`. Always a path, even when
-        /// it spells a rule id; use `--rule` for a rule.
+        /// it spells a rule id; use `--rule` for a rule. Required unless
+        /// `--rule`, `--types`, `--type` or `--full` is given.
         #[arg(
             required_unless_present_any = ["rule", "types", "record_type", "full"],
             conflicts_with_all = ["rule", "types", "record_type"]
@@ -349,6 +353,7 @@ enum Command {
     /// Emit records in another format. `--format json` is implemented; `agdr`
     /// is not. The format must be named: there is no default.
     Export {
+        /// The format to write.
         #[arg(long, value_enum, required = true)]
         format: ExportFormat,
         /// Leave each record's `raw_text` out. The header, sections and every
@@ -368,8 +373,10 @@ enum Command {
     /// Read records from another format. Not implemented yet. The format must
     /// be named: there is no default.
     Import {
+        /// The format to read.
         #[arg(long, value_enum, required = true)]
         format: ExportFormat,
+        /// The files to read.
         paths: Vec<PathBuf>,
     },
 
@@ -383,6 +390,7 @@ enum Command {
     /// adopting; `--dir` sets the layout root (default `docs`). On a terminal in a
     /// repository with no record directory, `init` asks which types to govern.
     Init {
+        /// Print the configuration the run would write, and write nothing.
         #[arg(long)]
         dry_run: bool,
         /// Record types to govern from built-in profiles: adr, rfc, spec, prd.
@@ -419,6 +427,12 @@ enum Command {
         target: HooksTarget,
     },
 
+    /// What a caller needs to invoke urzua, as one JSON object: every command
+    /// with its arguments, profile and whether it is safe, the environment
+    /// variables and the configuration file it reads. Not a report: no
+    /// `status`, exit 0.
+    Describe,
+
     /// Report on the tool's own configuration and invocation health: is
     /// there a config, does it parse, is it wired into a real gate. An
     /// unrecognized config key is an error here, not a warning.
@@ -433,6 +447,7 @@ enum Command {
     /// `indexes`) from the records. Detect mode by default: reports which
     /// artifacts differ and writes nothing; `--apply` writes them.
     Index {
+        /// Write the artifacts that differ. Without it nothing is written.
         #[arg(long)]
         apply: bool,
     },
@@ -459,6 +474,7 @@ enum Command {
         /// combined with PATHS or any apply flag.
         #[arg(long, value_name = "PATH")]
         stdin_path: Option<PathBuf>,
+        /// The drift tier to compute; only tier 1 (Embodiment) exists.
         #[arg(long, default_value_t = 1)]
         tier: u8,
         /// Write the computed values back. Requires --ids or --force, and
@@ -467,8 +483,10 @@ enum Command {
         /// with no Revision log section is refused, never silently skipped.
         #[arg(long)]
         apply: bool,
+        /// The records to repair: repo-relative paths, comma-separated.
         #[arg(long, value_delimiter = ',')]
         ids: Vec<String>,
+        /// The person the revision row names; defaults to the gh or git identity.
         #[arg(long)]
         by: Option<String>,
         /// Who ran the command: `agent` or `human`. Recorded in the revision
@@ -538,6 +556,7 @@ enum Command {
         /// attested way to pin a corpus, or a drifted unpinned locator.
         #[arg(long)]
         pin_only: bool,
+        /// The person the revision row names; defaults to the gh or git identity.
         #[arg(long)]
         by: Option<String>,
         /// Who ran the command: `agent` or `human`; refused as `agent` where
@@ -573,6 +592,7 @@ enum HooksTarget {
     Status,
     /// Remove the marked block, and a hook file that held nothing else.
     Uninstall {
+        /// List what would change and write nothing.
         #[arg(long)]
         dry_run: bool,
     },
@@ -619,8 +639,10 @@ enum HarnessTarget {
     /// Rewrite the files whose hash still matches the lock; report a file a
     /// person changed and leave it unless `--force`.
     Update {
+        /// Also rewrite the files a person changed.
         #[arg(long)]
         force: bool,
+        /// List what would change and write nothing.
         #[arg(long)]
         dry_run: bool,
     },
@@ -628,6 +650,7 @@ enum HarnessTarget {
     /// the marked block out of the shared files, report what a person changed
     /// and leave it, and delete the lock last.
     Uninstall {
+        /// List what would change and write nothing.
         #[arg(long)]
         dry_run: bool,
     },
@@ -651,7 +674,9 @@ enum HarnessTarget {
     /// A drafting step may fill only what the scaffold left empty; an
     /// amendment may only add.
     Record {
+        /// The step to run: `new`, `finish`, `amend-finish`, `repin`, `reverify` or `done`.
         step: String,
+        /// The step's own arguments, such as the record and the reason.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -697,6 +722,7 @@ enum MigrateTarget {
     /// unchanged -- cross-references keep resolving by filename exactly as
     /// they do today. Dry-run by default.
     Ids {
+        /// Write the stable IDs. Without it nothing is written.
         #[arg(long)]
         apply: bool,
     },
@@ -708,6 +734,7 @@ enum MigrateTarget {
     /// rewritten citation, and every citation in a file it does not edit. Dry-run
     /// by default.
     Filenames {
+        /// Rename the files and rewrite the citations. Without it nothing is written.
         #[arg(long)]
         apply: bool,
     },
@@ -725,9 +752,10 @@ enum MigrateTarget {
     Schema {
         /// Preview which records lack a real value for --field, without
         /// requiring it in config first.
-        #[arg(long)]
+        #[arg(long, required = true)]
         report: bool,
-        #[arg(long)]
+        /// The field to preview, as a record header names it.
+        #[arg(long, required = true)]
         field: Option<String>,
     },
 }
@@ -761,7 +789,7 @@ enum ExportFormat {
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
-        let out = serde_json::json!({ "status": "not-run", "error": info.to_string().split_whitespace().collect::<Vec<_>>().join(" "), "error_kind": "internal", "next_action": null, "next_action_argv": null, "next_action_reason": null, "next_action_inputs": [] });
+        let out = serde_json::json!({ "status": "not-run", "error": info.to_string().split_whitespace().collect::<Vec<_>>().join(" "), "error_kinds": ["internal"], "next_action": null, "next_action_argv": null, "next_action_reason": null, "next_action_inputs": [] });
         // write_all + let-ignore, never println!/a panicking macro here -- a
         // broken pipe during the hook itself would double-panic and abort
         // with no output at all, defeating the hook's entire purpose.
@@ -857,6 +885,7 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
         init @ Command::Init { .. } => dispatch_init(config, init),
         Command::Harness { target } => dispatch_harness(config, target),
         Command::Hooks { target } => dispatch_hooks(config, target),
+        Command::Describe => commands::describe::run(<Cli as clap::CommandFactory>::command()),
         Command::Doctor => commands::doctor::run(config),
         Command::Rules => commands::rules::run(),
         Command::Index { apply } => commands::index::run(config, apply),
@@ -1124,6 +1153,7 @@ fn command_name(command: &Command) -> &'static str {
         Command::Init { .. } => "init",
         Command::Harness { .. } => "harness",
         Command::Hooks { .. } => "hooks",
+        Command::Describe => "describe",
         Command::Doctor => "doctor",
         Command::Rules => "rules",
         Command::Index { .. } => "index",

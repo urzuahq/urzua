@@ -9,6 +9,18 @@
 //! an agent.
 
 mod claude_code;
+
+/// The environment variables the adapters read, for `urzua describe`.
+pub(crate) const ADAPTER_ENV: &[(&str, &str)] = &[
+    (
+        claude_code::PROJECT_ENV,
+        "Set by the agent host: the project `harness hook` judges an edit in.",
+    ),
+    (
+        claude_code::HOST_ENV,
+        "Set by the agent host: the program it runs under, recorded with an approval.",
+    ),
+];
 mod hook_json;
 mod once;
 #[cfg(test)]

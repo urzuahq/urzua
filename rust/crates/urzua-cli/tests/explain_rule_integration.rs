@@ -301,7 +301,11 @@ fn explain_with_neither_a_path_nor_a_rule_is_a_usage_error() {
         text.contains("<PATH>"),
         "names the missing argument: {text}"
     );
-    assert_eq!(report["error_kind"], "usage", "{report}");
+    assert_eq!(
+        report["error_kinds"],
+        serde_json::json!(["usage"]),
+        "{report}"
+    );
     assert!(!text.contains("Usage:"), "{text}");
 }
 

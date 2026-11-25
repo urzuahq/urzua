@@ -303,7 +303,7 @@ fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResu
             report: serde_json::json!({
                 "status": "not-run",
                 "error": message,
-                "error_kind": "internal",
+                "error_kinds": ["internal"],
                 "next_action": null,
                 "next_action_argv": null,
                 "next_action_reason": null,

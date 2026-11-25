@@ -16,7 +16,7 @@ Two flags are accepted by every command:
 Every command prints one JSON object to stdout. Where a command has a `status`, it is one of the
 values listed for it. Exit code 0 means the command ran and nothing blocks, 1 means it ran and found
 something blocking, and 2 means it could not run (the report then has `"status": "not-run"` and an
-`error` and an `error_kind`). `error_kind` is `usage` (the arguments were wrong; `error` names the
+`error` and `error_kinds`, an array holding one kind). The kind is `usage` (the arguments were wrong; `error` names the
 argument in one sentence, with no usage block), `config` (the configuration could not be read or is
 invalid), `environment` (something outside the tool is missing: a repository, a file, a program) or
 `internal` (the tool failed; a panic reports this way, under `error`). `urzua --help` lists the commands and `urzua <command> --help` lists the flags; the pages
@@ -39,7 +39,7 @@ path outside the repository, a directory that is not a git repository).
 ### What uses the network
 
 Almost nothing. `check`, `fix` and `reverify` without `--apply`, `explain`, `graph`, `roadmap`,
-`rules`, `doctor`, `export`, `board`, `index`, `migrate`, `mcp`, `init` and `harness` make no network call.
+`rules`, `describe`, `doctor`, `export`, `board`, `index`, `migrate`, `mcp`, `init` and `harness` make no network call.
 Four commands do:
 
 - `urzua refs refresh` fetches issue and pull request numbers from the GitHub REST API (with `curl`).
@@ -67,6 +67,7 @@ Four commands do:
 | [`roadmap`](#roadmap) | The order of work, computed from the records | no |
 | [`board`](#board) | One page showing every record, as a file or served locally | a file under `.urzua/cache` (or `--out`) |
 | [`rules`](#rules) | Every rule this build ships | no |
+| [`describe`](#describe) | Every command and its arguments, as one JSON object | no |
 | [`migrate`](#migrate) | Backfill stable ids, rename files to the filename convention, upgrade the config, preview a new required field | with `--apply` or `config` |
 | [`export`](#export) | Emit the records as JSON | no |
 | [`index`](#index) | Regenerate declared index files | with `--apply` |
@@ -450,6 +451,18 @@ urzua rules
 Every rule this build ships, each with `id`, `description`, `scope`, `judges`, `population_unit`,
 `spec` and `actions`, and a top-level `status` of `ok` like every other command's report. It reads no config: it says what the binary supports, not what your repository
 enabled. Use [`explain --rule`](#explain) for one rule's options and your current level.
+
+## describe
+
+```text
+urzua describe
+```
+
+Every command that runs, with its arguments (`name`, `kind`, `type`, `required`, `repeatable`,
+`means` and the relations between them), its profile, whether it is safe to run, and what it reads on
+standard input; also the environment variables urzua reads and its
+configuration file. It is not a report: it has no `status` and exits 0. It reads no configuration.
+[`describe`](describe.md) has every key.
 
 ## migrate
 

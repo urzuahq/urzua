@@ -45,12 +45,12 @@ CONFORM_SCHEMAS := $(RUST_DIR)/crates/urzua-cli/tests/fixtures/agent-cli-contrac
 conform: ## Run the published agent CLI contract's runner against the built binary (CONFORM_KIT=<checkout at the commit in the vendored VERSION file>)
 	@test -n "$(CONFORM_KIT)" || { echo "conform: set CONFORM_KIT to a checkout of the contract at the commit named in $(CONFORM_SCHEMAS)/../VERSION" >&2; exit 2; }
 	@test -x "$(CONFORM_BIN)" || { echo "conform: $(CONFORM_BIN) is not built; run make rust-build, or set CONFORM_BIN" >&2; exit 2; }
-	python3 "$(CONFORM_KIT)/scripts/conform.py" "$(CONFORM_BIN)" --schemas "$(CONFORM_SCHEMAS)"
+	python3 "$(CONFORM_KIT)/scripts/conform.py" "$(CONFORM_BIN)" --schemas "$(CONFORM_SCHEMAS)" --require-run
 
 install-script-test: ## Test scripts/install.sh under bash and dash (stubbed curl, wget, gh and uname, no network)
 	scripts/install-test.sh
 
-hooks-install: ## Wire the versioned git hooks (core.hooksPath=.git-hooks): pre-commit (urzua check --base HEAD), pre-push (fmt + clippy + urzua check)
+hooks-install: ## Wire the versioned git hooks (core.hooksPath=.git-hooks): pre-commit (urzua check --base HEAD, or MERGE_HEAD during a merge), pre-push (fmt + clippy + urzua check)
 	@current="$$(git config --get core.hooksPath || true)"; \
 	if [ -n "$$current" ] && [ "$$current" != ".git-hooks" ]; then \
 	  echo "hooks-install: core.hooksPath is already '$$current'; not overriding it." >&2; \

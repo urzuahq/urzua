@@ -16,6 +16,7 @@ Read them in this order the first time:
 | [A checklist whose state is computed](checklist.md) | Declaring a type whose acceptance items name their evidence, with a tested configuration and record |
 | [`check` and its JSON output](check.md) | `check`, `check --base`, exit codes and every output field |
 | [Command reference](commands.md) | Every command and flag |
+| [`describe`](describe.md) | The commands, arguments, environment and configuration as one JSON object, for an agent |
 | [Waivers and drift](waivers-and-drift.md) | Reviewed exceptions, evidence pins, `fix`, `reverify` |
 | [CI](ci.md) | The gate action and the stale-pin step |
 | [The agent harness](agent-harness.md) | Hooks that make an AI agent's edits go through urzua |

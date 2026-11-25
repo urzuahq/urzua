@@ -1,6 +1,6 @@
 //! A refusal states its kind where it is made (`MILE-365`): an argument that is wrong is `usage`
 //! whatever command's code noticed it, and a `not-run` report that carries an `error` carries
-//! `error_kind` beside it.
+//! `error_kinds` beside it, holding the one kind of its cause.
 
 mod common;
 
@@ -38,10 +38,13 @@ fn every_argument_error_is_a_usage_not_run() {
         let (code, stdout, stderr) = run(&dir, args);
         let report: serde_json::Value = serde_json::from_str(&stdout)
             .unwrap_or_else(|e| panic!("{args:?}: not JSON ({e}): {stdout} / {stderr}"));
-        if code != 2 || report["status"] != "not-run" || report["error_kind"] != "usage" {
+        if code != 2
+            || report["status"] != "not-run"
+            || report["error_kinds"] != serde_json::json!(["usage"])
+        {
             wrong.push(format!(
-                "{args:?}: exit {code}, status {}, error_kind {}",
-                report["status"], report["error_kind"]
+                "{args:?}: exit {code}, status {}, error_kinds {}",
+                report["status"], report["error_kinds"]
             ));
         }
     }
@@ -64,5 +67,9 @@ fn a_waive_apply_that_wrote_nothing_is_a_not_run_with_an_error_kind() {
     assert_eq!(code, 2, "{report}");
     assert_eq!(report["status"], "not-run", "{report}");
     assert!(report["error"].is_string(), "{report}");
-    assert_eq!(report["error_kind"], "environment", "{report}");
+    assert_eq!(
+        report["error_kinds"],
+        serde_json::json!(["environment"]),
+        "{report}"
+    );
 }

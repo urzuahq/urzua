@@ -1394,6 +1394,7 @@ impl Report for CheckReport {
 pub struct CouldNotRun {
     pub status: ReportStatus,
     pub error: String,
+    #[serde(rename = "error_kinds", serialize_with = "error_kinds")]
     pub error_kind: FailureKind,
     /// Present when the config's `schema_version` is outside the window this
     /// build reads (`ADR-77`): the same facts `error` states, as data an agent
@@ -1444,7 +1445,7 @@ impl CouldNotRun {
 }
 
 /// Why a command could not run, as the published agent CLI contract defines
-/// the four kinds: the report's `error_kind`.
+/// the four kinds: the one entry of the report's `error_kinds`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FailureKind {
@@ -1458,9 +1459,26 @@ pub enum FailureKind {
     Internal,
 }
 
+/// The contract's `error_kinds` is a list of every kind that applies; urzua
+/// refuses at the first cause it meets, so the list always holds one.
+pub fn error_kinds<S: serde::Serializer>(kind: &FailureKind, s: S) -> Result<S::Ok, S::Error> {
+    serde::Serialize::serialize(&[kind], s)
+}
+
+/// `error_kinds` for a report that carries a kind only when it is `not-run`;
+/// the field is skipped when `None`.
+pub fn optional_error_kinds<S: serde::Serializer>(
+    kind: &Option<FailureKind>,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    match kind {
+        Some(kind) => error_kinds(kind, s),
+        None => s.serialize_none(),
+    }
+}
+
 /// Why a command could not run: a message, and the structured form of the
-/// cause when it has one. Every `String` error converts into it, so a command
-/// that only has a sentence is unchanged; the config loader is the one source
+/// cause when it has one, with its kind; the config loader is the one source
 /// of the structured part (`ADR-77`).
 #[derive(Debug, Clone)]
 pub struct Failure {
@@ -1849,7 +1867,11 @@ pub struct WaiveReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// Present exactly when `status` is `not-run` and `error` is set.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "error_kinds",
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "optional_error_kinds"
+    )]
     pub error_kind: Option<FailureKind>,
     /// What the run said beyond its drafts: the identity it used in place of
     /// `--by`, and what numbering reported (a failed pull-request fetch, a

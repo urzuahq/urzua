@@ -17,6 +17,7 @@ mod block;
 mod bundle;
 mod gate;
 mod hook;
+pub(crate) use hook::ADAPTER_ENV;
 mod json;
 mod limits;
 mod lock;
@@ -73,7 +74,11 @@ struct HarnessReport {
     /// Guardrails the repository turned on that no chosen adapter can wire, and
     /// keys the build does not know: reported, never skipped.
     /// Set with `status` `not-run`: why the run refused (the published agent CLI contract).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "error_kinds",
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "urzua_core::report::optional_error_kinds"
+    )]
     error_kind: Option<FailureKind>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     problems: Vec<String>,

@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.58'
+Version: '0.59'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:564b30f48e0fe1f444574d874b7180be7531f664d933f652a3d484fae11ca187, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:f71754a09fce6f5b325b57fff4e85cc79325a52d3b3c433bc5dfc0cbd8cef35c, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:2bb508f31a969f0ec5e72fcaddc3df59215a996ecfee3826a7e228a05a1bbfaf
+Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:5b3a6c876fa4f525759412a1adbd74886a59e2b506a14c645d2cbbd7023861fb, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:f71754a09fce6f5b325b57fff4e85cc79325a52d3b3c433bc5dfc0cbd8cef35c, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:2bb508f31a969f0ec5e72fcaddc3df59215a996ecfee3826a7e228a05a1bbfaf
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -221,6 +221,17 @@ on every request, with `Cache-Control: no-store`, as a foreground process that p
 with its address when it listens. It is the one command whose product is a page for a person; its
 stdout is still JSON.
 
+### `urzua describe`
+**Specified in full by `docs/reference/describe.md`.** One JSON object stating how to call urzua, in
+the `describe` shape of the published agent CLI contract (its RFC-4, section 6): `name`, `version`,
+`contract_version` (`1.0` until `MILE-370` declares `1.1`), `system` `0`, an empty top-level `args`
+(`--config` and `--as-of` are declared on the commands that take them), `env`, `config`, `log` (`null`), and `commands`, one per command that runs,
+each with its full-path `name`, `profile`, `safe`, `scopes`, `metrics`, `args`, `stdin`, and an
+`example` or a `protocol` where they apply. Every argument is generated from the clap definitions in
+`main.rs`; a command missing from `describe`'s own table of profiles is a failing test, and a
+`not-run` (exit 2) if it ever ran. It is not a report: no `status`, exit 0, and it reads no
+configuration.
+
 ### `urzua export --format=agdr` / `urzua import`
 AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fields. Not
 implemented; `MILE-21`.
@@ -260,15 +271,16 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 - **`--help`/`--version` are the one stated plain-text exception** — clap's own output, never
   JSON-wrapped, matching `cargo`'s own convention that help/version generation is never gated behind
   a machine-format flag.
-- **A `not-run` report carries `error_kind`** (the published agent CLI contract's key): `usage`, `config`,
-  `environment` or `internal`. A `Failure` is built with its kind where the refusal is made, there is no conversion from a bare message, and
+- **A `not-run` report carries `error_kinds`** (the published agent CLI contract's key, from `v1.1.0-rc.4`): an
+  array of the kinds that apply, from `usage`, `config`, `environment` and `internal`. urzua refuses at the first
+  cause it meets, so the array holds exactly one kind, and the singular `error_kind` is never printed. A `Failure` is built with its kind where the refusal is made, there is no conversion from a bare message, and
   a `CouldNotRun` is built from one, so a refusal without a kind does not compile and no emitter supplies a default. The `harness` and `hooks` reports that print
   `"status": "not-run"` with `problems` carry the key too. A usage error's `error` is one sentence naming the
   argument, built from the parser's error kind and context, with no `Usage:` block and no line break. A run
-  that examined nothing and says `not-run` for that reason is not an error and carries no `error_kind`.
+  that examined nothing and says `not-run` for that reason is not an error and carries no `error_kinds`.
 - **A `std::panic::set_hook` covers the one gap `Report`/`emit()` can't reach**: an unexpected panic
-  prints a minimal ad hoc JSON object to stdout, with the text, on one line, under `error` (not `panic`) and `error_kind`
-  `internal`, before the process exits 2, instead of Rust's default
+  prints a minimal ad hoc JSON object to stdout, with the text, on one line, under `error` (not `panic`) and `error_kinds`
+  `["internal"]`, before the process exits 2, instead of Rust's default
   raw-text-to-stderr behavior. Not routed through `Notice`/`Report` — a panic is a lower-level escape
   hatch, not another instance of the five-command contract.
 
@@ -484,5 +496,8 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-18 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-541) f08b2cd956eb -> 57344b8c2562. Reason: main.rs#Command: the Board variant gained one boolean flag, --prompt (conflicts with --serve and --out, prints a JSON answer and writes no file); the spec defers the board's surface to docs/reference/board.md, which now documents it, and no other variant changed, so the command surface the spec states still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-18 | Bumped to `0.56`. The description of `state_disagrees_with_children` names the rule `status.children-agreement` (SPEC-2) that reports the same two cases and says a `dropped` record never disagrees; the key's meaning is unchanged. **Why:** an adopting repository ran a script over the export to fail on this key because `check` had no rule for it. Decided by the builder on 2026-11-18, pending maintainer review. | **substantive** |
 > | 2026-11-19 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-551) 57344b8c2562 -> 564b30f48e0f. Reason: `board`'s `--port` and `--allowed-host` arguments gain `conflicts_with = "prompt"`; nothing else in `Command` changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
-> | 2026-11-24 | Bumped to `0.57`. A `not-run` report gains `error_kind` (`usage`, `config`, `environment` or `internal`); a usage error's `error` names its argument without the parser's `Usage:` block; the panic report prints its text under `error`, not `panic`, with `error_kind` `internal`. The `panic` key is replaced, as `MILE-365` says; no other key is renamed or removed. **Why:** `MILE-365`, one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted: "I accept RFC, and yes allow option can be outside rule" (the contract's RFC-4, revision row of 2026-11-24). | **substantive** |
-> | 2026-11-24 | Bumped to `0.58`. A refusal states its `error_kind` where it is made: `Failure` has no conversion from a bare message, so an argument error noticed deep in a command (an unknown rule id, a record type that does not exist, a reason that is too short, a batch over `max_batch`) is `usage` and no emitter supplies a default; `waive --apply`'s `not-run` report carries `error_kind`; the panic report's `error` is one line. **Why:** review of pull request #649 found these argument errors reporting `environment`, the same shape in six commands. | **substantive** |
+> | 2026-11-24 | Bumped to `0.57`. Adds `urzua describe` to the commands (`MILE-359`): what a caller needs to invoke urzua, generated from the argument definitions, in the published agent CLI contract's `describe` shape, at contract version `1.0` until `MILE-370`. **Why:** the published agent CLI contract's RFC-4, which the maintainer accepted ("I accept RFC, and yes allow option can be outside rule", the contract's RFC-4, revision row of 2026-11-24), makes `describe` the place an agent reads a command's inputs. | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-569) 564b30f48e0f -> 9eda7e0bcd3d. Reason: Read the diff of main.rs: the Command enum gains a Describe variant with its doc comment, dispatch gains its arm (commands::describe::run with Cli::command()) and command_name its name; 21 existing arguments gain a one-line doc comment (help text, used as describe's means). No existing argument, default or dispatch path changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.58`. `describe`'s top-level `args` is empty: `--config` and `--as-of` are declared on the commands that accept them, and relations refused in code are declared as `conflicts_with` and `requires`. **Why:** the published agent CLI contract's maintainers, answering review on pull request #647: top-level means every command accepts it, and describe states the interface, not how the parser is built. | **substantive** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 167-570) 9eda7e0bcd3d -> 5b3a6c876fa4. Reason: Read the diff of main.rs: one doc comment on explain's path argument gains a sentence saying it is required unless --rule, --types, --type or --full is given (describe's means); no argument, default or dispatch path changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Bumped to `0.59`. A `not-run` report gains `error_kinds`, an array holding the one kind of its cause (`usage`, `config`, `environment` or `internal`); a refusal states its kind where it is made, since `Failure` has no conversion from a bare message, so an argument error noticed deep in a command (an unknown rule id, a record type that does not exist, a reason that is too short, a batch over `max_batch`) is `usage` and no emitter supplies a default; `waive --apply`'s `not-run` report and the `harness` and `hooks` reports that print `not-run` carry it too; a usage error's `error` names its argument in one sentence without the parser's `Usage:` block; the panic report prints its text on one line under `error`, not `panic`, with `error_kinds` `["internal"]`. The `panic` key is replaced, as `MILE-365` says; no other key is renamed or removed. **Why:** `MILE-365`, one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted ("I accept RFC, and yes allow option can be outside rule", the contract's RFC-4, revision row of 2026-11-24); the contract's `v1.1.0-rc.4` replaced `error_kind` with the array `error_kinds`, an amendment its maintainer chose as "A list of kinds" (the same record, revision row of 2026-11-24). | **substantive** |

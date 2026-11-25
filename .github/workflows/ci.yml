@@ -9,18 +9,25 @@ name: ci
 # rather than from the event payload (BUG-0034), which fixes a *stale* payload
 # but not a label applied *after* the run started -- that run correctly sees no
 # label and fails, and only a `labeled` event starts the correcting one.
+# `edited` is not listed: a title or body edit changes nothing this workflow
+# checks, and its run cancelled a correct run on the same commit (BUG-222). A
+# base-branch change therefore starts no run; push a commit to re-check.
+# There is no `workflow_dispatch`: a manual run on a PR branch lands in its own
+# concurrency group and can post a green `ci` over a failed changeset gate
+# (BUG-223).
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   merge_group:
   push:
     branches: [main]
-  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  # A push to main is never cancelled: the deploy-gating run for each main commit must finish.
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  # Only a new commit on a pull request cancels a run, so a second event for the
+  # same commit (a label) never cancels a correct run (BUG-222). A push to main
+  # is never cancelled: the deploy-gating run for each main commit must finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}
 
 permissions:
   contents: read

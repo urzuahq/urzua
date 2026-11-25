@@ -7,6 +7,9 @@ fixtures:
   - path: .urzua/promotion.yaml
     irregularity: >-
       a config enabling only the locator-promotion-candidate rule; not a record.
+  - path: .urzua/items.yaml
+    irregularity: >-
+      the config the item-copy case runs under: the adr type reads Done means as items; not a record.
   - path: .urzua/nudge.yaml
     irregularity: >-
       a config enabling the locator nudge with `scope: changed`, beside one rule that keeps the run valid when the nudge is switched off; not a record.

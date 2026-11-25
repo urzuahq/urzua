@@ -1,0 +1,28 @@
+---
+Stable-Id: 01M865PQQVDP77MEHZ45J0TVKS
+Status: Open
+Found-in: an independent review of the pull request fixing BUG-227 and BUG-228, after pins were made to pair only within one tier
+Realized-by:
+---
+# 229 — a pinning row names no tier so it accounts for the same locator in every tier
+
+## What was wrong
+
+The rows `urzua fix --pin --apply` writes (`Pinned` for a first pin, and the `--remove` and `--replace` rows) name the locator as `locator_name` prints it (`rust/crates/urzua-core/src/fix/pin.rs`, `locator_name`, through `Locator::display()`), which drops the tier. `diff.pin-changed-unattested` reads those rows back and matches them on locator and hash alone (`rust/crates/urzua-core/src/rules/pin_attestation.rs`: `removed_ok` for `Event::Remove` and the old side of `Event::Replace`, `added_ok` for `Event::First` and the new side of `Event::Replace`). So one row accounts for the same locator in every tier:
+
+- a record that cites `code:src/a.rs@sha256:X` and `test:src/a.rs@sha256:X` can have both removed under one `--remove` row written for the `code:` entry, and the `test:` removal passes `urzua check --base` with no row of its own; the same holds for the old side of a `--replace`;
+- a `--remove` row written for a pin in the `Realized-by` field also accounts for a hand removal of the same pin's copy in a Done-means item (`removed_ok` does not consume the event), so removing the field's copy with the tool and the item's by hand passes with one row;
+- one `Pinned` row for `src/a.rs` at `X` accounts for a hand-added `code:src/a.rs@sha256:X` and a hand-added `test:src/a.rs@sha256:X` alike, and likewise the new side of a `--replace`.
+
+## Why nothing caught it
+
+The rule compared no tier at all until `BUG-228`, so a row with no tier matched everything the rule could tell apart. Once pins paired within one tier, the rows became the one place the tier is still lost, and no test removes or adds one tier's copy of a file under a row written for the other.
+
+## References
+
+Open. The fix needs the pinning tools to write the tier into their rows and the rule to match it, while still reading the rows already committed without one; that is a change to the row format, not only to the rule. Found while fixing `BUG-228`.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|

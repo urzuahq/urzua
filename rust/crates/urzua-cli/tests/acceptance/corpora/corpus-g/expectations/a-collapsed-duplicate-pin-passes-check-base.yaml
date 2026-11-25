@@ -1,0 +1,19 @@
+id: a-collapsed-duplicate-pin-passes-check-base
+corpus: corpus-g
+bugs: [BUG-227]
+# The base cites src/cache.rs twice at one hash and the head once: the head still
+# pins it, so nothing was removed. The base declares the rule off, so switching it
+# off in the head (the proof mutation) stops it running.
+commits:
+  - write:
+      .urzua/config.yaml: "schema_version: 2\nfail_on: warning\nrecord_types:\n  adr:\n    dir: records\n    prefix: ADR\n    required_fields: [Status, Embodiment, Realized-by]\n    header_shape: yaml-frontmatter\nrules:\n  diff.pin-changed-unattested: off\n  embodiment.consistency: warn\n  embodiment.locator-exists: error\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n  code.dangling-bug-reference:\n    level: error\n    back_pointer_paths: [src]\n    extensions: [rs]\n"
+      records/ADR-0012-collapsed-duplicate.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222, code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n---\n# ADR-0012 \u2014 Collapsed duplicate\n"
+  - write:
+      .urzua/config.yaml: "schema_version: 2\nfail_on: warning\nrecord_types:\n  adr:\n    dir: records\n    prefix: ADR\n    required_fields: [Status, Embodiment, Realized-by]\n    header_shape: yaml-frontmatter\nrules:\n  diff.pin-changed-unattested: error\n  embodiment.consistency: warn\n  embodiment.locator-exists: error\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n  code.dangling-bug-reference:\n    level: error\n    back_pointer_paths: [src]\n    extensions: [rs]\n"
+      records/ADR-0012-collapsed-duplicate.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:2222222222222222222222222222222222222222222222222222222222222222\n---\n# ADR-0012 \u2014 Collapsed duplicate\n"
+invocation: [check, --base, HEAD~1]
+expect_exit: 1
+expect_rules_ran: [diff.pin-changed-unattested]
+expect_no_findings:
+  - rule: diff.pin-changed-unattested
+    file: records/ADR-0012-collapsed-duplicate.md

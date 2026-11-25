@@ -65,7 +65,11 @@ fn a_panic_exits_2_with_a_not_run_result() {
             .is_some_and(|p| p.contains("URZUA_TEST_PANIC set")),
         "the report names the panic under `error`: {report}"
     );
-    assert_eq!(report["error_kind"], "internal", "{report}");
+    assert_eq!(
+        report["error_kinds"],
+        serde_json::json!(["internal"]),
+        "{report}"
+    );
     assert!(
         !report["error"].as_str().unwrap().contains('\n'),
         "`error` is one line: {report}"

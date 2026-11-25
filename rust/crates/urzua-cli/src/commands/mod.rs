@@ -10,6 +10,7 @@ mod board_server;
 mod board_shell;
 pub mod check;
 pub(crate) mod config_lines;
+pub mod describe;
 pub mod doctor;
 pub(crate) mod evidence_log;
 pub mod explain;

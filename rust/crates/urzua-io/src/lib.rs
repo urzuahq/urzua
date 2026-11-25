@@ -279,7 +279,7 @@ pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, D
     }
     // `merge-base` exits 1 with nothing on stderr when the two commits share
     // no history; every other failure keeps git's own message.
-    let merge_base = match run_git(repo_root, &["merge-base", base, "HEAD"]) {
+    let merge_base = match run_merge_base(repo_root, base) {
         Ok(out) => out,
         Err(DiscoveryError::NonZeroExit { status, stderr, .. })
             if status.code() == Some(1) && stderr.trim().is_empty() =>
@@ -550,10 +550,34 @@ pub fn symbolic_full_name(repo_root: &Path, rev: &str) -> Option<String> {
         .filter(|s| s.starts_with("refs/"))
 }
 
+/// The merge base of `base` and what `HEAD` is becoming. Mid-merge that is the
+/// pending merge commit, whose parents are `HEAD` and every line of `MERGE_HEAD`: `git merge-base
+/// <base> HEAD <merge heads...>` is the merge base of `base` and that merge, so `--base MERGE_HEAD`
+/// resolves to `MERGE_HEAD` itself and the diff is what a pull request judges after the commit.
+/// Against `HEAD` alone the old fork point would charge the merge for every commit that came in.
+fn run_merge_base(repo_root: &Path, base: &str) -> Result<String, DiscoveryError> {
+    let heads = merge_heads(repo_root);
+    let mut args = vec!["merge-base", base, "HEAD"];
+    args.extend(heads.iter().map(String::as_str));
+    run_git(repo_root, &args)
+}
+
+/// The commits of an unfinished merge (one line each in `MERGE_HEAD`; several for an octopus), or
+/// none when no merge is in progress.
+fn merge_heads(repo_root: &Path) -> Vec<String> {
+    let Ok(path) = run_git(repo_root, &["rev-parse", "--git-path", "MERGE_HEAD"]) else {
+        return Vec::new();
+    };
+    let path = repo_root.join(path.trim());
+    std::fs::read_to_string(path)
+        .map(|t| t.split_whitespace().map(String::from).collect())
+        .unwrap_or_default()
+}
+
 /// The merge base of `rev` and `HEAD`, or `None` when none is visible (no
 /// shared history, or a shallow clone that hides it).
 pub fn merge_base_with_head(repo_root: &Path, rev: &str) -> Option<String> {
-    run_git(repo_root, &["merge-base", rev, "HEAD"])
+    run_merge_base(repo_root, rev)
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())

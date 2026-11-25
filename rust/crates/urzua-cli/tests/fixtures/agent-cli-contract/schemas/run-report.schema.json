@@ -45,7 +45,7 @@
           "type": ["object", "null"],
           "required": ["kind"],
           "properties": {
-            "kind": {"enum": ["staged", "changed", "affected", "all"]},
+            "kind": {"enum": ["staged", "changed", "affected", "all", "named"]},
             "files": {"type": "array", "items": {"type": "string"}},
             "packages": {"type": "array", "items": {"type": "string"}}
           }

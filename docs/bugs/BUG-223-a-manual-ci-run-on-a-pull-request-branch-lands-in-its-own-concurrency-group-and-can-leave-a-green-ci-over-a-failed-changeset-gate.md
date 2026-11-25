@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M85B7YFF7ATC30EKAN8RYKGW
-Status: Open
+Status: Fixed
 Found-in: 'reviewing ci.yml: workflow_dispatch is a trigger, the changeset job runs on pull_request only and the gate allows it to skip on every other event'
-Realized-by:
+Realized-by: code:.github/workflows/ci.yml@sha256:d7e1bf9840e867dfa7246e3cd261ddf2e4cd1914cb239d63b8f380ac4379d6de
 ---
 # 223 — A manual ci run on a pull request branch lands in its own concurrency group and can leave a green ci over a failed changeset gate
 
@@ -70,3 +70,5 @@ diffs against `github.event.pull_request.base.ref`. Also change alongside it, in
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-24 | `Status` set to Fixed: `ci.yml` drops `workflow_dispatch`, so no manual run can post a `ci` over a pull request's changeset gate; `Realized-by` pins the workflow. **Why:** the fix landed in the pull request that carries this row. | **substantive** |
+> | 2026-11-24 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: .github/workflows/ci.yml@sha256:d7e1bf9840e8 Reason: ci.yml: the pull_request types drop edited, workflow_dispatch is removed, and cancel-in-progress is true only for a pull_request synchronize event; this is the fix the record describes **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |

@@ -133,6 +133,9 @@ fn fix_suggests_applying_then_checking() {
     );
 }
 
+/// Runs `graph`, `rules`, `export`, `explain`, `index`, `doctor` and `check` and
+/// asserts the keys. It does not run `describe`, `harness hook` or `harness record`,
+/// which print no report, nor the other report-printing commands (`SPEC-2`).
 #[test]
 fn every_other_command_and_a_could_not_run_emit_both_keys_as_null() {
     let dir = fixture("others", true, true);

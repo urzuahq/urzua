@@ -2,7 +2,7 @@
 Stable-Id: 01M2MP1F6VY4TNSH7J1QFMES1R
 Status: Accepted
 Embodiment: Implemented
-Realized-by: code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, code:.github/workflows/ci.yml@sha256:d967686a97628663a0fcd754ce5da6e83f38a374d9f784fa7f06d9af26f67563, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30
+Realized-by: code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, code:.github/workflows/ci.yml@sha256:d7e1bf9840e867dfa7246e3cd261ddf2e4cd1914cb239d63b8f380ac4379d6de, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30
 Date: 2026-09-16
 Accepted-on: 2026-09-16
 Author: beauwilliams
@@ -123,6 +123,7 @@ than merely tedious.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` fe22a1814fb9 -> 4ea9e5c7cf7d. Reason: the pinned release moves from v0.4.4 to v0.4.5 in this file (version, ref and the linux archive sha256 in the pinned-release gate job, the version named in the action's examples, the README's gate example); nothing else in the file changed and the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` 4ea9e5c7cf7d -> 0912db414050. Reason: the pinned release moves from v0.4.5 to v0.4.6 in this file (version, ref and the linux archive sha256 in the pinned-release gate job, the version named in the action's examples, the README's gate example); nothing else in the file changed and the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` 0912db414050 -> d967686a9762. Reason: ci.yml: the pinned-release gate job's ref, version and linux archive sha256 move from v0.4.6 to v0.4.7; nothing else changed. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-24 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` d967686a9762 -> d7e1bf9840e8. Reason: ci.yml: the pull_request types drop edited, workflow_dispatch is removed, and cancel-in-progress is true only for a pull_request synchronize event, with comments updated; no job, step or gate script changed, so the claim about the jobs this record cites still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 
 ## Amendment (2026-09-16): two Consequences corrected by the first real release
 
