@@ -28,3 +28,4 @@ Contract 1.1 (the published agent CLI contract's RFC-4) is taken whole: urzua pr
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-24 | Filed as planned work: nothing built, no evidence yet. It is one piece of conforming to the published agent CLI contract 1.1, whose RFC-4 the maintainer accepted: "I accept RFC, and yes allow option can be outside rule" (the contract's RFC-4, revision row of 2026-11-24). | **substantive** |
+> | 2026-11-27 | Partly delivered: `VERSION` names the contract's `v1.1.0` tag at `9e35d452`, and the vendored schemas and `SHA256SUMS` are byte-identical to that tag (unchanged since `v1.1.0-rc.4`). The contract's runner passes against urzua's main at `c72d0082` with `--require-run` (12 of 14 commands exercised). What remains: `describe` still prints `contract_version` `"1.0"` until MILE-359, MILE-366, MILE-368 and MILE-369 are `Done`, and the test and changeset items. Status stays `Planned`. | **structural** |
