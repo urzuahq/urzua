@@ -209,4 +209,23 @@ expect "install: a reported version that only contains the pinned one fails" $?
 [ -z "$(ls -A "$tmp/inst-tmp")" ]
 expect "install: no work directory is left behind, on success or on a refusal" $?
 
+# ---- base resolution ----
+base() { # event, input, queue base
+  EVENT_NAME="$1" BASE_REF="$2" QUEUE_BASE="$3" "$here/resolve-base.sh"
+}
+[ "$(base merge_group "" refs/heads/main)" = "main" ]
+expect "base: an empty input on a merge_group event resolves to the queue's base, trimmed" $?
+[ "$(base merge_group "" refs/heads/release/1.x)" = "release/1.x" ]
+expect "base: a queue base with slashes keeps them after the trim" $?
+[ "$(base merge_group develop refs/heads/main)" = "develop" ]
+expect "base: an explicit input is kept on a merge_group event" $?
+[ -z "$(base pull_request "" "")" ]
+expect "base: an empty input on a pull_request stays empty" $?
+[ -z "$(base push "" refs/heads/main)" ]
+expect "base: an empty input on a push stays empty" $?
+[ "$(base pull_request main "")" = "main" ]
+expect "base: an input on a pull_request is kept" $?
+[ "$(grep -c 'inputs.base-ref' "$here/action.yml")" -eq 1 ]
+expect "base: only the resolving step reads the base-ref input" $?
+
 [ "$fails" -eq 0 ] && echo "urzua-gate: all tests passed" || { echo "urzua-gate: $fails test(s) failed" >&2; exit 1; }
