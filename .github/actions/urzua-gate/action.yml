@@ -16,6 +16,10 @@ description: >-
 #       version: v0.4.7
 #       base-ref: ${{ github.base_ref }}
 #
+# In a merge queue `github.base_ref` is empty; the action then takes the base
+# from the queue's `merge_group` event itself, so the same `base-ref` line gets
+# the diff rules there too.
+#
 # The job needs `pull-requests: write` for the comment. A comment that cannot be
 # posted (a fork's read-only token) is a warning and never changes the verdict.
 # This action only consumes urzua's JSON; the engine prints nothing else.
@@ -46,6 +50,8 @@ inputs:
     description: >-
       The pull request's base branch name. When set, also runs
       `urzua check --base origin/<base-ref>`. Leave empty outside pull requests.
+      When empty on a `merge_group` event, the action uses the merge queue's
+      base branch instead; a value set here always wins.
     required: false
     default: ""
   working-directory:
@@ -106,11 +112,22 @@ runs:
         bin="$("$GITHUB_ACTION_PATH/install.sh")"
         echo "bin=$bin" >> "$GITHUB_OUTPUT"
 
+    - name: resolve the base branch for the diff rules
+      id: base
+      shell: bash
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
+        EVENT_NAME: ${{ github.event_name }}
+        QUEUE_BASE: ${{ github.event.merge_group.base_ref }}
+      run: |
+        set -euo pipefail
+        echo "ref=$("$GITHUB_ACTION_PATH/resolve-base.sh")" >> "$GITHUB_OUTPUT"
+
     - name: check the checkout has the history the gate reads
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        BASE_REF: ${{ inputs.base-ref }}
+        BASE_REF: ${{ steps.base.outputs.ref }}
       run: |
         "$GITHUB_ACTION_PATH/check-history.sh"
 
@@ -119,7 +136,7 @@ runs:
       shell: bash
       env:
         BIN: ${{ inputs.binary != '' && inputs.binary || steps.install.outputs.bin }}
-        BASE_REF: ${{ inputs.base-ref }}
+        BASE_REF: ${{ steps.base.outputs.ref }}
         WORKDIR: ${{ inputs.working-directory }}
         ACTORS: ${{ inputs.actors }}
         PR_NUMBER: ${{ inputs.pr-number }}
@@ -162,7 +179,7 @@ runs:
         DIR: ${{ steps.run.outputs.dir }}
         CHECK_CODE: ${{ steps.run.outputs.check_code }}
         BASE_CODE: ${{ steps.run.outputs.base_code }}
-        BASE_REF: ${{ inputs.base-ref }}
+        BASE_REF: ${{ steps.base.outputs.ref }}
         ANNOTATE: ${{ inputs.annotate }}
         COMMENT: ${{ inputs.comment }}
         PR_NUMBER: ${{ inputs.pr-number }}
